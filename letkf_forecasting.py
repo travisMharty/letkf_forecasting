@@ -1,0 +1,90 @@
+import numpy as np
+import pandas as pd
+
+
+# To DO:
+# Make module for preparing satellite data and cleaning up sensor data.
+
+def time_deriv_3(q, dt, u, dx, v, dy):
+    k = space_deriv_4(q, u, dx, v, dy)
+    k = space_deriv_4(q + dt/3*k, u, dx, v, dy)
+    k = space_deriv_4(q + dt/2*k, u, dx, v, dy)
+    qout = q + dt*k
+    return qout
+
+def space_deriv_4(q, u, dx, v, dy):
+    qout = np.zeros_like(q)
+    F_x = np.zeros_like(u)
+    F_y = np.zeros_like(v)
+
+    # middle calculation
+    F_x[:, 2:-2] = u[:, 2:-2]/12*(
+        7*(q[:, 2:-1] + q[:, 1:-2]) - (q[:, 3:] + q[:, :-3]))
+    F_y[2:-2, :] = v[2:-2, :]/12*(
+        7*(q[2:-1, :] + q[1:-2, :]) - (q[3:, :] + q[:-3, :]))
+    qout[:, 2:-2] = qout[:, 2:-2] - (F_x[:, 3:-2] - F_x[:, 2:-3])/dx
+    qout[2:-2, :] = qout[2:-2, :] - (F_y[3:-2, :] - F_y[2:-3, :])/dy
+
+    # boundary calculation
+    u_w = u[:, 0:2].clip(max=0)
+    u_e = u[:, -2:].clip(min=0)
+    qout[:, 0:2] = qout[:, 0:2] - ((u_w/dx)*(
+        q[:, 1:3] - q[:, 0:2]) + (q[:, 0:2]/dx)*(u[:, 1:3] - u[:, 0:2]))
+    qout[:, -2:] = qout[:, -2:] - ((u_e/dx)*(
+        q[:, -2:] - q[:, -3:-1]) + (q[:, -2:]/dx)*(u[:, -2:] - u[:, -3:-1]))
+
+    v_n = v[-2:, :].clip(min=0)
+    v_s = v[0:2, :].clip(max=0)
+    qout[0:2, :] = qout[0:2, :] - ((v_s/dx)*(
+        q[1:3, :] - q[0:2, :]) + (q[0:2, :]/dx)*(v[1:3, :] - v[0:2, :]))
+    qout[-2:, :] = qout[-2:, :] - ((v_n/dx)*(
+        q[-2:, :] - q[-3:-1, :]) + (q[-2:, :]/dx)*(v[-2:, :] - v[-3:-1, :]))
+
+    return qout
+
+def cot(theta):
+    """Why doesn't numpy have cot?"""
+    return np.cos(theta)/np.sin(theta)
+
+def parallax_shift(cloud_height,
+                   satellite_azimuth,
+                   satellite_altitude,
+                   solar_azimuth,
+                   solar_altitude):
+    """Returns x and y shift required to match satellite pixel to earth location
+    based on satellite and solar position. Units of x and y correction will be
+    in the units of cloud_height.
+
+    Parameters
+    ----------
+    cloud_hieght : float
+         Height of cloud.
+
+    satellite_azimuth : float
+         Azimuth angle of satellite in radians.
+
+    satellite_altitude : float
+         Altitude angle of satellite in radians.
+
+    solar_azimuth : float
+         Azimuth angle of the sun in radians.
+
+    solar_altitude : float
+         Altitude angle of the sun in radians.
+
+    Returns
+    -------
+    x_correction, y_correction : float
+         x_correction and y_correction are the values which must be added to
+         the satellite position to find actual position of cloud shadow.
+    """
+    satellite_displacement = cloud_height*cot(satellite_altitude)
+    solar_displacement = cloud_height*cot(solar_altitude)
+    x_correction = (
+        solar_displacement*np.cos(np.pi/2 - solar_azimuth) -
+        satellite_displacement*np.cos(np.pi/2 - satellite_azimuth))
+    y_correction = (
+        solar_displacement*np.sin(np.pi/2 - solar_azimuth) -
+        satellite_displacement*np.sin(np.pi/2 - satellite_azimuth))
+
+    return x_correction, y_correction
