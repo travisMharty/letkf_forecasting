@@ -88,3 +88,40 @@ def parallax_shift(cloud_height,
         satellite_displacement*np.sin(np.pi/2 - satellite_azimuth))
 
     return x_correction, y_correction
+
+def forward_obs_mat(sensor_loc, sat_loc):
+    """Returns the forward observation matrix H which maps sat locations to
+    sensor locations.
+
+    Parameters
+    ----------
+    sensor_loc : array
+         A kx2 array where k is the number of sensors and each row is the
+         position of the sensor.
+
+    sat_loc : array
+         A nx2 array where n is the number of elements in the domain and each
+         row is the position of an element.
+
+    Returns
+    -------
+    H : array
+         A kxn forward observation matrix which maps sensor locations to
+         satellite locations.
+    sensor_loc : array
+         The same as the inputed sensor_loc with an additional third column
+         which is the index number of the domain corresponding to the row
+         location.
+"""
+    sensor_num = sensor_loc.shape[0]
+    domain_size = sat_locs.shape[0]
+    sensor_loc = np.concate((sensor_loc, np.zeros(sensor_num)[:, None]), axis=1)
+    H = np.zeros([sensor_num, domain_size])
+    for id in range(0, sensor_num):
+        index = np.sqrt(
+            (sat_loc[:, 0] - sensor_loc[id, 0])**2
+            + (sat_loc[:, 1] - sensor_loc[id, 1])**2).argmin()
+        sensor_loc[id, 3] = index
+        H[id, index] = 1
+
+    return sensor_loc, H
