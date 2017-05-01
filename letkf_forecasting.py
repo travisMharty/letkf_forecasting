@@ -5,6 +5,8 @@ import pandas as pd
 # To DO:
 # Make module for preparing satellite data and cleaning up sensor data.
 
+a = 6371000  # average radius of earth when modeled as a sphere From wikipedia
+
 def time_deriv_3(q, dt, u, dx, v, dy):
     k = space_deriv_4(q, u, dx, v, dy)
     k = space_deriv_4(q + dt/3*k, u, dx, v, dy)
@@ -114,14 +116,42 @@ def forward_obs_mat(sensor_loc, sat_loc):
          location.
 """
     sensor_num = sensor_loc.shape[0]
-    domain_size = sat_locs.shape[0]
-    sensor_loc = np.concate((sensor_loc, np.zeros(sensor_num)[:, None]), axis=1)
+    domain_size = sat_loc.shape[0]
+    sensor_loc = np.concatenate((sensor_loc, np.zeros(sensor_num)[:, None]),
+                                axis=1)
+    print(sensor_loc.shape)
     H = np.zeros([sensor_num, domain_size])
     for id in range(0, sensor_num):
         index = np.sqrt(
             (sat_loc[:, 0] - sensor_loc[id, 0])**2
             + (sat_loc[:, 1] - sensor_loc[id, 1])**2).argmin()
-        sensor_loc[id, 3] = index
+        sensor_loc[id, 2] = index
         H[id, index] = 1
 
     return sensor_loc, H
+
+def to_lat_lon(x, y, loc_lat, loc_lon):
+    """Converts a displacement in meters to a displacement in degrees.
+
+    Parameters
+    ----------
+    x : float
+         Displacement in meters in east west direction.
+
+    y : float
+         Displacement in meters in north south direction.
+
+    loc_lat : float
+         Latitude for location.
+
+    loc_lon : float
+         Longitude for location.
+
+    Returns
+    -------
+    lat, lon : float
+         Displacement converted to degrees.
+    """
+    lon = x*360/(2*np.pi*a*np.cos(loc_lat))
+    lat = y*360/(2*np.pi*a)
+    return lat, lon
