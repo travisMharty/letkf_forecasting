@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import scipy as sp
 
 
 # To DO:
@@ -137,13 +138,10 @@ def to_lat_lon(x, y, loc_lat, loc_lon):
     ----------
     x : float
          Displacement in meters in east west direction.
-
     y : float
          Displacement in meters in north south direction.
-
     loc_lat : float
          Latitude for location.
-
     loc_lon : float
          Longitude for location.
 
@@ -155,3 +153,118 @@ def to_lat_lon(x, y, loc_lat, loc_lon):
     lon = x*360/(2*np.pi*a*np.cos(loc_lat))
     lat = y*360/(2*np.pi*a)
     return lat, lon
+
+def nearest_positions(loc, shape, dist):
+    # the shape has to be square
+    position = np.unravel_index(loc, shape)
+    row_min = (position[0] - dist).clip(min=0)
+    row_max = (position[0] + dist).clip(max=(shape[0] - 1))
+    col_min = (position[1] - dist).clip(min=0)
+    col_max = (position[1] + dist).clip(max=(shape[1] - 1))
+    row_positions, col_positions = np.meshgrid(np.arange(row_min, row_max + 1),
+                                               np.arange(col_min, col_max + 1))
+    row_positions = np.ravel(row_positions)
+    col_positions = np.ravel(col_positions)
+    near_positions = np.ravel_multi_index((row_positions, col_positions),
+                                          shape)
+    near_positions.sort()
+    return near_positions
+
+def assimilate(ensemble, observations, H, R_inverse, inflation, shape=False,
+               localization_length=False, assimilation_positions=False,
+               full_positions=False):
+    """Assimilates observations into ensemble using the LETKF.
+
+    Parameters
+    ----------
+    ensemble : array
+         The ensemble of size kxn where k is the number of ensemble members
+         and n is the state vector size.
+    observations : array
+         An observation vector of length m.
+    H : array
+         Forward observation matrix of size mxn.
+    R_inverse : array
+         Inverse of observation error matrix.
+    inflation : float
+         Inflation parameter.
+    localization_length : float
+         Localization distance in each direction so that assimilation will take
+         on (2*localization + 1)**2 elements. If equal to False then no
+         localization will take place.
+    assimilation_positions : array
+         Row and column index of state domain over which assimilation will
+         take place. First column contains row positions, second column
+         contains column positions, total number of rows is number of
+         assimilations. If False the assimilation will take place over
+         full_positions. If localization_length is False then this variable
+         will not be used.
+    full_positions : array
+         Array similar to assimilation_positions including the positions of
+         all elements of the state.
+
+    Return
+    ------
+    ensemble : array
+         Analysis ensemble of the same size as input ensemble
+    """
+    ## Change to allow for R to not be pre-inverted?
+    x_bar = ensemble.mean(axis=1)
+    ensemble -= x_bar
+    ens_size = ensemble.shape[1]
+
+    if localization_length is False:
+        # LETKF without localization
+        Y_b = np.einsum('ij,jk...->ik...', H, ensemble[wind_size::, :])
+        y_b_bar = Y_b.mean(axis=1)
+        Y_b -= y_b_bar[:, np.newaxis]
+        C = (Y_b.T).dot(R_inverse)
+        eig_value, eig_vector = np.linalg.eigh(
+            (ens_size-1)*np.eye(ens_size)/inflation + C.dot(Y_b))
+        P_tilde = eig_vector.copy()
+        W_a = eig_vector.copy()
+        for i, num in enumerate(eig_value):
+            P_tilde[:, i] *= 1/num
+            W_a[:, i] *= 1/np.sqrt(num)
+        P_tilde = P_tilde.dot(eig_vector.T)
+        W_a = W_a.dot(eig_vector.T)
+        w_a_bar = P_tilde.dot(C.dot(observations - y_b_bar))
+        W_a += w_a_bar[:, None]
+        ensemble = x_bar[:, None] + ensemble.dot(W_a)
+        return ensemble
+
+    else:
+        # LETKF with localization assumes H is I
+        ## Change to include wind in ensemble will require reworking due to
+        ## new H and different localization.
+        kal_count = 0
+        for interp_position in assimilation_positions:
+            local_positions = nearest_positions(interp_position, shape,
+                                                localization_length)
+            local_j, local_i = np.meshgrid(local_positions, local_positions)
+            local_R_inverse = R_inverse[local_i, local_j]
+            local_ensemble = ensemble[local_positions]
+            local_x_bar = x_bar[local_positions]
+            local_obs = observations[local_positions]
+            C = (local_ensemble.T).dot(local_R_inverse)
+            eig_value, eig_vector = np.linalg.eigh(
+                (ens_size-1)*np.eye(ens_size)/inflation + C.dot(local_ensemble))
+            P_tilde = eig_vector.copy()
+            W_a = eig_vector.copy()
+            for i, num in enumerate(eig_value):
+                P_tilde[:, i] *= 1/num
+                W_a[:, i] *= 1/np.sqrt(num)
+            P_tilde = P_tilde.dot(eig_vector.T)
+            W_a = W_a.dot(eig_vector.T)
+            w_a_bar = P_tilde.dot(C.dot(local_obs - local_x_bar))
+            W_a += w_a_bar[:, None]
+            ensemble = x_bar[:, None] + ensemble.dot(W_a)
+            W_interp[kal_count] = np.ravel(W_a) ## separate w_bar??
+            kal_count += 1
+        W_fun = scipy.interpolate.LinearNDInterpolator(kalman_positions_2d,
+                                                       W_interp)
+        W_fine_mesh = W_fun(full_positions)
+        W_fine_mesh = W_fine_mesh.reshape(shape[0]*shape[1],
+                                          ens_size, ens_size)
+        ensemble = x_bar + np.einsum('ij, ijk->ik', ensemble, W_fine_mesh)
+        return ensemble
