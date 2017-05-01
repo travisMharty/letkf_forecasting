@@ -51,9 +51,9 @@ def cot(theta):
 
 def parallax_shift(cloud_height,
                    satellite_azimuth,
-                   satellite_altitude,
+                   satellite_elevation,
                    solar_azimuth,
-                   solar_altitude):
+                   solar_elevation):
     """Returns x and y shift required to match satellite pixel to earth location
     based on satellite and solar position. Units of x and y correction will be
     in the units of cloud_height.
@@ -81,13 +81,13 @@ def parallax_shift(cloud_height,
          x_correction and y_correction are the values which must be added to
          the satellite position to find actual position of cloud shadow.
     """
-    satellite_displacement = cloud_height*cot(satellite_altitude)
-    solar_displacement = cloud_height*cot(solar_altitude)
+    satellite_displacement = cloud_height*cot(satellite_elevation)
+    solar_displacement = cloud_height*cot(solar_elevation)
     x_correction = (
         solar_displacement*np.cos(np.pi/2 - solar_azimuth) -
         satellite_displacement*np.cos(np.pi/2 - satellite_azimuth))
     y_correction = (
-        solar_displacement*np.sin(np.pi/2 - solar_azimuth) -
+        solar_displacement*np.sin(np.pi/2 - solar_azimuth -
         satellite_displacement*np.sin(np.pi/2 - satellite_azimuth))
 
     return x_correction, y_correction
