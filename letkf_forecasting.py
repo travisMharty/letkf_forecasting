@@ -8,12 +8,14 @@ import scipy as sp
 
 a = 6371000  # average radius of earth when modeled as a sphere From wikipedia
 
+
 def time_deriv_3(q, dt, u, dx, v, dy):
     k = space_deriv_4(q, u, dx, v, dy)
     k = space_deriv_4(q + dt/3*k, u, dx, v, dy)
     k = space_deriv_4(q + dt/2*k, u, dx, v, dy)
     qout = q + dt*k
     return qout
+
 
 def space_deriv_4(q, u, dx, v, dy):
     qout = np.zeros_like(q)
@@ -45,9 +47,11 @@ def space_deriv_4(q, u, dx, v, dy):
 
     return qout
 
+
 def cot(theta):
     """Why doesn't numpy have cot?"""
     return np.cos(theta)/np.sin(theta)
+
 
 def parallax_shift(cloud_height,
                    satellite_azimuth,
@@ -87,10 +91,11 @@ def parallax_shift(cloud_height,
         solar_displacement*np.cos(np.pi/2 - solar_azimuth) -
         satellite_displacement*np.cos(np.pi/2 - satellite_azimuth))
     y_correction = (
-        solar_displacement*np.sin(np.pi/2 - solar_azimuth -
+        solar_displacement*np.sin(np.pi/2 - solar_azimuth) -
         satellite_displacement*np.sin(np.pi/2 - satellite_azimuth))
 
     return x_correction, y_correction
+
 
 def forward_obs_mat(sensor_loc, sat_loc):
     """Returns the forward observation matrix H which maps sat locations to
@@ -120,7 +125,6 @@ def forward_obs_mat(sensor_loc, sat_loc):
     domain_size = sat_loc.shape[0]
     sensor_loc = np.concatenate((sensor_loc, np.zeros(sensor_num)[:, None]),
                                 axis=1)
-    print(sensor_loc.shape)
     H = np.zeros([sensor_num, domain_size])
     for id in range(0, sensor_num):
         index = np.sqrt(
@@ -130,6 +134,7 @@ def forward_obs_mat(sensor_loc, sat_loc):
         H[id, index] = 1
 
     return sensor_loc, H
+
 
 def to_lat_lon(x, y, loc_lat, loc_lon):
     """Converts a displacement in meters to a displacement in degrees.
@@ -154,7 +159,27 @@ def to_lat_lon(x, y, loc_lat, loc_lon):
     lat = y*360/(2*np.pi*a)
     return lat, lon
 
+
 def nearest_positions(loc, shape, dist):
+    """Returns the indices of a vector which are dist distance from loc in
+    either the x or y direction when that vector is unraveled given shape.
+
+    Parameters
+    ----------
+    loc : int
+         The index of the raveled vector.
+    shape : (int, int)
+         The shape of the unraveled array. Currently assumed to be square.
+    dist : int
+         The distance which can be traveled in x or y in the unraveled array.
+
+    Returns
+    -------
+    near_positions : array
+         Array of indices for the raveled vector near loc.
+    """
+
+
     # the shape has to be square
     position = np.unravel_index(loc, shape)
     row_min = (position[0] - dist).clip(min=0)
@@ -169,6 +194,7 @@ def nearest_positions(loc, shape, dist):
                                           shape)
     near_positions.sort()
     return near_positions
+
 
 def assimilate(ensemble, observations, H, R_inverse, inflation, shape=False,
                localization_length=False, assimilation_positions=False,
@@ -215,7 +241,7 @@ def assimilate(ensemble, observations, H, R_inverse, inflation, shape=False,
 
     if localization_length is False:
         # LETKF without localization
-        Y_b = np.einsum('ij,jk...->ik...', H, ensemble[wind_size::, :])
+        Y_b = np.einsum('ij,jk...->ik...', H, ensemble)
         y_b_bar = Y_b.mean(axis=1)
         Y_b -= y_b_bar[:, np.newaxis]
         C = (Y_b.T).dot(R_inverse)
@@ -238,6 +264,7 @@ def assimilate(ensemble, observations, H, R_inverse, inflation, shape=False,
         ## Change to include wind in ensemble will require reworking due to
         ## new H and different localization.
         kal_count = 0
+        W_interp = np.zeros([assimilation_positions.size, ens_size**2])
         for interp_position in assimilation_positions:
             local_positions = nearest_positions(interp_position, shape,
                                                 localization_length)
@@ -261,10 +288,17 @@ def assimilate(ensemble, observations, H, R_inverse, inflation, shape=False,
             ensemble = x_bar[:, None] + ensemble.dot(W_a)
             W_interp[kal_count] = np.ravel(W_a) ## separate w_bar??
             kal_count += 1
-        W_fun = scipy.interpolate.LinearNDInterpolator(kalman_positions_2d,
-                                                       W_interp)
+        assimilation_positions_2d = np.unravel_index(assimilation_positions,
+                                                     shape)
+        W_fun = sp.interpolate.LinearNDInterpolator(assimilation_positions_2d,
+                                                    W_interp)
         W_fine_mesh = W_fun(full_positions)
         W_fine_mesh = W_fine_mesh.reshape(shape[0]*shape[1],
                                           ens_size, ens_size)
         ensemble = x_bar + np.einsum('ij, ijk->ik', ensemble, W_fine_mesh)
         return ensemble
+
+
+def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
+               dx, dy, C_max, assimilation_grid_size, location):
+    """"""
