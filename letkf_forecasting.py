@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 import scipy as sp
+from scipy import ndimage
+import matplotlib.pyplot as plt
 
 
 # To DO:
@@ -133,7 +135,7 @@ def forward_obs_mat(sensor_loc, sat_loc):
         sensor_loc[id, 2] = index
         H[id, index] = 1
 
-    return sensor_loc, H
+    return H, sensor_loc
 
 
 def to_lat_lon(x, y, loc_lat, loc_lon):
@@ -301,4 +303,82 @@ def assimilate(ensemble, observations, H, R_inverse, inflation, shape=False,
 
 def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
                dx, dy, C_max, assimilation_grid_size, location):
-    """"""
+    """Check back later."""
+    time_range = (pd.date_range(start_time, end_time, freq='15 min')
+                  .tz_localize('MST').astype(int))
+    all_time = sat.time.values
+    time_range = np.intersect1d(time_range, all_time)
+    sensor_RMSE = np.zeros(
+        int((time_range[-1] - time_range[0])*10**(-9)/(60*5)) + 1)
+    wind_smoothing_size = 30*4
+    min_CI_plot = 0
+    max_CI_plot = 1.4
+    max_CI = 1.4
+    sensor_error = pd.DataFrame(data=None, index=None, columns=sensor_loc.id)
+
+    ## This is only for now. Eventually H will be a function of time and cloud height.
+    sat_loc = np.concatenate(
+        (sat['lat'].values.ravel()[:, None],
+         sat['long'].values.ravel()[:, None]), axis=1)
+    H, delete = forward_obs_mat(sensor_loc[['lat', 'lon']].values, sat_loc)
+    for date_index in range(time_range.size - 1):
+        start_time = time_range[date_index]
+        end_time = time_range[date_index + 1]
+        U = wind.sel(time=start_time, method='pad').U.values
+        V = wind.sel(time=start_time, method='pad').V.values
+        U = ndimage.filters.uniform_filter(U, size=wind_smoothing_size)
+        V = ndimage.filters.uniform_filter(V, size=wind_smoothing_size)
+        cx = abs(U).max()
+        cy = abs(V).max()
+        N = np.ceil((5*60)*(cx/dx+cy/dy)/C_max)
+        dt = (5*60)/N
+        T = (end_time - start_time)*10**(-9)
+        T_steps = int(T/dt)
+        q = sat['clear_sky_good'].sel(time=start_time).values
+        this_time = pd.Timestamp(
+            start_time).tz_localize('UTC').tz_convert('MST')
+        this_time_sensor_error = pd.DataFrame(
+            data=np.ones([1, sensor_error.shape[1]]),
+            index=[this_time],
+            columns=sensor_error.columns)
+
+        ## Write in terms of H not in terms of index.
+        for id_num in sensor_loc.id:
+            this_sensor_data = sensor_data.ix[sensor_data.id==id_num]
+            this_sensor_data = this_sensor_data['clearsky_index'].ix[
+                this_sensor_data.index.get_loc(
+                    this_time, method='nearest')].item()
+            this_time_sensor_error[id_num] = (
+                H.dot(q.ravel()) - this_sensor_data)
+            sensor_error = sensor_error.append(this_time_sensor_error)
+
+        for t in range(T_steps):
+            q = time_deriv_3(q, dt, U, dx, V, dy)
+            q = q.clip(max=max_CI, min=0)
+            nearest_up = 5*np.round((t + 1)*dt/(60*5))
+            test = abs(nearest_up - (t + 1)*dt/60) < abs(nearest_up - (t + 2)*dt/60)
+            test = test and abs(nearest_up-(t+1)*dt/60) < abs(nearest_up-(t)*dt/60)
+            test = test and (nearest_up != 0)
+            if test:
+                this_time = pd.Timestamp(start_time + (t+1)*dt*10**9).tz_localize('UTC').tz_convert('MST')
+                this_time_sensor_error = pd.DataFrame(
+                    data=np.ones([1, sensor_error.shape[1]]),
+                    index=[this_time],
+                    columns=sensor_error.columns)
+
+                for id_num in sensor_loc.id:
+                    this_sensor_data = sensor_data.ix[sensor_data.id==id_num]
+                    this_sensor_data = this_sensor_data['clearsky_index'].ix[
+                        this_sensor_data.index.get_loc(this_time, method='nearest')].item()
+                    this_time_sensor_error[id_num] = (
+                        q[sensor_loc.ix[sensor_loc.id==id_num].south_north,
+                          sensor_loc.ix[sensor_loc.id==id_num].west_east]
+                        - this_sensor_data)
+                    sensor_error = sensor_error.append(this_time_sensor_error)
+
+                plt.figure()
+                im = plt.pcolormesh(sat.long, sat.lat, q, cmap='Blues', vmin=0, vmax=1)
+                plt.colorbar(im)
+                plt.title(pd.Timestamp(start_time + (t+1)*dt*10**9).tz_localize('UTC').tz_convert('MST'))
+                plt.scatter(sensor_loc.lon, sensor_loc.lat)
+                plt.show()
