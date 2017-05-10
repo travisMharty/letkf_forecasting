@@ -3,6 +3,7 @@ import pandas as pd
 import scipy as sp
 from scipy import ndimage
 import matplotlib.pyplot as plt
+import scipy.interpolate as interpolate
 
 
 # To DO:
@@ -200,8 +201,10 @@ def nearest_positions(loc, shape, dist):
 
 def assimilate(ensemble, observations, H, R_inverse, inflation, shape=False,
                localization_length=False, assimilation_positions=False,
-               full_positions=False):
-    """Assimilates observations into ensemble using the LETKF.
+               assimilation_positions_2d=False, full_positions_2d=False):
+    """
+    *** NEED TO REWRITE
+    Assimilates observations into ensemble using the LETKF.
 
     Parameters
     ----------
@@ -211,9 +214,9 @@ def assimilate(ensemble, observations, H, R_inverse, inflation, shape=False,
     observations : array
          An observation vector of length m.
     H : array
-         Forward observation matrix of size mxn.
+         Forward observation matrix of size mxn. **may need changing**
     R_inverse : array
-         Inverse of observation error matrix.
+         Inverse of observation error matrix. **will need changing**
     inflation : float
          Inflation parameter.
     localization_length : float
@@ -238,7 +241,7 @@ def assimilate(ensemble, observations, H, R_inverse, inflation, shape=False,
     """
     ## Change to allow for R to not be pre-inverted?
     x_bar = ensemble.mean(axis=1)
-    ensemble -= x_bar
+    ensemble -= x_bar[:, None]
     ens_size = ensemble.shape[1]
 
     if localization_length is False:
@@ -263,41 +266,53 @@ def assimilate(ensemble, observations, H, R_inverse, inflation, shape=False,
 
     else:
         # LETKF with localization assumes H is I
-        ## Change to include wind in ensemble will require reworking due to
+        ## NEED: to include wind in ensemble will require reworking due to
         ## new H and different localization.
+        ## NEED: Change to include some form of H for paralax correction??
+        ## Maybe: ^ not if paralax is only corrected when moving to ground sensors.
+        ## SHOULD: Will currently write as though R_inverse is a scalar.
+        ## May need to change at some point but will likely need to do
+        ## something clever since R_inverse.size is 400 billion
+        ## best option: form R_inverse inside of localization routine
+        ## good option: assimilate sat images at low resolution (probabily should do this either way)
         kal_count = 0
         W_interp = np.zeros([assimilation_positions.size, ens_size**2])
         for interp_position in assimilation_positions:
             local_positions = nearest_positions(interp_position, shape,
                                                 localization_length)
             local_j, local_i = np.meshgrid(local_positions, local_positions)
-            local_R_inverse = R_inverse[local_i, local_j]
             local_ensemble = ensemble[local_positions]
             local_x_bar = x_bar[local_positions]
-            local_obs = observations[local_positions]
-            C = (local_ensemble.T).dot(local_R_inverse)
-            eig_value, eig_vector = np.linalg.eigh(
-                (ens_size-1)*np.eye(ens_size)/inflation + C.dot(local_ensemble))
-            P_tilde = eig_vector.copy()
-            W_a = eig_vector.copy()
-            for i, num in enumerate(eig_value):
-                P_tilde[:, i] *= 1/num
-                W_a[:, i] *= 1/np.sqrt(num)
-            P_tilde = P_tilde.dot(eig_vector.T)
-            W_a = W_a.dot(eig_vector.T)
+            local_obs = observations[local_positions] # assume H is I
+            C = (local_ensemble.T)*R_inverse  # assume R_inverse is diag+const
+
+            # This should be better, but I can't get it to work
+            # eig_value, eig_vector = np.linalg.eigh(
+            #     (ens_size-1)*np.eye(ens_size)/inflation + C.dot(local_ensemble))
+            # P_tilde = eig_vector.copy()
+            # W_a = eig_vector.copy()
+            # for i, num in enumerate(eig_value):
+            #     P_tilde[:, i] *= 1/num
+            #     W_a[:, i] *= 1/np.sqrt(num)
+            # P_tilde = P_tilde.dot(eig_vector.T)
+            # W_a = W_a.dot(eig_vector.T)*(ens_size - 1)
+
+            P_tilde = np.linalg.inv(
+                (ens_size-1)*np.eye(ens_size)/inflation +
+                C.dot(local_ensemble))
+            W_a = np.real(sp.linalg.sqrtm((ens_size - 1)*P_tilde))
             w_a_bar = P_tilde.dot(C.dot(local_obs - local_x_bar))
             W_a += w_a_bar[:, None]
             ensemble = x_bar[:, None] + ensemble.dot(W_a)
             W_interp[kal_count] = np.ravel(W_a) ## separate w_bar??
             kal_count += 1
-        assimilation_positions_2d = np.unravel_index(assimilation_positions,
-                                                     shape)
-        W_fun = sp.interpolate.LinearNDInterpolator(assimilation_positions_2d,
-                                                    W_interp)
-        W_fine_mesh = W_fun(full_positions)
+        W_fun = interpolate.LinearNDInterpolator(assimilation_positions_2d,
+                                                 W_interp)
+        W_fine_mesh = W_fun(full_positions_2d)
         W_fine_mesh = W_fine_mesh.reshape(shape[0]*shape[1],
                                           ens_size, ens_size)
-        ensemble = x_bar + np.einsum('ij, ijk->ik', ensemble, W_fine_mesh)
+        ensemble = x_bar[:, None] + np.einsum(
+            'ij, ijk->ik', ensemble, W_fine_mesh)
         return ensemble
 
 
@@ -330,10 +345,31 @@ def ensemble_creator(sat_image, CI_sigma, wind_size, wind_sigma, ens_size):
     return ensemble
 
 
+
+def assimilation_position_generator(domain_shape, assimilation_grid_size):
+    domain_size = domain_shape[0]*domain_shape[1]
+    row_positions, col_positions = np.meshgrid(
+        np.arange(0, domain_shape[0], assimilation_grid_size),
+        np.arange(0, domain_shape[1], assimilation_grid_size))
+    row_positions = np.ravel(row_positions)
+    col_positions = np.ravel(col_positions)
+    assimilation_positions = np.ravel_multi_index(
+        (row_positions, col_positions), domain_shape)
+    assimilation_positions.sort()
+    assimilation_positions_2d = np.unravel_index(assimilation_positions,
+                                                 domain_shape)
+    assimilation_positions_2d = np.stack(assimilation_positions_2d, axis=1)
+    full_positions_2d = np.unravel_index(np.arange(0, domain_size),
+                                         domain_shape)
+    full_positions_2d = np.stack(full_positions_2d, axis=1)
+    return assimilation_positions, assimilation_positions_2d, full_positions_2d
+
+
 def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
-               dx, dy, C_max, assimilation_grid_size, localization,
-               sat_sig, sensor_sig):
+               dx, dy, C_max, assimilation_grid_size, localization_length,
+               sat_sig, sensor_sig, ens_size, wind_sigma, wind_size):
     """Check back later."""
+    ## NEED: Incorporate IO? Would need to reformulate so that P is smaller.
     time_range = (pd.date_range(start_time, end_time, freq='15 min')
                   .tz_localize('MST').astype(int))
     all_time = sat.time.values
@@ -345,19 +381,17 @@ def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
     sat_loc = np.concatenate(
         (sat['lat'].values.ravel()[:, None],
          sat['long'].values.ravel()[:, None]), axis=1)
-
+    domain_shape = sat['clear_sky_good'].isel(time=0).shape
+    domain_size = domain_shape[0]*domain_shape[1]
+    assimilation_positions, assimilation_positions_2d, full_positions_2d = (
+        assimilation_position_generator(domain_shape, assimilation_grid_size))
     ## This is only for now. Eventually H will be a function of time and cloud height.
     H, delete = forward_obs_mat(sensor_loc[['lat', 'lon']].values, sat_loc)
-
-    ## move to input
-    ens_size = 5
-    wind_size = 2
-    wind_sigma = (2, .25)
-    ## move to input
+    H = np.concatenate((np.zeros((H.shape[0], 2)), H), axis=1)
 
     ensemble = ensemble_creator(
         sat['clear_sky_good'].sel(time=time_range[0]).values,
-        CI_sigma=None, wind_size=wind_size, wind_sigma=wind_sigma, ens_size=10)
+        CI_sigma=None, wind_size=wind_size, wind_sigma=wind_sigma, ens_size=ens_size)
     for date_index in range(time_range.size - 1):
         start_time = time_range[date_index]
         end_time = time_range[date_index + 1]
@@ -372,13 +406,32 @@ def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
         T = (end_time - start_time)*10**(-9)
         T_steps = int(T/dt)
         q = sat['clear_sky_good'].sel(time=start_time).values
-        domain_shape = q.shape
-        domain_size = q.size
         this_time = pd.Timestamp(
             start_time).tz_localize('UTC').tz_convert('MST')
-        ## don't assimilate with first image Should be nicer
 
-        ## only calc error for forecasts
+        ## Maybe this isn't working? Maybe not though.
+        if date_index != 0:
+            print('Starting Full image')
+            ensemble[wind_size::] = assimilate(
+                ensemble[wind_size::],
+                sat['clear_sky_good'].sel(
+                    time=time_range[date_index]).values.ravel(),
+                None, 1/sat_sig**2, 1, shape=domain_shape,
+                localization_length=localization_length,
+                assimilation_positions=assimilation_positions,
+                assimilation_positions_2d=assimilation_positions_2d,
+                full_positions_2d=full_positions_2d)
+
+            this_index = 2
+            plt.figure()
+            plt.pcolormesh(
+                ensemble[wind_size::, this_index].reshape(domain_shape),
+                cmap='Blues_r')
+            plt.show()
+            print(ensemble[wind_size::, this_index].mean())
+        #     return None
+
+        ## only calculate error for forecasts
         # sensor_error = sensor_error.append(
         #     calc_sensor_error(sensor_data.ix[this_time],
         #                       sensor_loc, H, q, this_time))
@@ -407,15 +460,18 @@ def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
                 this_time = pd.Timestamp(
                     start_time + (t+1)*dt*10**9).tz_localize('UTC'
                     ).tz_convert('MST')
+                ensemble = assimilate(ensemble, sensor_data.ix[this_time],
+                                      H, 1/sensor_sig**2, 1)
                 ensemble_mean = ensemble[wind_size::].mean(axis=1).reshape(
                     domain_shape)
                 sensor_error = sensor_error.append(
                     calc_sensor_error(sensor_data.ix[this_time],
-                                      sensor_loc, H, q, this_time))
+                                      sensor_loc, H[:, wind_size::],
+                                      q, this_time))
                 sensor_error_ens = sensor_error_ens.append(
                     calc_sensor_error(
-                        sensor_data.ix[this_time], sensor_loc, H,
-                        ensemble_mean, this_time))
+                        sensor_data.ix[this_time], sensor_loc,
+                        H[:, wind_size::], ensemble_mean, this_time))
 
                 print(sensor_error.ix[this_time].abs().mean())
                 print(sensor_error_ens.ix[this_time].abs().mean())
@@ -424,7 +480,7 @@ def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
                 im = plt.pcolormesh(sat.long, sat.lat, q,
                                     cmap='Blues', vmin=0, vmax=1)
                 plt.colorbar(im)
-                plt.title(this_time)
+                plt.title('Just advect: ' + str(this_time))
                 plt.scatter(sensor_loc.lon, sensor_loc.lat, c='r')
                 plt.show()
 
@@ -433,6 +489,6 @@ def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
                                     ensemble_mean,
                                     cmap='Blues', vmin=0, vmax=1)
                 plt.colorbar(im)
-                plt.title(this_time)
+                plt.title('Ensemble: ' + str(this_time))
                 plt.scatter(sensor_loc.lon, sensor_loc.lat, c='r')
                 plt.show()
