@@ -313,52 +313,50 @@ def calc_sensor_error(sensor_values, sensor_loc, H, q, time):
 
 def ensemble_creator(sat_image, CI_sigma, wind_size, wind_sigma, ens_size):
     """check back later"""
+    half_wind = int(round(wind_size/2))
+    ens_wind = int(round(ens_size*half_wind))
     ensemble = np.random.normal(
         loc=0,
         scale=wind_sigma[0],
-        size=ens_size*wind_size).reshape(wind_size/2, ens_size)
-    ensemble = np.concatenate([ensemble,
-                               np.random.normal(
-                                   loc=0,
-                                   scale=wind_sigma[1],
-                                   size=ens_size*wind_size
-                               ).reshape(wind_size/2, ens_size)], axis=0)
+        size=ens_wind).reshape(half_wind, ens_size)
+    ensemble = np.concatenate(
+        [ensemble, np.random.normal(
+            loc=0,
+            scale=wind_sigma[1],
+            size=ens_wind).reshape(half_wind, ens_size)], axis=0)
     ensemble = np.concatenate(
         [ensemble,
          np.repeat(sat_image.ravel()[:, None], ens_size, axis=1)], axis=0)
     return ensemble
 
+
 def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
-               dx, dy, C_max, assimilation_grid_size, location):
+               dx, dy, C_max, assimilation_grid_size, localization,
+               sat_sig, sensor_sig):
     """Check back later."""
     time_range = (pd.date_range(start_time, end_time, freq='15 min')
                   .tz_localize('MST').astype(int))
     all_time = sat.time.values
     time_range = np.intersect1d(time_range, all_time)
-    # sensor_RMSE = np.zeros(
-    #    int((time_range[-1] - time_range[0])*10**(-9)/(60*5)) + 1)
     wind_smoothing_size = 30*10
-    # min_CI_plot = 0
-    # max_CI_plot = 1.4
     max_CI = 1.4
     sensor_error = pd.DataFrame(data=None, index=None, columns=sensor_loc.id)
-
-    ## This is only for now. Eventually H will be a function of time and cloud height.
+    sensor_error_ens = sensor_error.copy()
     sat_loc = np.concatenate(
         (sat['lat'].values.ravel()[:, None],
          sat['long'].values.ravel()[:, None]), axis=1)
+
+    ## This is only for now. Eventually H will be a function of time and cloud height.
     H, delete = forward_obs_mat(sensor_loc[['lat', 'lon']].values, sat_loc)
-    this_time = pd.Timestamp(
-        time_range[0]).tz_localize('UTC').tz_convert('MST')
 
     ## move to input
-    ens_size = 10
+    ens_size = 5
     wind_size = 2
     wind_sigma = (2, .25)
     ## move to input
 
     ensemble = ensemble_creator(
-        sat['clear_sky_good'].sel(time=this_time).values,
+        sat['clear_sky_good'].sel(time=time_range[0]).values,
         CI_sigma=None, wind_size=wind_size, wind_sigma=wind_sigma, ens_size=10)
     for date_index in range(time_range.size - 1):
         start_time = time_range[date_index]
@@ -374,8 +372,11 @@ def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
         T = (end_time - start_time)*10**(-9)
         T_steps = int(T/dt)
         q = sat['clear_sky_good'].sel(time=start_time).values
+        domain_shape = q.shape
+        domain_size = q.size
         this_time = pd.Timestamp(
             start_time).tz_localize('UTC').tz_convert('MST')
+        ## don't assimilate with first image Should be nicer
 
         ## only calc error for forecasts
         # sensor_error = sensor_error.append(
@@ -393,8 +394,9 @@ def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
             q = q.clip(max=max_CI, min=0)
             for ens_index in range(ens_size):
                 ensemble[wind_size::, ens_index] = time_deriv_3(
-                    ensemble[wind_size::, ens_index],
-                    dt, U + ens)
+                    ensemble[wind_size::, ens_index].reshape(domain_shape), dt,
+                    U + ensemble[0, ens_index], dx,
+                    V + ensemble[1, ens_index], dy).reshape(domain_size)
             nearest_up = 5*np.round((t + 1)*dt/(60*5))
             test = (abs(nearest_up - (t + 1)*dt/60) <
                     abs(nearest_up - (t + 2)*dt/60))
@@ -405,13 +407,30 @@ def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
                 this_time = pd.Timestamp(
                     start_time + (t+1)*dt*10**9).tz_localize('UTC'
                     ).tz_convert('MST')
+                ensemble_mean = ensemble[wind_size::].mean(axis=1).reshape(
+                    domain_shape)
                 sensor_error = sensor_error.append(
                     calc_sensor_error(sensor_data.ix[this_time],
                                       sensor_loc, H, q, this_time))
+                sensor_error_ens = sensor_error_ens.append(
+                    calc_sensor_error(
+                        sensor_data.ix[this_time], sensor_loc, H,
+                        ensemble_mean, this_time))
 
                 print(sensor_error.ix[this_time].abs().mean())
+                print(sensor_error_ens.ix[this_time].abs().mean())
+
                 plt.figure()
                 im = plt.pcolormesh(sat.long, sat.lat, q,
+                                    cmap='Blues', vmin=0, vmax=1)
+                plt.colorbar(im)
+                plt.title(this_time)
+                plt.scatter(sensor_loc.lon, sensor_loc.lat, c='r')
+                plt.show()
+
+                plt.figure()
+                im = plt.pcolormesh(sat.long, sat.lat,
+                                    ensemble_mean,
                                     cmap='Blues', vmin=0, vmax=1)
                 plt.colorbar(im)
                 plt.title(this_time)
