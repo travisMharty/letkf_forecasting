@@ -199,7 +199,38 @@ def nearest_positions(loc, shape, dist):
     return near_positions
 
 
-def assimilate(ensemble, observations, H, R_inverse, inflation, shape=False,
+def assimilate_test(
+                ensemble, y_obs, sig_obs, inflation, shape, dist,
+                kalman_positions, kalman_positions_2d, full_positions_2d,
+                W_interp, wind_size, ens_size, size):
+                x_bar = ensemble.mean(axis=1)
+                ensemble -= x_bar[:, np.newaxis] # Y_b is ensemble[wind_size::, :]
+                ## localization with interpolation
+                kal_count = 0
+                for interp_position in kalman_positions:
+                    local_positions = nearest_positions(interp_position, shape, dist)
+                    local_ensemble = ensemble[local_positions + wind_size]
+                    local_x_bar = x_bar[local_positions + wind_size]
+                    local_obs = y_obs[local_positions]
+                    C = (local_ensemble.T)/(sig_obs**2)
+                    P_a = np.linalg.inv((ens_size - 1)*np.eye(ens_size)/inflation +
+                                        C.dot(local_ensemble)) # withOUT noise inflation
+                    W_a = np.real(sp.linalg.sqrtm((ens_size - 1)*P_a))
+                    w_a_bar = P_a.dot(C.dot(local_obs - local_x_bar))
+                    W_a += w_a_bar[:, None]
+                    W_interp[kal_count] = np.ravel(W_a) ## separate w_bar??
+                    kal_count += 1
+
+                W_fun = sp.interpolate.LinearNDInterpolator(kalman_positions_2d, W_interp)
+                W_fine_mesh = W_fun(full_positions_2d)
+                W_fine_mesh = W_fine_mesh.reshape(size, ens_size, ens_size)
+                ensemble[wind_size::] = x_bar[wind_size::, None] + np.einsum('ij, ijk->ik', ensemble[wind_size::], W_fine_mesh)
+                ensemble[0:wind_size] += x_bar[0:wind_size, None]
+                return ensemble
+
+
+def assimilate(ensemble, observations, H, R_inverse, inflation,
+               domain_shape=False,
                localization_length=False, assimilation_positions=False,
                assimilation_positions_2d=False, full_positions_2d=False):
     """
@@ -240,132 +271,114 @@ def assimilate(ensemble, observations, H, R_inverse, inflation, shape=False,
          Analysis ensemble of the same size as input ensemble
     """
     ## Change to allow for R to not be pre-inverted?
-    # x_bar = ensemble.mean(axis=1)
-    # ensemble -= x_bar[:, None]
-    # ens_size = ensemble.shape[1]
-    # print(ens_size)
-
-    # if localization_length is False:
-    #     # LETKF without localization
-    #     Y_b = np.einsum('ij,jk...->ik...', H, ensemble)
-    #     y_b_bar = Y_b.mean(axis=1)
-    #     Y_b -= y_b_bar[:, np.newaxis]
-    #     C = (Y_b.T).dot(R_inverse)
-    #     eig_value, eig_vector = np.linalg.eigh(
-    #         (ens_size-1)*np.eye(ens_size)/inflation + C.dot(Y_b))
-    #     P_tilde = eig_vector.copy()
-    #     W_a = eig_vector.copy()
-    #     for i, num in enumerate(eig_value):
-    #         P_tilde[:, i] *= 1/num
-    #         W_a[:, i] *= 1/np.sqrt(num)
-    #     P_tilde = P_tilde.dot(eig_vector.T)
-    #     W_a = W_a.dot(eig_vector.T)
-    #     w_a_bar = P_tilde.dot(C.dot(observations - y_b_bar))
-    #     W_a += w_a_bar[:, None]
-    #     ensemble = x_bar[:, None] + ensemble.dot(W_a)
-    #     return ensemble
-
-    # else:
-    #     # LETKF with localization assumes H is I
-    #     ## NEED: to include wind in ensemble will require reworking due to
-    #     ## new H and different localization.
-    #     ## NEED: Change to include some form of H for paralax correction??
-    #     ## Maybe: ^ not if paralax is only corrected when moving to ground sensors.
-    #     ## SHOULD: Will currently write as though R_inverse is a scalar.
-    #     ## May need to change at some point but will likely need to do
-    #     ## something clever since R_inverse.size is 400 billion
-    #     ## best option: form R_inverse inside of localization routine
-    #     ## good option: assimilate sat images at low resolution (probabily should do this either way)
-    #     kal_count = 0
-    #     W_interp = np.zeros([assimilation_positions.size, ens_size**2])
-    #     for interp_position in assimilation_positions:
-    #         local_positions = nearest_positions(interp_position, shape,
-    #                                             localization_length)
-    #         local_ensemble = ensemble[local_positions]
-    #         local_x_bar = x_bar[local_positions]
-    #         local_obs = observations[local_positions] # assume H is I
-    #         C = (local_ensemble.T)*R_inverse  # assume R_inverse is diag+const
-
-    #         # This should be better, but I can't get it to work
-    #         # eig_value, eig_vector = np.linalg.eigh(
-    #         #     (ens_size-1)*np.eye(ens_size)/inflation + C.dot(local_ensemble))
-    #         # P_tilde = eig_vector.copy()
-    #         # W_a = eig_vector.copy()
-    #         # for i, num in enumerate(eig_value):#             x_bar = ensemble.mean(axis=1)
-    #             ensemble -= x_bar[:, np.newaxis] # Y_b is ensemble[wind_size::, :]
-    #             ## localization with interpolation
-    #             kal_count = 0
-    #             for interp_position in kalman_positions:
-    #                 local_positions = nearest_positions(interp_position, shape, dist)
-    #                 local_ensemble = ensemble[local_positions + wind_size]
-    #                 local_x_bar = x_bar[local_positions + wind_size]
-    #                 local_obs = y_obs[local_positions]
-    #                 local_noise = flat_noise[local_positions]
-    #                 C = (local_ensemble.T)/(sig_obs**2)
-    # #                 C = C*local_noise[None, :]
-    # #                 P_a = np.linalg.inv((ens_size - 1)*np.eye(ens_size)/flat_noise[interp_position] +
-    # #                                     C.dot(local_ensemble)) # with noise inflation
-    #                 P_a = np.linalg.inv((ens_size - 1)*np.eye(ens_size)/inflation +
-    #                                     C.dot(local_ensemble)) # withOUT noise inflation
-    #                 W_a = np.real(scipy.linalg.sqrtm((ens_size - 1)*P_a))
-    #                 w_a_bar = P_a.dot(C.dot(local_obs - local_x_bar))
-    #                 W_a += w_a_bar[:, None]
-    #                 W_interp[kal_count] = np.ravel(W_a) ## separate w_bar??
-    #                 kal_count += 1
-
-    #             W_fun = scipy.interpolate.LinearNDInterpolator(kalman_positions_2d, W_interp)
-    #             W_fine_mesh = W_fun(full_positions_2d)
-    #             W_fine_mesh = W_fine_mesh.reshape(size, ens_size, ens_size)
-    #             ensemble[wind_size::] = x_bar[wind_size::, None] + np.einsum('ij, ijk->ik', ensemble[wind_size::], W_fine_mesh)
-    #             ensemble[0:wind_size] += x_bar[0:wind_size, None]
-    #         #     P_tilde[:, i] *= 1/num
-    #         #     W_a[:, i] *= 1/np.sqrt(num)
-    #         # P_tilde = P_tilde.dot(eig_vector.T)
-    #         # W_a = W_a.dot(eig_vector.T)*(ens_size - 1)
-
-    #         P_tilde = np.linalg.inv(
-    #             (ens_size - 1)*np.eye(ens_size)/inflation +
-    #             C.dot(local_ensemble))
-    #         W_a = np.real(sp.linalg.sqrtm((ens_size - 1)*P_tilde))
-    #         w_a_bar = P_tilde.dot(C.dot(local_obs - local_x_bar))
-    #         W_a += w_a_bar[:, None]
-    #         ensemble = x_bar[:, None] + ensemble.dot(W_a)
-    #         W_interp[kal_count] = np.ravel(W_a) ## separate w_bar??
-    #         kal_count += 1
-    #     W_fun = interpolate.LinearNDInterpolator(assimilation_positions_2d,
-    #                                              W_interp)
-    #     W_fine_mesh = W_fun(full_positions_2d)
-    #     W_fine_mesh = W_fine_mesh.reshape(shape[0]*shape[1],
-    #                                       ens_size, ens_size)
-    #     ensemble = x_bar[:, None] + np.einsum(
-    #         'ij, ijk->ik', ensemble, W_fine_mesh)
-
-    domain_size = shape[0]*shape[1]
-    ens_size = ensemble.shape[1]
     x_bar = ensemble.mean(axis=1)
-    ensemble -= x_bar[:, np.newaxis] # Y_b is ensemble[wind_size::, :]
-    ## localization with interpolation
-    kal_count = 0
-    W_interp = np.zeros([assimilation_positions.size, ens_size**2])
-    for interp_position in assimilation_positions:
-        local_positions = nearest_positions(interp_position, shape, domain_size)
-        local_ensemble = ensemble[local_positions]
-        local_x_bar = x_bar[local_positions]
-        local_obs = observations[local_positions]
-        C = (local_ensemble.T)*R_inverse
-        P_a = np.linalg.inv((ens_size - 1)*np.eye(ens_size)/inflation +
-                            C.dot(local_ensemble)) # withOUT noise inflation
-        W_a = np.real(sp.linalg.sqrtm((ens_size - 1)*P_a))
-        w_a_bar = P_a.dot(C.dot(local_obs - local_x_bar))
-        W_a += w_a_bar[:, None]
-        W_interp[kal_count] = np.ravel(W_a) ## separate w_bar??
-        kal_count += 1
+    ensemble -= x_bar[:, None]
+    ens_size = ensemble.shape[1]
 
-    W_fun = interpolate.LinearNDInterpolator(assimilation_positions_2d, W_interp)
-    W_fine_mesh = W_fun(full_positions_2d)
-    W_fine_mesh = W_fine_mesh.reshape(domain_size, ens_size, ens_size)
-    ensemble = x_bar[:, None] + np.einsum('ij, ijk->ik', ensemble, W_fine_mesh)
-    return ensemble
+    if localization_length is False:
+        print('Loc is False')
+        # LETKF without localization
+        Y_b = np.einsum('ij,jk...->ik...', H, ensemble)
+        y_b_bar = Y_b.mean(axis=1)
+        Y_b -= y_b_bar[:, np.newaxis]
+        C = (Y_b.T).dot(R_inverse)
+        eig_value, eig_vector = np.linalg.eigh(
+            (ens_size-1)*np.eye(ens_size)/inflation + C.dot(Y_b))
+        P_tilde = eig_vector.copy()
+        W_a = eig_vector.copy()
+        for i, num in enumerate(eig_value):
+            P_tilde[:, i] *= 1/num
+            W_a[:, i] *= 1/np.sqrt(num)
+        P_tilde = P_tilde.dot(eig_vector.T)
+        W_a = W_a.dot(eig_vector.T)
+        w_a_bar = P_tilde.dot(C.dot(observations - y_b_bar))
+        W_a += w_a_bar[:, None]
+        ensemble = x_bar[:, None] + ensemble.dot(W_a)
+        return ensemble
+
+    else:
+        # LETKF with localization assumes H is I
+        ## NEED: to include wind in ensemble will require reworking due to
+        ## new H and different localization.
+        ## NEED: Change to include some form of H for paralax correction??
+        ## Maybe: ^ not if paralax is only corrected when moving to ground sensors.
+        ## SHOULD: Will currently write as though R_inverse is a scalar.
+        ## May need to change at some point but will likely need to do
+        ## something clever since R_inverse.size is 400 billion
+        ## best option: form R_inverse inside of localization routine
+        ## good option: assimilate sat images at low resolution (probabily should do this either way)
+
+        plt.figure()
+        plt.pcolormesh(x_bar.reshape(domain_shape))
+        kal_count = 0
+        W_interp = np.zeros([assimilation_positions.size, ens_size**2])
+        print(W_interp.shape)
+        for interp_position in assimilation_positions:
+            local_positions = nearest_positions(interp_position, domain_shape,
+                                                localization_length)
+            local_ensemble = ensemble[local_positions]
+            local_x_bar = x_bar[local_positions]
+            local_obs = observations[local_positions] # assume H is I
+            C = (local_ensemble.T)*R_inverse  # assume R_inverse is diag+const
+
+            # This should be better, but I can't get it to work
+            # eig_value, eig_vector = np.linalg.eigh(
+            #     (ens_size-1)*np.eye(ens_size)/inflation + C.dot(local_ensemble))
+            # P_tilde = eig_vector.copy()
+            # W_a = eig_vector.copy()
+            # for i, num in enumerate(eig_value):
+            #     P_tilde[:, i] *= 1/num
+            #     W_a[:, i] *= 1/np.sqrt(num)
+            # P_tilde = P_tilde.dot(eig_vector.T)
+            # W_a = W_a.dot(eig_vector.T)*(ens_size - 1)
+
+            P_tilde = np.linalg.inv(
+                (ens_size - 1)*np.eye(ens_size)/inflation +
+                C.dot(local_ensemble))
+            W_a = np.real(sp.linalg.sqrtm((ens_size - 1)*P_tilde))
+            w_a_bar = P_tilde.dot(C.dot(local_obs - local_x_bar))
+            W_a += w_a_bar[:, None]
+            W_interp[kal_count] = np.ravel(W_a) ## separate w_bar??
+            kal_count += 1
+
+        W_fun = interpolate.LinearNDInterpolator(assimilation_positions_2d,
+                                                 W_interp)
+        W_fine_mesh = W_fun(full_positions_2d)
+        W_fine_mesh = W_fine_mesh.reshape(domain_shape[0]*domain_shape[1],
+                                          ens_size, ens_size)
+        ensemble = x_bar[:, None] + np.einsum(
+            'ij, ijk->ik', ensemble, W_fine_mesh)
+
+        return ensemble
+
+
+    # ## this was working
+    # domain_size = domain_shape[0]*domain_shape[1]
+    # ens_size = ensemble.shape[1]
+    # x_bar = ensemble.mean(axis=1)
+    # ensemble -= x_bar[:, np.newaxis] # Y_b is ensemble[wind_size::, :]
+    # ## localization with interpolation
+    # kal_count = 0
+    # W_interp = np.zeros([assimilation_positions.size, ens_size**2])
+    # for interp_position in assimilation_positions:
+    #     local_positions = nearest_positions(interp_position, domain_shape, localization_length)
+    #     local_ensemble = ensemble[local_positions]
+    #     local_x_bar = x_bar[local_positions]
+    #     local_obs = observations[local_positions]
+    #     C = (local_ensemble.T)*R_inverse
+    #     P_a = np.linalg.inv((ens_size - 1)*np.eye(ens_size)/inflation +
+    #                         C.dot(local_ensemble)) # withOUT noise inflation
+    #     W_a = np.real(sp.linalg.sqrtm((ens_size - 1)*P_a))
+    #     w_a_bar = P_a.dot(C.dot(local_obs - local_x_bar))
+    #     W_a += w_a_bar[:, None]
+    #     W_interp[kal_count] = np.ravel(W_a) ## separate w_bar??
+    #     kal_count += 1
+
+    # W_fun = interpolate.LinearNDInterpolator(assimilation_positions_2d, W_interp)
+    # W_fine_mesh = W_fun(full_positions_2d)
+    # W_fine_mesh = W_fine_mesh.reshape(domain_size, ens_size, ens_size)
+    # ensemble = x_bar[:, None] + np.einsum('ij, ijk->ik', ensemble, W_fine_mesh)
+    # return ensemble
 
 
 def calc_sensor_error(sensor_values, sensor_loc, H, q, time):
@@ -464,17 +477,22 @@ def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
         ## Maybe this isn't working? Maybe not though.
         if date_index != 0:
             print('Starting Full image')
+            this_index = 2
+            plt.figure()
+            plt.pcolormesh(
+                ensemble[wind_size::, this_index].reshape(domain_shape),
+                cmap='Blues_r')
+            plt.show()
             ensemble[wind_size::] = assimilate(
-                ensemble[wind_size::],
-                sat['clear_sky_good'].sel(
+                ensemble=ensemble[wind_size::],
+                observations=sat['clear_sky_good'].sel(
                     time=time_range[date_index]).values.ravel(),
-                None, 1/sat_sig**2, 1, shape=domain_shape,
+                H=None, R_inverse=1/sat_sig**2, inflation=1,
+                domain_shape=domain_shape,
                 localization_length=localization_length,
                 assimilation_positions=assimilation_positions,
                 assimilation_positions_2d=assimilation_positions_2d,
                 full_positions_2d=full_positions_2d)
-
-            this_index = 2
             plt.figure()
             plt.pcolormesh(
                 ensemble[wind_size::, this_index].reshape(domain_shape),
