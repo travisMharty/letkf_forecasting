@@ -91,11 +91,11 @@ def parallax_shift(cloud_height,
     satellite_displacement = cloud_height*cot(satellite_elevation)
     solar_displacement = cloud_height*cot(solar_elevation)
     x_correction = (
-        solar_displacement*np.cos(np.pi/2 - solar_azimuth) -
-        satellite_displacement*np.cos(np.pi/2 - satellite_azimuth))
+        solar_displacement*np.cos(-np.pi/2 - solar_azimuth) -
+        satellite_displacement*np.cos(-np.pi/2 - satellite_azimuth))
     y_correction = (
-        solar_displacement*np.sin(np.pi/2 - solar_azimuth) -
-        satellite_displacement*np.sin(np.pi/2 - satellite_azimuth))
+        solar_displacement*np.sin(-np.pi/2 - solar_azimuth) -
+        satellite_displacement*np.sin(-np.pi/2 - satellite_azimuth))
 
     return x_correction, y_correction
 
@@ -307,12 +307,8 @@ def assimilate(ensemble, observations, H, R_inverse, inflation,
         ## something clever since R_inverse.size is 400 billion
         ## best option: form R_inverse inside of localization routine
         ## good option: assimilate sat images at low resolution (probabily should do this either way)
-
-        plt.figure()
-        plt.pcolormesh(x_bar.reshape(domain_shape))
         kal_count = 0
         W_interp = np.zeros([assimilation_positions.size, ens_size**2])
-        print(W_interp.shape)
         for interp_position in assimilation_positions:
             local_positions = nearest_positions(interp_position, domain_shape,
                                                 localization_length)
@@ -346,6 +342,12 @@ def assimilate(ensemble, observations, H, R_inverse, inflation,
         W_fine_mesh = W_fun(full_positions_2d)
         W_fine_mesh = W_fine_mesh.reshape(domain_shape[0]*domain_shape[1],
                                           ens_size, ens_size)
+        print('W_interp: '+str(W_interp.shape))
+        print(W_interp)
+        print('W_fine_mesh: '+str(W_fine_mesh.shape))
+        print(W_fine_mesh)
+        print('ensemble: '+str(ensemble.shape))
+        print(ensemble)
         ensemble = x_bar[:, None] + np.einsum(
             'ij, ijk->ik', ensemble, W_fine_mesh)
 
@@ -413,9 +415,15 @@ def ensemble_creator(sat_image, CI_sigma, wind_size, wind_sigma, ens_size):
 
 def assimilation_position_generator(domain_shape, assimilation_grid_size):
     domain_size = domain_shape[0]*domain_shape[1]
-    row_positions, col_positions = np.meshgrid(
-        np.arange(0, domain_shape[0], assimilation_grid_size),
-        np.arange(0, domain_shape[1], assimilation_grid_size))
+    row_positions = np.arange(0, domain_shape[0], assimilation_grid_size)
+    col_positions = np.arange(0, domain_shape[1], assimilation_grid_size)
+    if row_positions[-1] != domain_shape[0] - 1:
+        row_positions = np.concatenate((row_positions,
+                                        np.array(domain_shape[0] - 1)[None]))
+    if col_positions[-1] != domain_shape[1] - 1:
+        col_positions = np.concatenate((col_positions,
+                                        np.array(domain_shape[1] - 1)[None]))
+    row_positions, col_positions = np.meshgrid(row_positions, col_positions)
     row_positions = np.ravel(row_positions)
     col_positions = np.ravel(col_positions)
     assimilation_positions = np.ravel_multi_index(
@@ -446,6 +454,12 @@ def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
     sat_loc = np.concatenate(
         (sat['lat'].values.ravel()[:, None],
          sat['long'].values.ravel()[:, None]), axis=1)
+    noise_init = np.zeros_like(q)
+    noise_init[0:25, :] = 1
+    noise_init[-25:, :] = 1
+    noise_init[:, 0:25] = 1
+    noise_init[:, -25:] = 1
+    noise_init = sp.ndimage.gaussian_filter(noise_init, 12)
     domain_shape = sat['clear_sky_good'].isel(time=0).shape
     domain_size = domain_shape[0]*domain_shape[1]
     assimilation_positions, assimilation_positions_2d, full_positions_2d = (
@@ -476,13 +490,7 @@ def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
 
         ## Maybe this isn't working? Maybe not though.
         if date_index != 0:
-            print('Starting Full image')
-            this_index = 2
-            plt.figure()
-            plt.pcolormesh(
-                ensemble[wind_size::, this_index].reshape(domain_shape),
-                cmap='Blues_r')
-            plt.show()
+
             ensemble[wind_size::] = assimilate(
                 ensemble=ensemble[wind_size::],
                 observations=sat['clear_sky_good'].sel(
@@ -493,13 +501,7 @@ def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
                 assimilation_positions=assimilation_positions,
                 assimilation_positions_2d=assimilation_positions_2d,
                 full_positions_2d=full_positions_2d)
-            plt.figure()
-            plt.pcolormesh(
-                ensemble[wind_size::, this_index].reshape(domain_shape),
-                cmap='Blues_r')
-            plt.show()
-            print(ensemble[wind_size::, this_index].mean())
-        #     return None
+            noise = noise_init.copy()
 
         ## only calculate error for forecasts
         # sensor_error = sensor_error.append(
@@ -515,6 +517,7 @@ def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
         for t in range(T_steps):
             q = time_deriv_3(q, dt, U, dx, V, dy)
             q = q.clip(max=max_CI, min=0)
+            noise = time_deriv_3(noise, dt, U, dx, V, dy) # maybe change U and V to ensemble average
             for ens_index in range(ens_size):
                 ensemble[wind_size::, ens_index] = time_deriv_3(
                     ensemble[wind_size::, ens_index].reshape(domain_shape), dt,
