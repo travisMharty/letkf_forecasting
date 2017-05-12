@@ -276,7 +276,7 @@ def assimilate(ensemble, observations, H, R_inverse, inflation,
     ens_size = ensemble.shape[1]
 
     if localization_length is False:
-        print('Loc is False')
+        # print('Loc is False')
         # LETKF without localization
         Y_b = np.einsum('ij,jk...->ik...', H, ensemble)
         y_b_bar = Y_b.mean(axis=1)
@@ -342,12 +342,12 @@ def assimilate(ensemble, observations, H, R_inverse, inflation,
         W_fine_mesh = W_fun(full_positions_2d)
         W_fine_mesh = W_fine_mesh.reshape(domain_shape[0]*domain_shape[1],
                                           ens_size, ens_size)
-        print('W_interp: '+str(W_interp.shape))
-        print(W_interp)
-        print('W_fine_mesh: '+str(W_fine_mesh.shape))
-        print(W_fine_mesh)
-        print('ensemble: '+str(ensemble.shape))
-        print(ensemble)
+        # print('W_interp: '+str(W_interp.shape))
+        # print(W_interp)
+        # print('W_fine_mesh: '+str(W_fine_mesh.shape))
+        # print(W_fine_mesh)
+        # print('ensemble: '+str(ensemble.shape))
+        # print(ensemble)
         ensemble = x_bar[:, None] + np.einsum(
             'ij, ijk->ik', ensemble, W_fine_mesh)
 
@@ -409,6 +409,9 @@ def ensemble_creator(sat_image, CI_sigma, wind_size, wind_sigma, ens_size):
     ensemble = np.concatenate(
         [ensemble,
          np.repeat(sat_image.ravel()[:, None], ens_size, axis=1)], axis=0)
+    CI_pert = np.random.normal(loc=0, scale=CI_sigma, size=ens_size)
+    ensemble[wind_size:] = ((1 - CI_pert[None, :])*ensemble[wind_size:] +
+                            CI_pert[None, :])
     return ensemble
 
 
@@ -440,7 +443,7 @@ def assimilation_position_generator(domain_shape, assimilation_grid_size):
 
 def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
                dx, dy, C_max, assimilation_grid_size, localization_length,
-               sat_sig, sensor_sig, ens_size, wind_sigma, wind_size):
+               sat_sig, sensor_sig, ens_size, wind_sigma, wind_size, CI_sigma):
     """Check back later."""
     ## NEED: Incorporate IO? Would need to reformulate so that P is smaller.
     time_range = (pd.date_range(start_time, end_time, freq='15 min')
@@ -454,14 +457,14 @@ def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
     sat_loc = np.concatenate(
         (sat['lat'].values.ravel()[:, None],
          sat['long'].values.ravel()[:, None]), axis=1)
-    noise_init = np.zeros_like(q)
+    domain_shape = sat['clear_sky_good'].isel(time=0).shape
+    domain_size = domain_shape[0]*domain_shape[1]
+    noise_init = np.zeros(domain_shape)
     noise_init[0:25, :] = 1
     noise_init[-25:, :] = 1
     noise_init[:, 0:25] = 1
     noise_init[:, -25:] = 1
     noise_init = sp.ndimage.gaussian_filter(noise_init, 12)
-    domain_shape = sat['clear_sky_good'].isel(time=0).shape
-    domain_size = domain_shape[0]*domain_shape[1]
     assimilation_positions, assimilation_positions_2d, full_positions_2d = (
         assimilation_position_generator(domain_shape, assimilation_grid_size))
     ## This is only for now. Eventually H will be a function of time and cloud height.
@@ -470,7 +473,7 @@ def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
 
     ensemble = ensemble_creator(
         sat['clear_sky_good'].sel(time=time_range[0]).values,
-        CI_sigma=None, wind_size=wind_size, wind_sigma=wind_sigma, ens_size=ens_size)
+        CI_sigma=CI_sigma, wind_size=wind_size, wind_sigma=wind_sigma, ens_size=ens_size)
     for date_index in range(time_range.size - 1):
         start_time = time_range[date_index]
         end_time = time_range[date_index + 1]
@@ -490,7 +493,11 @@ def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
 
         ## Maybe this isn't working? Maybe not though.
         if date_index != 0:
-
+            noise = (noise - noise.min())
+            noise = noise/noise.max()
+            noise = noise.ravel()
+            ensemble[wind_size::] = (q.ravel()[:, None]*noise[:, None] +
+                                     ensemble[wind_size:, :]*(1 - noise[:, None]))
             ensemble[wind_size::] = assimilate(
                 ensemble=ensemble[wind_size::],
                 observations=sat['clear_sky_good'].sel(
@@ -501,23 +508,43 @@ def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
                 assimilation_positions=assimilation_positions,
                 assimilation_positions_2d=assimilation_positions_2d,
                 full_positions_2d=full_positions_2d)
-            noise = noise_init.copy()
+        noise = noise_init.copy()
 
-        ## only calculate error for forecasts
-        # sensor_error = sensor_error.append(
-        #     calc_sensor_error(sensor_data.ix[this_time],
-        #                       sensor_loc, H, q, this_time))
-        # plt.figure()
-        # im = plt.pcolormesh(sat.long, sat.lat, q, cmap='Blues', vmin=0, vmax=1)
-        # plt.colorbar(im)
-        # plt.title(this_time)
-        # plt.scatter(sensor_loc.lon, sensor_loc.lat, c='r')
-        # plt.show()
+        ensemble_mean = ensemble[wind_size::].mean(axis=1).reshape(
+            domain_shape)
+        sensor_error = sensor_error.append(
+                    calc_sensor_error(sensor_data.ix[this_time],
+                              sensor_loc, H[:, wind_size::],
+                              q, this_time))
+        sensor_error_ens = sensor_error_ens.append(
+            calc_sensor_error(
+                sensor_data.ix[this_time], sensor_loc,
+                H[:, wind_size::], ensemble_mean, this_time))
+
+        print(sensor_error.ix[this_time].abs().mean())
+        print(sensor_error_ens.ix[this_time].abs().mean())
+
+        plt.figure()
+        im = plt.pcolormesh(sat.long, sat.lat, q,
+                            cmap='Blues', vmin=0, vmax=1)
+        plt.colorbar(im)
+        plt.title('Just advect: ' + str(this_time))
+        plt.scatter(sensor_loc.lon, sensor_loc.lat, c='r')
+        plt.show()
+
+        plt.figure()
+        im = plt.pcolormesh(sat.long, sat.lat,
+                            ensemble_mean,
+                            cmap='Blues', vmin=0, vmax=1)
+        plt.colorbar(im)
+        plt.title('Ensemble: ' + str(this_time))
+        plt.scatter(sensor_loc.lon, sensor_loc.lat, c='r')
+        plt.show()
 
         for t in range(T_steps):
             q = time_deriv_3(q, dt, U, dx, V, dy)
             q = q.clip(max=max_CI, min=0)
-            noise = time_deriv_3(noise, dt, U, dx, V, dy) # maybe change U and V to ensemble average
+            noise = time_deriv_3(noise, dt, U, dx, V, dy) # maybe change U and V to ensemble
             for ens_index in range(ens_size):
                 ensemble[wind_size::, ens_index] = time_deriv_3(
                     ensemble[wind_size::, ens_index].reshape(domain_shape), dt,

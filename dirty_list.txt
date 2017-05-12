@@ -1,0 +1,25 @@
+In no particular order:
+
+Error variance for sensor
+
+Error variance for satellite
+
+Error Covariances for satellite
+
+Non-gaussian error for both
+
+** .resample vs sp.interpolate for sensor data
+
+H for sensors does not include fact that sensors are time average and sat are
+space average
+
+Better means of removing background
+
+Ensemble creation
+         Shift CI map (by different h, by simple shifting,
+         by using wind field (like shifts in time))
+
+         What variances should be used for: wind, CI field, height
+
+         Should CI field perturbation be constant over the whole domain or
+         some smooth field over the whole domain?
