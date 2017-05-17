@@ -535,3 +535,171 @@ def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
                 plt.title('Ensemble: ' + str(this_time))
                 plt.scatter(sensor_loc.lon, sensor_loc.lat, c='r')
                 plt.show()
+
+
+def noise_fun(domain_shape):
+    noise_init = np.zeros(domain_shape)
+    noise_init[0:25, :] = 1
+    noise_init[-25:, :] = 1
+    noise_init[:, 0:25] = 1
+    noise_init[:, -25:] = 1
+    noise_init = sp.ndimage.gaussian_filter(noise_init, 12)
+    return noise_init
+
+
+
+
+def advect_5min(q, noise, ensemble, dt, U, dx, V, dy, T_steps, wind_size):
+    """Check back later"""
+    domain_shape = q.shape
+    domain_size = domain_shape[0]*domain_shape[1]
+    ens_size = ensemble.shape[1]
+    for t in range(T_steps):
+        q = time_deriv_3(q, dt, U, dx, V, dy)
+        noise = time_deriv_3(noise, dt, U, dx, V, dy)
+        for ens_index in range(ens_size):
+            ensemble[wind_size:, ens_index] = time_deriv_3(
+                ensemble[wind_size:, ens_index].reshape(domain_shape), dt,
+                U + ensemble[0, ens_index], dx,
+                V + ensemble[1, ens_index], dy).reshape(domain_size)
+    return q, noise, ensemble
+
+def trimmed_simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
+               dx, dy, C_max, assimilation_grid_size, localization_length,
+               sat_sig, sensor_sig, ens_size, wind_sigma, wind_size, CI_sigma):
+    """Check back later."""
+    ## NEED: Incorporate IO? Would need to reformulate so that P is smaller.
+    time_range = (pd.date_range(start_time, end_time, freq='15 min')
+                  .tz_localize('MST').astype(int))
+    all_time = sat.time.values
+    time_range = np.intersect1d(time_range, all_time)
+    sensor_error = pd.DataFrame(data=None, index=None, columns=sensor_loc.id)
+    sensor_error_ens = sensor_error.copy()
+    sat_loc = np.concatenate(
+        (sat['lat'].values.ravel()[:, None],
+         sat['long'].values.ravel()[:, None]), axis=1)
+    domain_shape = sat['clear_sky_good'].isel(time=0).shape
+    domain_size = domain_shape[0]*domain_shape[1]
+    noise_init = noise_fun(domain_shape)
+    assimilation_positions, assimilation_positions_2d, full_positions_2d = (
+        assimilation_position_generator(domain_shape, assimilation_grid_size))
+    ## This is only for now. Eventually H will be a function of time and cloud height.
+    H, delete = forward_obs_mat(sensor_loc[['lat', 'lon']].values, sat_loc)
+    H = np.concatenate((np.zeros((H.shape[0], 2)), H), axis=1)
+
+    ensemble = ensemble_creator(
+        sat['clear_sky_good'].sel(time=time_range[0]).values,
+        CI_sigma=CI_sigma, wind_size=wind_size,
+        wind_sigma=wind_sigma, ens_size=ens_size)
+    # Calc initial error here
+
+    for time_index in range(time_range.size - 1):
+        q = sat['clear_sky_good'].sel(time=start_advection).values
+        noise = noise_init.copy()
+        U = wind.sel(time=start_advection, method='pad').U.values
+        V = wind.sel(time=start_advection, method='pad').V.values
+        cx = abs(U).max()
+        cy = abs(V).max()
+        T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)/C_max))
+        dt = (5*60)/T_steps
+        advection_number = int((time_range[time_index + 1] -
+                                time_range[time_index])*(10**(-9)/(60*5)))
+        for n in range(advection_number):
+            q, noise, ensemble = advect_5min(q, noise, ensemble, dt, U, dx,
+                                             V, dy, T_steps, wind_size)
+
+
+
+        # ensemble_mean = ensemble[wind_size::].mean(axis=1).reshape(
+        #     domain_shape)
+        # sensor_error = sensor_error.append(
+        #             calc_sensor_error(sensor_data.ix[this_time],
+        #                       sensor_loc, H[:, wind_size::],
+        #                       q, this_time))
+        # sensor_error_ens = sensor_error_ens.append(
+        #     calc_sensor_error(
+        #         sensor_data.ix[this_time], sensor_loc,
+        #         H[:, wind_size::], ensemble_mean, this_time))
+
+        # print(sensor_error.ix[this_time].abs().mean())
+        # print(sensor_error_ens.ix[this_time].abs().mean())
+
+        # plt.figure()
+        # im = plt.pcolormesh(sat.long, sat.lat, q,
+        #                     cmap='Blues', vmin=0, vmax=1)
+        # plt.colorbar(im)
+        # plt.title('Just advect: ' + str(this_time))
+        # plt.scatter(sensor_loc.lon, sensor_loc.lat, c='r')
+        # plt.show()
+
+        # plt.figure()
+        # im = plt.pcolormesh(sat.long, sat.lat,
+        #                     ensemble_mean,
+        #                     cmap='Blues', vmin=0, vmax=1)
+        # plt.colorbar(im)
+        # plt.title('Ensemble: ' + str(this_time))
+        # plt.scatter(sensor_loc.lon, sensor_loc.lat, c='r')
+        # plt.show()
+
+
+            # nearest_up = 5*np.round((t + 1)*dt/(60*5))
+        #     test = (abs(nearest_up - (t + 1)*dt/60) <
+        #             abs(nearest_up - (t + 2)*dt/60))
+        #     test = test and (abs(nearest_up-(t+1)*dt/60) <
+        #                      abs(nearest_up-(t)*dt/60))
+        #     test = test and (nearest_up != 0)
+        #     if test:
+        #         this_time = pd.Timestamp(
+        #             start_time + (t+1)*dt*10**9).tz_localize('UTC'
+        #             ).tz_convert('MST')
+        #         ensemble = assimilate(ensemble, sensor_data.ix[this_time],
+        #                               H, 1/sensor_sig**2, 1)
+        #         ensemble_mean = ensemble[wind_size::].mean(axis=1).reshape(
+        #             domain_shape)
+        #         sensor_error = sensor_error.append(
+        #             calc_sensor_error(sensor_data.ix[this_time],
+        #                               sensor_loc, H[:, wind_size::],
+        #                               q, this_time))
+        #         sensor_error_ens = sensor_error_ens.append(
+        #             calc_sensor_error(
+        #                 sensor_data.ix[this_time], sensor_loc,
+        #                 H[:, wind_size::], ensemble_mean, this_time))
+
+        #         print(sensor_error.ix[this_time].abs().mean())
+        #         print(sensor_error_ens.ix[this_time].abs().mean())
+
+        #         plt.figure()
+        #         im = plt.pcolormesh(sat.long, sat.lat, q,
+        #                             cmap='Blues', vmin=0, vmax=1)
+        #         plt.colorbar(im)
+        #         plt.title('Just advect: ' + str(this_time))
+        #         plt.scatter(sensor_loc.lon, sensor_loc.lat, c='r')
+        #         plt.show()
+
+        #         plt.figure()
+        #         im = plt.pcolormesh(sat.long, sat.lat,
+        #                             ensemble_mean,
+        #                             cmap='Blues', vmin=0, vmax=1)
+        #         plt.colorbar(im)
+        #         plt.title('Ensemble: ' + str(this_time))
+        #         plt.scatter(sensor_loc.lon, sensor_loc.lat, c='r')
+        #         plt.show()
+
+
+        #     # for whole image assimilation
+        #     noise = (noise - noise.min())
+        #     noise = noise/noise.max()
+        #     noise = noise.ravel()
+        #     ensemble[wind_size::] = (q.ravel()[:, None]*noise[:, None] +
+        #                              ensemble[wind_size:, :]*(1 - noise[:, None]))
+        #     ensemble[wind_size::] = assimilate(
+        #         ensemble=ensemble[wind_size::],
+        #         observations=sat['clear_sky_good'].sel(
+        #             time=time_range[date_index]).values.ravel(),
+        #         H=None, R_inverse=1/sat_sig**2, inflation=1,
+        #         domain_shape=domain_shape,
+        #         localization_length=localization_length,
+        #         assimilation_positions=assimilation_positions,
+        #         assimilation_positions_2d=assimilation_positions_2d,
+        #         full_positions_2d=full_positions_2d)
+        # noise = noise_init.copy()

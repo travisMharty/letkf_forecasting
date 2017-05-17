@@ -27,6 +27,8 @@ Ensemble creation
          some smooth but changing field over the domain?
 
 Include IO before assimilating satellite images
+        Will need to do something somewhat clever such as domain localization in
+        OI if the domain is too large.
 
 Perform assimilation or advection on GPU?
 
@@ -45,9 +47,7 @@ Optimize over:
 
          localization distances and assimilation grid sizes
 
-
----------
-Questions:
----------
-
 Do results improve with a larger domain or a smaller domain?
+
+Should localization for sate update be in space or cloudiness?
+What about sensor update?
