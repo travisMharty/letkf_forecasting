@@ -1,17 +1,19 @@
-In no particular order:
+-------------------------------
+The dirt in no particular order:
+-------------------------------
 
 Error variance for sensor
 
 Error variance for satellite
 
-Error Covariances for satellite
+Error Covariances for satellite -- OI
 
 Non-gaussian error for both
 
 ** .resample vs sp.interpolate for sensor data
 
 H for sensors does not include fact that sensors are time average and sat are
-space average
+space average. This should be in inflation, but does it need to be?
 
 Better means of removing background
 
@@ -22,4 +24,30 @@ Ensemble creation
          What variances should be used for: wind, CI field, height
 
          Should CI field perturbation be constant over the whole domain or
-         some smooth field over the whole domain?
+         some smooth but changing field over the domain?
+
+Include IO before assimilating satellite images
+
+Perform assimilation or advection on GPU?
+
+Parallelize advection on multiple cores Dask?
+
+Make advection faster with only matrix multiplication?
+
+Optimize over:
+         OI or no OI
+            Types of OI and those parameters (can pull from dissertaion?)
+
+         Different ensemble creation techniques including the standard
+         deviations involved
+
+         Sattellite/sensor errors and inflation
+
+         localization distances and assimilation grid sizes
+
+
+---------
+Questions:
+---------
+
+Do results improve with a larger domain or a smaller domain?
