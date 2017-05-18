@@ -465,8 +465,8 @@ def simulation(sat, wind, sensor_data, sensor_loc, start_time, end_time,
                 sensor_data.ix[this_time], sensor_loc,
                 H[:, wind_size::], ensemble_mean, this_time))
 
-        print(sensor_error.ix[this_time].abs().mean())
-        print(sensor_error_ens.ix[this_time].abs().mean())
+        print(abs(sensor_error.ix[this_time].values).mean())
+        print(abs(sensor_error_ens.ix[this_time].values).mean())
 
         plt.figure()
         im = plt.pcolormesh(sat.long, sat.lat, q,
@@ -587,17 +587,18 @@ def trimmed_simulation(sat, wind, sensor_data, sensor_loc, start_time,
         sat['clear_sky_good'].sel(time=time_range[0]).values,
         CI_sigma=CI_sigma, wind_size=wind_size,
         wind_sigma=wind_sigma, ens_size=ens_size)
-    background = xr.DataArray(
-        data=ensemble[None, :, :],
-        coords={'time': [0],
-                'element': np.arange(ensemble.shape[0]),
-                'ens_num': np.arange(ensemble.shape[1])},
-        dims=('time', 'element', 'ens_num'),
-        attrs={'shape': domain_shape})
-    analysis = background.copy()
-    advected = xr.DataArray
     q = sat['clear_sky_good'].sel(time=time_range[0]).values
     noise = noise_init.copy()
+    # background = xr.DataArray(
+    #     data=ensemble[None, :, :],
+    #     coords={'time': [0],
+    #             'element': np.arange(ensemble.shape[0]),
+    #             'ens_num': np.arange(ensemble.shape[1])},
+    #     dims=('time', 'element', 'ens_num'),
+    #     attrs={'shape': domain_shape})
+    background = ensemble.mean(axis=1)[None, :]
+    analysis = background.copy()
+    advected = q[None, :, :].copy()
     for time_index in range(time_range.size - 1):
         sat_time = time_range[time_index]
         print('time_index: ' + str(time_index))
@@ -616,23 +617,26 @@ def trimmed_simulation(sat, wind, sensor_data, sensor_loc, start_time,
             print('advection_number: ' + str(n))
             q, noise, ensemble = advect_5min(q, noise, ensemble, dt, U, dx,
                                              V, dy, T_steps, wind_size)
-            temp = xr.DataArray(data=ensemble[None, :, :],
-                                coords={'time': [sensor_time.value],
-                                        'element': background.element,
-                                        'ens_num': background.ens_num},
-                                dims=background.dims,
-                                attrs={'shape': domain_shape})
-            background = xr.concat([background, temp], dim='time')
+            advected = np.concatenate([advected, q[None, :, :]], axis=0)
+            # temp = xr.DataArray(data=ensemble[None, :, :],
+            #                     coords={'time': [sensor_time.value],
+            #                             'element': background.element,
+            #                             'ens_num': background.ens_num},
+            #                     dims=background.dims,
+            #                     attrs={'shape': domain_shape})
+            # background = xr.concat([background, temp], dim='time')
+            background = np.concatenate([background, ensemble.mean(axis=1)[None,:]], axis=0)
             ensemble = assimilate(ensemble, sensor_data.ix[sensor_time],
                                   H, 1/sensor_sig**2, 1)
             if n != advection_number-1:
-                temp = xr.DataArray(data=ensemble[None, :, :],
-                                    coords={'time': [sensor_time.value],
-                                            'element': background.element,
-                                            'ens_num': background.ens_num},
-                                    dims=background.dims,
-                                    attrs={'shape': domain_shape})
-                analysis = xr.concat([analysis, temp], dim='time')
+                # temp = xr.DataArray(data=ensemble[None, :, :],
+                #                     coords={'time': [sensor_time.value],
+                #                             'element': background.element,
+                #                             'ens_num': background.ens_num},
+                #                     dims=background.dims,
+                #                     attrs={'shape': domain_shape})
+                # analysis = xr.concat([analysis, temp], dim='time')
+                analysis = np.concatenate([analysis, ensemble.mean(axis=1)[None, :]], axis=0)
 
         # for whole image assimilation
         q = sat['clear_sky_good'].sel(time=time_range[time_index + 1]).values
@@ -644,20 +648,23 @@ def trimmed_simulation(sat, wind, sensor_data, sensor_loc, start_time,
         ensemble[wind_size::] = assimilate(
             ensemble=ensemble[wind_size::],
             observations=sat['clear_sky_good'].sel(
-                time=time_range[time_index]).values.ravel(),
+                time=time_range[time_index + 1]).values.ravel(),
             H=None, R_inverse=1/sat_sig**2, inflation=1,
             domain_shape=domain_shape,
             localization_length=localization_length,
             assimilation_positions=assimilation_positions,
             assimilation_positions_2d=assimilation_positions_2d,
             full_positions_2d=full_positions_2d)
-        temp = xr.DataArray(data=ensemble[None, :, :],
-                            coords={'time': [time_range[time_index + 1]],
-                                    'element': background.element,
-                                    'ens_num': background.ens_num},
-                            dims=background.dims,
-                            attrs={'shape': domain_shape})
-        analysis = xr.concat([analysis, temp], dim='time')
+        # temp = xr.DataArray(data=ensemble[None, :, :],
+        #                     coords={'time': [time_range[time_index + 1]],
+        #                             'element': background.element,
+        #                             'ens_num': background.ens_num},
+        #                     dims=background.dims,
+        #                     attrs={'shape': domain_shape})
+        # analysis = xr.concat([analysis, temp], dim='time')
+        analysis = np.concatenate([analysis, ensemble.mean(axis=1)[None, :]], axis=0)
         noise = noise_init.copy()
-
-    return analysis, background
+    begining = time_range[0]
+    end = time_range[-1]
+    time_range = (pd.date_range(begining, end, freq='5 min').tz_localize('MST'))
+    return analysis, background, advected, time_range
