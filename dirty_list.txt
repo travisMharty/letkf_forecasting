@@ -12,10 +12,12 @@ Non-gaussian error for both
 
 ** .resample vs sp.interpolate for sensor data
 
+Include H which accounts for cloud height.
+
 H for sensors does not include fact that sensors are time average and sat are
 space average. This should be in inflation, but does it need to be?
 
-Better means of removing background
+Better means of removing background --- look at SUNY code
 
 Ensemble creation
          Shift CI map (by different h, by simple shifting,
@@ -49,5 +51,6 @@ Optimize over:
 
 Do results improve with a larger domain or a smaller domain?
 
-Should localization for sate update be in space or cloudiness?
-What about sensor update?
+Should localization for sat update be in space or cloudiness?
+
+Include cloudiness localization in sensor update
