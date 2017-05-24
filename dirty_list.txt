@@ -54,3 +54,6 @@ Do results improve with a larger domain or a smaller domain?
 Should localization for sat update be in space or cloudiness?
 
 Include cloudiness localization in sensor update
+
+There could be an error for the parallrax correction if the corrected sensor
+location leaves the satellite domain.
