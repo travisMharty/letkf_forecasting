@@ -843,7 +843,6 @@ def get_flat_correct(
     return flat_correct
 
 
-@profile
 def simulation_parallax(sat, wind, sensor_data, sensor_loc, start_time,
                        end_time, dx, dy, C_max, assimilation_grid_size,
                        localization_length, sat_sig, sensor_sig, ens_size,
@@ -965,8 +964,8 @@ sensor_CI = sensor_CI.reset_index().pivot(
 sensor_CI = sensor_CI.resample('5min').mean().dropna() ##Use scipy interpolate instead of this.
 
 #This is taken from http://www.groundcontrol.com/Satellite_Look_Angle_Calculator.html
-goes15_azimuth = 220.5*(2*np.pi)/360
-goes15_elevation = 44.1*(2*np.pi)/360
+goes15_azimuth = 220.5
+goes15_elevation = 44.1
 
 tus = pv.location.Location(32.2, -111, 'US/Arizona', 700,'Tucson')
 
@@ -1002,7 +1001,6 @@ wind_15_smooth = wind_15.copy()
 wind_15_smooth['U'] = (wind_15.U.dims, U)
 wind_15_smooth['V'] = (wind_15.V.dims, V)
 
-importlib.reload(lf)
 dx = 250 #in km
 dy = 250 #in km
 C_max = 1.2
@@ -1014,7 +1012,6 @@ ens_size = 40
 wind_sigma = (.4, .05)
 wind_size = 2
 CI_sigma = .1
-tus = pv.location.Location(32.2, -111, 'US/Arizona', 700,'Tucson')
 start_time = '2014-04-15 12:30:00' #11:00:00 is not a bad start
 end_time = '2014-04-15 13:00:00' #Gets boring shortly after 14:00:00
 x_crop_stag = slice(x_crop.start - 1, x_crop.stop)
