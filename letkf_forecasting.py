@@ -935,100 +935,143 @@ def simulation_parallax(sat, wind, sensor_data, sensor_loc, start_time,
     time_range = (pd.date_range(begining, end, freq='5 min').tz_localize('MST'))
     return analysis, background, advected, time_range
 
+def test_parallax(sat, sensor_data, sensor_loc, start_time,
+                       end_time, location, cloud_height,
+                       sat_azimuth, sat_elevation):
+    """Check back later."""
+    ## NEED: Incorporate IO? Would need to reformulate so that P is smaller.
+    time_range = (pd.date_range(start_time, end_time, freq='15 min')
+                  .tz_localize('MST').astype(int))
+    all_time = sat.time.values
+    time_range = np.intersect1d(time_range, all_time)
+    sat_loc = np.concatenate(
+        (sat['lat'].values.ravel()[:, None],
+         sat['long'].values.ravel()[:, None]), axis=1)
+    domain_shape = sat['clear_sky_good'].isel(time=0).shape
+    flat_sensor_loc, lat_step, lon_step = find_flat_loc(
+        sat, sensor_loc)
+    error = np.ones([time_range.size, flat_sensor_loc.size])*np.nan
+    lat_correction = np.ones(time_range.size)*np.nan
+    lon_correction = np.ones(time_range.size)*np.nan
+    for time_index in range(time_range.size):
+        sat_int_time = time_range[time_index]
+        q = sat['clear_sky_good'].sel(time=sat_int_time).values.ravel()
+        sat_time = pd.Timestamp(sat_int_time).tz_localize('UTC').tz_convert('MST')
+        flat_correct = get_flat_correct(
+                cloud_height=cloud_height, lat_step=lat_step, lon_step=lon_step,
+                domain_shape=domain_shape, sat_azimuth=sat_azimuth,
+                sat_elevation=sat_elevation,
+                location=location, sensor_time=sat_time)
+        this_flat_sensor_loc = flat_sensor_loc + flat_correct
+        error[time_index] = (q[this_flat_sensor_loc] -
+                             sensor_data.ix[sat_time].values)
+        solar_position = location.get_solarposition(sat_time)
+        x_correct, y_correct = parallax_shift(
+            cloud_height, sat_azimuth, sat_elevation,
+            solar_position['azimuth'].values,
+            solar_position['elevation'].values)
+        lat_correct, lon_correct = to_lat_lon(x_correct, y_correct,
+                                              location.latitude)
+        lat_correction[time_index] = lat_correct
+        lon_correction[time_index] = lon_correct
 
-### ***HERE TO RUN LINE_PROFILER***
-import numpy as np
-import pandas as pd
-import xarray as xr
-import pvlib as pv
-import matplotlib.pyplot as plt
-import scipy.ndimage.filters as filters
-
-sat_14 = xr.open_dataset('/home/travis/python_code/forecasting/current_data/sat_14.nc')
-sat_15 = xr.open_dataset('/home/travis/python_code/forecasting/current_data/sat_15.nc')
-wind_15 = xr.open_dataset('/home/travis/python_code/forecasting/current_data/wind_15_crop.nc')
-sensor_data = pd.read_hdf('/home/travis/python_code/forecasting/current_data/sensor_data.h5')
-sensor_loc = pd.read_hdf('/home/travis/python_code/forecasting/current_data/sensor_loc.h5')
-
-clear_sky_good = xr.DataArray(
-    data=(sat_15.GHI.values/sat_14.GHI.values).clip(max=1),
-    coords=sat_15.coords)
-clear_sky_good = clear_sky_good.rename({'x': 'y_', 'y': 'x_'})
-clear_sky_good = clear_sky_good.rename({'y_': 'y', 'x_': 'x'})
-sat_15['clear_sky_good'] = clear_sky_good
-sat_15 = sat_15.rename({'x': 'west_east', 'y': 'south_north'})
-
-sensor_CI = sensor_data[['clearsky_index', 'id']]
-sensor_CI = sensor_CI.reset_index().pivot(
-    index='time', columns='id', values='clearsky_index')
-sensor_CI = sensor_CI.resample('5min').mean().dropna() ##Use scipy interpolate instead of this.
-
-#This is taken from http://www.groundcontrol.com/Satellite_Look_Angle_Calculator.html
-goes15_azimuth = 220.5
-goes15_elevation = 44.1
-
-tus = pv.location.Location(32.2, -111, 'US/Arizona', 700,'Tucson')
-
-long_min = sensor_loc['lon'].min()
-long_max = sensor_loc['lon'].max()
-lat_min = sensor_loc['lat'].min()
-lat_max = sensor_loc['lat'].max()
-long = sat_15.long.values
-lat = sat_15.lat.values
-min_x = abs(long[0, :] - long_min).argmin()
-max_x = abs(long[0, :] - long_max).argmin()
-min_y = abs(lat[:, 0] - lat_min).argmin()
-max_y = abs(lat[:, 0] - lat_max).argmin()
-
-U_max = wind_15.U.max() # know U is positive
-V_max = abs(wind_15.V.min()) # know V is negative
-
-left = int(U_max*60*30/250) + 20
-right = 20
-
-up = int(V_max*60*30/250) + 20
-down = 20
-
-x_crop = slice(min_x - left, max_x + right)
-y_crop = slice(min_y - down, max_y + up)
+        # for whole image assimilation
+    return error, lat_correction, lon_correction, time_range
 
 
-U = filters.uniform_filter(wind_15.U, (0, 300, 300), mode='mirror')
-V = filters.uniform_filter(wind_15.V, (0, 300, 300), mode='mirror')
+# ### ***HERE TO RUN LINE_PROFILER***
+# import numpy as np
+# import pandas as pd
+# import xarray as xr
+# import pvlib as pv
+# import matplotlib.pyplot as plt
+# import scipy.ndimage.filters as filters
+
+# sat_14 = xr.open_dataset('/home/travis/python_code/forecasting/current_data/sat_14.nc')
+# sat_15 = xr.open_dataset('/home/travis/python_code/forecasting/current_data/sat_15.nc')
+# wind_15 = xr.open_dataset('/home/travis/python_code/forecasting/current_data/wind_15_crop.nc')
+# sensor_data = pd.read_hdf('/home/travis/python_code/forecasting/current_data/sensor_data.h5')
+# sensor_loc = pd.read_hdf('/home/travis/python_code/forecasting/current_data/sensor_loc.h5')
+
+# clear_sky_good = xr.DataArray(
+#     data=(sat_15.GHI.values/sat_14.GHI.values).clip(max=1),
+#     coords=sat_15.coords)
+# clear_sky_good = clear_sky_good.rename({'x': 'y_', 'y': 'x_'})
+# clear_sky_good = clear_sky_good.rename({'y_': 'y', 'x_': 'x'})
+# sat_15['clear_sky_good'] = clear_sky_good
+# sat_15 = sat_15.rename({'x': 'west_east', 'y': 'south_north'})
+
+# sensor_CI = sensor_data[['clearsky_index', 'id']]
+# sensor_CI = sensor_CI.reset_index().pivot(
+#     index='time', columns='id', values='clearsky_index')
+# sensor_CI = sensor_CI.resample('5min').mean().dropna() ##Use scipy interpolate instead of this.
+
+# #This is taken from http://www.groundcontrol.com/Satellite_Look_Angle_Calculator.html
+# goes15_azimuth = 220.5
+# goes15_elevation = 44.1
+
+# tus = pv.location.Location(32.2, -111, 'US/Arizona', 700,'Tucson')
+
+# long_min = sensor_loc['lon'].min()
+# long_max = sensor_loc['lon'].max()
+# lat_min = sensor_loc['lat'].min()
+# lat_max = sensor_loc['lat'].max()
+# long = sat_15.long.values
+# lat = sat_15.lat.values
+# min_x = abs(long[0, :] - long_min).argmin()
+# max_x = abs(long[0, :] - long_max).argmin()
+# min_y = abs(lat[:, 0] - lat_min).argmin()
+# max_y = abs(lat[:, 0] - lat_max).argmin()
+
+# U_max = wind_15.U.max() # know U is positive
+# V_max = abs(wind_15.V.min()) # know V is negative
+
+# left = int(U_max*60*30/250) + 20
+# right = 20
+
+# up = int(V_max*60*30/250) + 20
+# down = 20
+
+# x_crop = slice(min_x - left, max_x + right)
+# y_crop = slice(min_y - down, max_y + up)
 
 
-wind_15_smooth = wind_15.copy()
-wind_15_smooth['U'] = (wind_15.U.dims, U)
-wind_15_smooth['V'] = (wind_15.V.dims, V)
+# U = filters.uniform_filter(wind_15.U, (0, 300, 300), mode='mirror')
+# V = filters.uniform_filter(wind_15.V, (0, 300, 300), mode='mirror')
 
-dx = 250 #in km
-dy = 250 #in km
-C_max = 1.2
-assimilation_grid_size = 5
-localization = 30
-sat_sig = 0.05 #0.01
-sensor_sig = 0.05 #0.1
-ens_size = 40
-wind_sigma = (.4, .05)
-wind_size = 2
-CI_sigma = .1
-start_time = '2014-04-15 12:30:00' #11:00:00 is not a bad start
-end_time = '2014-04-15 13:00:00' #Gets boring shortly after 14:00:00
-x_crop_stag = slice(x_crop.start - 1, x_crop.stop)
-y_crop_stag = slice(y_crop.start - 1, y_crop.stop)
-analysis, background, advected, time_range = simulation_parallax(
-    sat=sat_15.isel(west_east=x_crop, south_north=y_crop),
-    wind=wind_15_smooth.isel(west_east=x_crop, west_east_stag=x_crop_stag,
-                                 south_north=y_crop, south_north_stag=y_crop_stag),
-    sensor_data=sensor_CI,
-    sensor_loc=sensor_loc,
-    start_time=start_time, end_time=end_time, dx=dx, dy=dy,
-    C_max=C_max,
-    assimilation_grid_size=assimilation_grid_size,
-    localization_length=localization,
-    sat_sig=sat_sig, sensor_sig=sensor_sig, ens_size=ens_size,
-    wind_sigma=wind_sigma, wind_size=wind_size, CI_sigma=CI_sigma,
-    location=tus, cloud_height=10000, sat_azimuth=goes15_azimuth,
-    sat_elevation=goes15_elevation)
 
-### ***HERE TO RUN LINE_PROFILER***
+# wind_15_smooth = wind_15.copy()
+# wind_15_smooth['U'] = (wind_15.U.dims, U)
+# wind_15_smooth['V'] = (wind_15.V.dims, V)
+
+# dx = 250 #in km
+# dy = 250 #in km
+# C_max = 1.2
+# assimilation_grid_size = 5
+# localization = 30
+# sat_sig = 0.05 #0.01
+# sensor_sig = 0.05 #0.1
+# ens_size = 40
+# wind_sigma = (.4, .05)
+# wind_size = 2
+# CI_sigma = .1
+# start_time = '2014-04-15 12:30:00' #11:00:00 is not a bad start
+# end_time = '2014-04-15 13:00:00' #Gets boring shortly after 14:00:00
+# x_crop_stag = slice(x_crop.start - 1, x_crop.stop)
+# y_crop_stag = slice(y_crop.start - 1, y_crop.stop)
+# analysis, background, advected, time_range = simulation_parallax(
+#     sat=sat_15.isel(west_east=x_crop, south_north=y_crop),
+#     wind=wind_15_smooth.isel(west_east=x_crop, west_east_stag=x_crop_stag,
+#                                  south_north=y_crop, south_north_stag=y_crop_stag),
+#     sensor_data=sensor_CI,
+#     sensor_loc=sensor_loc,
+#     start_time=start_time, end_time=end_time, dx=dx, dy=dy,
+#     C_max=C_max,
+#     assimilation_grid_size=assimilation_grid_size,
+#     localization_length=localization,
+#     sat_sig=sat_sig, sensor_sig=sensor_sig, ens_size=ens_size,
+#     wind_sigma=wind_sigma, wind_size=wind_size, CI_sigma=CI_sigma,
+#     location=tus, cloud_height=10000, sat_azimuth=goes15_azimuth,
+#     sat_elevation=goes15_elevation)
+
+# ### ***HERE TO RUN LINE_PROFILER***
