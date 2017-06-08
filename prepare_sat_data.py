@@ -3,6 +3,7 @@ import pandas as pd
 import xarray as xr
 from glob import glob
 
+
 def get_all_files(start_hour=11, end_hour=3):
     """
     start_hour - in UTC
@@ -26,7 +27,7 @@ def get_all_files(start_hour=11, end_hour=3):
             ('/a2/uaren/goes_images/june/goes15.2014.*.{hour:02d}*.BAND_01.nc'
                           .format(hour=hour)))
         files = files + temp
-    files.sort(key = lambda x: x.sort('.2014.')[1])
+    files.sort(key = lambda x: x.split('.2014.')[1])
     return files
 
 
@@ -93,3 +94,15 @@ def lcc_to_sphere(self, x, y, R=6370, truelat0=31.7, truelat1=31.7,
     lambdas = np.arcsin(x / rho) / n + lambda0
 
     return np.degrees(phis), np.degrees(lambdas)
+
+
+def main(dist_from_center, dx):
+    tus_lon = 32.2217
+    tus_lat = -110.9265
+    tus_x, tus_y = sphere_to_lcc(tus_lon, tus_lat)
+    start = np.round(tus_x - dist_from_center)
+    x = np.arange(start, tus_x + dist_from_center, dx)
+    start = np.round(tus_y - dist_from_center)
+    y = np.arange(start, tus_y + dist_from_center)
+    x, y = np.meshgrid(x, y)
+    lat, long = lcc_to_sphere(x, y, dx)
