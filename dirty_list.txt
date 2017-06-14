@@ -12,8 +12,6 @@ Non-gaussian error for both
 
 ** .resample vs sp.interpolate for sensor data
 
-Include H which accounts for cloud height.
-
 H for sensors does not include fact that sensors are time average and sat are
 space average. This should be in inflation, but does it need to be?
 
@@ -45,7 +43,9 @@ Optimize over:
          Different ensemble creation techniques including the standard
          deviations involved
 
-         Sattellite/sensor errors and inflation
+         Sattellite/sensor error magnatude and inflation
+
+         Satellite error structure
 
          localization distances and assimilation grid sizes
 
