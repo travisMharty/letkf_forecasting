@@ -550,7 +550,8 @@ def get_flat_correct(
 # Need to rewrite to end at non-satellite times
 def main(sat, wind, sensor_data, sensor_loc, start_time,
          end_time, dx, dy, C_max, assimilation_grid_size,
-         localization_length, inflation, sat_sig, sensor_sig, ens_size,
+         localization_length, sensor_inflation, sat_inflation,
+         sat_sig, sensor_sig, ens_size,
          wind_sigma, wind_size, CI_sigma, location, cloud_height,
          sat_azimuth, sat_elevation, client):
     """Check back later."""
@@ -621,7 +622,7 @@ def main(sat, wind, sensor_data, sensor_loc, start_time,
             this_flat_sensor_loc_assim = flat_sensor_loc_assim + flat_correct
             ensemble = assimilate(ensemble, sensor_data_assim.ix[sensor_time],
                                   this_flat_sensor_loc_assim + wind_size,
-                                           1/sensor_sig**2, inflation=inflation)
+                                  1/sensor_sig**2, inflation=sensor_inflation)
             if n != advection_number-1:
                 analysis = np.concatenate(
                     [analysis, ensemble.mean(axis=1)[None, :]], axis=0)
@@ -645,7 +646,8 @@ def main(sat, wind, sensor_data, sensor_loc, start_time,
             ensemble=ensemble[wind_size::],
             observations=sat['clear_sky_good'].sel(
                 time=time_range[time_index + 1]).values.ravel(),
-            flat_sensor_indices=None, R_inverse=1/sat_sig**2, inflation=inflation,
+            flat_sensor_indices=None, R_inverse=1/sat_sig**2,
+            inflation=sat_inflation,
             domain_shape=domain_shape,
             localization_length=localization_length,
             assimilation_positions=assimilation_positions,
@@ -669,6 +671,7 @@ def test_parallax(sat, sensor_data, sensor_loc, start_time,
                        sat_azimuth, sat_elevation):
     """Check back later."""
     ## NEED: Incorporate IO? Would need to reformulate so that P is smaller.
+    sensor_loc = sensor_loc.sort_values(by='id', inplace=False)
     time_range = (pd.date_range(start_time, end_time, freq='15 min')
                   .tz_localize('MST').astype(int))
     all_time = sat.time.values
