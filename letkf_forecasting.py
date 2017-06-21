@@ -616,7 +616,8 @@ def main(sat, wind, sensor_data, sensor_loc, start_time,
     for time_index in range(time_range.size - 1):
         sat_time = time_range[time_index]
         print('time_index: ' + str(time_index))
-        U = wind.sel(time=sat_time, method='pad').U.values
+        # *** manually adjust wind by .5***
+        U = wind.sel(time=sat_time, method='pad').U.values + .5
         V = wind.sel(time=sat_time, method='pad').V.values
         cx = abs(U).max()
         cy = abs(V).max()
@@ -733,6 +734,7 @@ def main_oi(sat, wind, sensor_data, sensor_loc, start_time,
     analysis = background.copy()
     advected = q[None, :, :].copy()
     background_error = np.zeros([1, sensor_loc_test.id.size])
+    OI_error = background_error.copy()
     analysis_error = background_error.copy()
     for time_index in range(time_range.size - 1):
         sat_time = time_range[time_index]
@@ -781,6 +783,8 @@ def main_oi(sat, wind, sensor_data, sensor_loc, start_time,
                 temp = ens_test - sensor_data_test.ix[sensor_time].values
                 analysis_error = np.concatenate(
                     [analysis_error, temp[None, :]], axis=0)
+                OI_error = np.concatenate(
+                    [OI_error, np.zeros_like(temp[None, :])], axis=0)
 
 
         # for whole image assimilation
@@ -799,12 +803,14 @@ def main_oi(sat, wind, sensor_data, sensor_loc, start_time,
             sensor_data_assim.ix[sensor_time].values, sensor_sig,
             sat['clear_sky_good'].sel(time=time_range[time_index + 1]).values.ravel(),
             this_flat_sensor_loc_assim, CI_localization, sat_oi_inflation).reshape(domain_shape)
-
+        temp = q.ravel()[this_flat_sensor_loc_test] - sensor_data_test.ix[sensor_time].values
+        OI_error = np.concatenate([OI_error, temp[None, :]], axis=0)
         # ####
         # plt.figure()
         # im = plt.pcolormesh(q)
         # plt.colorbar(im)
         # ####
+
 
         advected = np.concatenate([advected, q[None, :, :]], axis=0)
         noise = (noise - noise.min())
@@ -835,7 +841,74 @@ def main_oi(sat, wind, sensor_data, sensor_loc, start_time,
     end = time_range[-1]
     time_range = (pd.date_range(begining, end, freq='5 min')
                   .tz_localize('UTC').tz_convert('MST'))
-    return analysis, analysis_error, background, background_error, advected, time_range
+    return analysis, analysis_error, background, background_error, advected, time_range, OI_error
+
+
+def just_advection(sat, wind, u_pert, v_pert,
+                   start_time, end_time, dx, dy, C_max):
+    """Check back later."""
+    ## NEED: Incorporate IO? Would need to reformulate so that P is smaller.
+    time_range = (pd.date_range(start_time, end_time, freq='15 min')
+                  .tz_localize('MST').astype(int))
+    all_time = sat.time.values
+    time_range = np.intersect1d(time_range, all_time)
+    q = sat['clear_sky_good'].sel(time=time_range[0]).values
+    q_rmse = np.zeros(time_range.size - 1)
+    count=0
+    for time_index in range(time_range.size - 1):
+        sat_time = time_range[time_index]
+        # print('time_index: ' + str(time_index))
+        U = wind.sel(time=sat_time, method='pad').U.values + u_pert
+        V = wind.sel(time=sat_time, method='pad').V.values + v_pert
+        cx = abs(U).max()
+        cy = abs(V).max()
+        T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)/C_max))
+        dt = (5*60)/T_steps
+        advection_number = int((time_range[time_index + 1] -
+                                time_range[time_index])*(10**(-9)/(60*5)))
+        for n in range(advection_number):
+            # print('advection_number: ' + str(n))
+            for t in range(T_steps):
+                q = time_deriv_3(q, dt, U, dx, V, dy)
+
+        q_new = sat['clear_sky_good'].sel(time=time_range[time_index + 1]).values
+        q_error = (q - q_new)**2
+        q_rmse[count] = np.sqrt(q_error.mean())
+        # print(q_rmse[count])
+
+        # verr = np.abs(q_error).max()
+        # vmin = 0
+        # vmax = 1.1
+
+        # plt.figure()
+        # im = plt.pcolormesh(
+        #     q,
+        #     cmap='Blues', vmin=vmin, vmax=vmax)
+        # plt.colorbar(im)
+        # plt.title('advected:')
+        # plt.axis('equal')
+
+        # plt.figure()
+        # im = plt.pcolormesh(
+        #     q_new,
+        #     cmap='Blues', vmin=vmin, vmax=vmax)
+        # plt.colorbar(im)
+        # plt.title('new sat: ')
+        # plt.axis('equal')
+
+        # plt.figure()
+        # im = plt.pcolormesh(
+        #     q_error,
+        #     cmap='bwr', vmin=-verr, vmax=verr)
+        # plt.colorbar(im)
+        # plt.title('new sat: ')
+        # plt.axis('equal')
+
+        q = q_new
+        count += 1
+    print(q_rmse.mean())
+    # return q_rmse.mean()
+
 
 def test_parallax(sat, sensor_data, sensor_loc, start_time,
                        end_time, location, cloud_height,
