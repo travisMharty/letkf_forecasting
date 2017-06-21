@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from glob import glob
+from scipy import interpolate
 
 import matplotlib.pyplot as plt
 
@@ -98,7 +99,33 @@ def lcc_to_sphere(x, y, R=6370, truelat0=31.7, truelat1=31.7,
     return np.degrees(phis), np.degrees(lambdas)
 
 
-def main(dist_from_center, dx):
+def fine_crop(lat, lon, sat, x_slice, y_slice):
+    sat = sat.isel(yc=y_slice, xc=x_slice)
+    data = sat.data.values[0]
+    sat_lat = sat.lat.values
+    sat_lon = sat.lon.values
+
+    plt.figure()
+    im = plt.pcolormesh(sat_lon, sat_lat, data)
+    plt.colorbar(im)
+    plt.show()
+
+    data = data.ravel()
+    sat_lat = sat_lat.ravel()
+    sat_lon = sat_lon.ravel()
+    data_positions = np.stack([sat_lat, sat_lon], axis=1)
+    print(data_positions.shape)
+    print(data.shape)
+    f = interpolate.NearestNDInterpolator(data_positions, data)
+    shape = lat.shape
+    interp_lat = lat.ravel()
+    interp_lon = lon.ravel()
+    interp_positions = np.stack([interp_lat, interp_lon], axis=1)
+    return f(interp_positions).reshape(shape)
+
+
+
+def main(dist_from_center, dx, x_slice, y_slice):
     tus_lon = 32.2217
     tus_lat = -110.9265
     tus_x, tus_y = np.array(sphere_to_lcc(tus_lon, tus_lat))
@@ -111,4 +138,18 @@ def main(dist_from_center, dx):
     y = np.arange(start, end + dx, dx)
     south_north = np.arange(y.size)
     x, y = np.meshgrid(x, y)
-    lat, long = lcc_to_sphere(x, y)
+    lat, lon = lcc_to_sphere(x, y)
+    print(lat.min())
+    print(lat.max())
+    print(lon.min())
+    print(lon.max())
+
+    files = get_all_files()
+
+    sat0 = xr.open_dataset(files[10])
+    sat1 = fine_crop(lat, lon, sat0, x_slice, y_slice)
+
+    plt.figure()
+    im = plt.pcolormesh(x, y, sat1)
+    plt.colorbar(im)
+    plt.show()
