@@ -3,6 +3,8 @@ import pandas as pd
 import xarray as xr
 from glob import glob
 
+import matplotlib.pyplot as plt
+
 
 def get_all_files(start_hour=11, end_hour=3):
     """
@@ -31,7 +33,7 @@ def get_all_files(start_hour=11, end_hour=3):
     return files
 
 
-def sphere_to_lcc(self, lats, lons, R=6370, truelat0=31.7, truelat1=31.7,
+def sphere_to_lcc(lats, lons, R=6370, truelat0=31.7, truelat1=31.7,
                   ref_lat=31.68858, stand_lon=-113.7):
     """
     Taken from Tony Lorenzo's repository at:
@@ -63,7 +65,7 @@ def sphere_to_lcc(self, lats, lons, R=6370, truelat0=31.7, truelat1=31.7,
 
     return x, y
 
-def lcc_to_sphere(self, x, y, R=6370, truelat0=31.7, truelat1=31.7,
+def lcc_to_sphere(x, y, R=6370, truelat0=31.7, truelat1=31.7,
                   ref_lat=31.68858, stand_lon=-113.7):
     """
     Taken from Tony Lorenzo's repository at:
@@ -99,10 +101,14 @@ def lcc_to_sphere(self, x, y, R=6370, truelat0=31.7, truelat1=31.7,
 def main(dist_from_center, dx):
     tus_lon = 32.2217
     tus_lat = -110.9265
-    tus_x, tus_y = sphere_to_lcc(tus_lon, tus_lat)
-    start = np.round(tus_x - dist_from_center)
-    x = np.arange(start, tus_x + dist_from_center, dx)
-    start = np.round(tus_y - dist_from_center)
-    y = np.arange(start, tus_y + dist_from_center)
+    tus_x, tus_y = np.array(sphere_to_lcc(tus_lon, tus_lat))
+    start = np.floor(tus_x - dist_from_center)
+    end = np.ceil(tus_x + dist_from_center)
+    x = np.arange(start, end + dx, dx)
+    west_east = np.arange(x.size)
+    start = np.floor(tus_y - dist_from_center)
+    end = np.ceil(tus_y + dist_from_center)
+    y = np.arange(start, end + dx, dx)
+    south_north = np.arange(y.size)
     x, y = np.meshgrid(x, y)
-    lat, long = lcc_to_sphere(x, y, dx)
+    lat, long = lcc_to_sphere(x, y)
