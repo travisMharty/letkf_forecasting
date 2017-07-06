@@ -8,8 +8,10 @@ profiler_script.py
 __pycache__/
 elevation_data/
 results/
+data/
 
 *.nc
 *.txt
 *.h5
 *.lprof
+*_old*
