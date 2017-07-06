@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import xarray as xr
+import pvlib as pv
 from glob import glob
 from scipy import interpolate
 
@@ -104,18 +105,10 @@ def fine_crop(lat, lon, sat, x_slice, y_slice):
     data = sat.data.values[0]
     sat_lat = sat.lat.values
     sat_lon = sat.lon.values
-
-    plt.figure()
-    im = plt.pcolormesh(sat_lon, sat_lat, data)
-    plt.colorbar(im)
-    plt.show()
-
     data = data.ravel()
     sat_lat = sat_lat.ravel()
     sat_lon = sat_lon.ravel()
     data_positions = np.stack([sat_lat, sat_lon], axis=1)
-    print(data_positions.shape)
-    print(data.shape)
     f = interpolate.NearestNDInterpolator(data_positions, data)
     shape = lat.shape
     interp_lat = lat.ravel()
@@ -124,11 +117,90 @@ def fine_crop(lat, lon, sat, x_slice, y_slice):
     return f(interp_positions).reshape(shape)
 
 
+def midday(data, loc, max_zenith):
+    if type(data) == type(pd.DataFrame()):
+        times = data.index
+        zenith = loc.get_solarposition(times).loc[:, 'apparent_zenith']
+        night = np.where(zenith >= max_zenith)[0]
+        data.ix[night] = np.NAN
+        data = data.dropna()
+        return data
+    if type(data) == type(xr.Dataset()):
+        times = (pd.to_datetime(data.time.values)
+                 .tz_localize('UTC').tz_convert('MST'))
+        zenith = loc.get_solarposition(times).loc[:, 'apparent_zenith']
+        midday_times = np.where(zenith < max_zenith)
+        data = data.isel(time=midday_times[0])
+        return data
 
-def main(dist_from_center, dx, x_slice, y_slice):
-    tus_lon = 32.2217
-    tus_lat = -110.9265
-    tus_x, tus_y = np.array(sphere_to_lcc(tus_lon, tus_lat))
+
+def get_cloudiness_index(pixel, lats, lons, elevation):
+    pressure = pv.atmosphere.alt2pres(elevation)
+    app_zenith = None
+    for time in pixel.index:
+        temp = pv.spa.solar_position(time.value/10**9, lats, lons, elevation,
+                                     pressure, 12, 67.0, 0.)
+        if app_zenith is None:
+            app_zenith = pd.DataFrame({time: temp[0]})
+        else:
+            app_zenith[time] = temp[0]
+
+    am = pv.atmosphere.absoluteairmass(pv.atmosphere.relativeairmass(
+        app_zenith.T), pressure)
+    soldist = pv.solarposition.pyephem_earthsun_distance(pixel.index).T.pow(2)
+    norpix = (pixel * am).mul(soldist, axis=0)
+    upper_bound = []
+    lower_bound = []
+    for c in norpix.columns:
+        upper_bound.append(norpix[c].nlargest(20).mean())
+        lower_bound.append(norpix[c].nsmallest(20).mean())
+    low = pd.Series(lower_bound)
+    up = pd.Series(upper_bound)
+
+    cloudiness_index = (norpix - low) / (up - low)
+    return low, up, cloudiness_index
+
+
+def get_clearsky(times, elevation, lats, lons):
+    pressure = pv.atmosphere.alt2pres(elevation)
+    app_zenith = None
+    zenith = None
+    for time in times:
+        temp = pv.spa.solar_position(time.value/10**9, lats, lons, elevation,
+                                     pressure, 12, 67.0, 0.)
+        if app_zenith is None:
+            app_zenith = pd.DataFrame({time: temp[0]})
+        else:
+            app_zenith[time] = temp[0]
+
+        if zenith is None:
+            zenith = pd.DataFrame({time: temp[1]})
+        else:
+            zenith[time] = temp[1]
+    am = pv.atmosphere.absoluteairmass(pv.atmosphere.relativeairmass(
+        app_zenith.T), pressure)
+    cos_zen = np.cos(np.radians(zenith.T))
+    LT = pv.clearsky.lookup_linke_turbidity(times, lats.mean(), lons.mean())
+    # LT = pd.DataFrame(LT, columns=[0])
+    # for c in np.arange(lats.size - 1) + 1:
+    #     LT[c] = pv.clearsky.lookup_linke_turbidity(times, lats[c], lons[c])
+    ones = pd.DataFrame(np.ones([times.size, lats.size]),
+                        index=times, columns=np.arange(lats.size))
+    LT = ones.mul(LT, axis=0)
+    elev = ones.mul(elevation, axis=1)
+    cg1 = (0.0000509 * elev + 0.868)
+    cg2 = (0.0000392 * elev + 0.0387)
+    I0 = ones.mul(pv.irradiance.extraradiation(times), axis=0)
+    fh1 = np.exp(-1.0 / 8000 * elev)
+    fh2 = np.exp(-1.0 / 1250 * elev)
+    clearsky = cg1 * I0 * cos_zen * np.exp(-1.0 * cg2 * am * (
+        fh1 + fh2 * (LT - 1))) * np.exp(0.01 * am**1.8)
+
+    return clearsky
+
+def main(dist_from_center, dx, x_slice, y_slice,
+         tus_lat=32.2217, tus_lon=-110.9265):
+    tus_x, tus_y = np.array(sphere_to_lcc(tus_lat, tus_lon))
     start = np.floor(tus_x - dist_from_center)
     end = np.ceil(tus_x + dist_from_center)
     x = np.arange(start, end + dx, dx)
@@ -139,17 +211,47 @@ def main(dist_from_center, dx, x_slice, y_slice):
     south_north = np.arange(y.size)
     x, y = np.meshgrid(x, y)
     lat, lon = lcc_to_sphere(x, y)
-    print(lat.min())
-    print(lat.max())
-    print(lon.min())
-    print(lon.max())
 
     files = get_all_files()
+    sat = xr.open_dataset(files[0])
+    data = fine_crop(lat, lon, sat, x_slice, y_slice)[None, :, :]
+    sat_dataset = xr.Dataset(
+        {'data': (['time', 'south_north', 'west_east'], data)},
+        coords={'west_east': west_east,
+                'south_north': south_north,
+                'lon': (['south_north', 'west_east'], lon),
+                'lat': (['south_north', 'west_east'], lat),
+                'x': (['south_north', 'west_east'], x),
+                'y': (['south_north', 'west_east'], y),
+                'time': sat.time.values.astype('int')})
 
-    sat0 = xr.open_dataset(files[10])
-    sat1 = fine_crop(lat, lon, sat0, x_slice, y_slice)
+    count = 0
+    for file in files[1:]:
+        sat = xr.open_dataset(file)
+        data = fine_crop(lat, lon, sat, x_slice, y_slice)[None, :, :]
+        temp = xr.Dataset(
+            {'data': (['time','south_north','west_east'], data)},
+            coords={'west_east': west_east,
+                    'south_north': south_north,
+                    'lon': (['south_north', 'west_east'], lon),
+                    'lat': (['south_north', 'west_east'], lat),
+                    'x': (['south_north', 'west_east'], x),
+                    'y': (['south_north', 'west_east'], y),
+                    'time': sat.time.values.astype('int')})
+        sat_dataset = xr.concat([sat_dataset, temp], dim='time')
+        count += 1
+        if count % 500==0:
+            sat_dataset.to_netcdf(path='/a2/uaren/goes_images/crop/sat_images.nc')
+            print(count)
+            print(pd.Timestamp(int(sat.time.values.astype('int')))
+                  .tz_localize('UTC').tz_convert('MST'))
+    sat_dataset.to_netcdf(path='/a2/uaren/goes_images/crop/sat_images.nc')
+    print('finished')
 
-    plt.figure()
-    im = plt.pcolormesh(x, y, sat1)
-    plt.colorbar(im)
-    plt.show()
+
+if __name__ == '__main__':
+    dist_from_center = 180  # km
+    dx = 1  # km
+    y_slice = slice(900 - 100, 1090 + 100)
+    x_slice = slice(2200 - 200, 2570 + 220)
+    main(dist_from_center, dx, x_slice, y_slice)
