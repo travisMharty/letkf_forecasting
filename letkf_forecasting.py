@@ -410,12 +410,15 @@ def assimilate(ensemble, observations, flat_sensor_indices, R_inverse,
             W_a += w_a_bar[:, None]
             W_interp[kal_count] = np.ravel(W_a) ## separate w_bar??
             kal_count += 1
-
-        W_fun = interpolate.LinearNDInterpolator(assimilation_positions_2d,
-                                                 W_interp)
-        W_fine_mesh = W_fun(full_positions_2d)
-        W_fine_mesh = W_fine_mesh.reshape(domain_shape[0]*domain_shape[1],
-                                          ens_size, ens_size)
+        if assimilation_positions_2d.size != full_positions_2d.size:
+            W_fun = interpolate.LinearNDInterpolator(assimilation_positions_2d,
+                                                     W_interp)
+            W_fine_mesh = W_fun(full_positions_2d)
+            W_fine_mesh = W_fine_mesh.reshape(domain_shape[0]*domain_shape[1],
+                                              ens_size, ens_size)
+        else:
+            W_fine_mesh = W_interp.reshape(domain_shape[0]*domain_shape[1],
+                                              ens_size, ens_size)
         ensemble = x_bar[:, None] + np.einsum(
             'ij, ijk->ik', ensemble, W_fine_mesh)
 
@@ -712,6 +715,122 @@ def main_only_sat(sat, x, y, domain_shape,
         noise = noise_init.copy()
     return analysis, background, advected, sat_time_range, trace_back, trace_analy
 
+def only_durring_sat(sat, x, y, domain_shape,
+                     U, U_shape, V, V_shape,
+                     start_time, end_time, dx, dy, C_max,
+                     assimilation_grid_size,
+                     localization_letkf, sat_inflation,
+                     sat_sig, ens_size,
+                     wind_sigma, wind_size,
+                     client,
+                     oi_localization,
+                     oi_inflation,
+                     sensor_data,
+                     sensor_loc,
+                     sensor_sig,
+                     sensor_inflation,
+                     CI_sigma, location,
+                     cloud_height, sat_azimuth,
+                     sat_elevation):
+    sat_time_range = (pd.date_range(start_time, end_time, freq='15 min')
+                      .tz_localize('MST'))
+    sat_time_range = sat_time_range.intersection(sat.index)
+    sat_lats, sat_lons = prep.lcc_to_sphere(x, y)
+    sensor_loc = sensor_loc.sort_values(by='id', inplace=False)
+    sensor_loc_test = sensor_loc[sensor_loc.test==True]
+    sensor_loc_assim = sensor_loc[sensor_loc.test==False]
+    sensor_data_test = sensor_data[sensor_loc_test.id.values]
+    sensor_data_assim = sensor_data[sensor_loc_assim.id.values]
+    flat_sensor_loc_test = find_flat_loc(
+        sat_lats, sat_lons, sensor_loc_test)
+    flat_sensor_loc_assim = find_flat_loc(
+        sat_lats, sat_lons, sensor_loc_assim)
+    assimilation_positions, assimilation_positions_2d, full_positions_2d = (
+        assimilation_position_generator(domain_shape, assimilation_grid_size))
+    q = sat.loc[sat_time_range[0]].values.reshape(domain_shape)
+    # small CI_sigma not interested in fixing irradiance
+    ensemble = ensemble_creator(
+        q, CI_sigma=0.001, wind_size=wind_size,
+        wind_sigma=wind_sigma, ens_size=ens_size)
+    trace_back =  np.array([ensemble.var(axis=1).mean()])
+    trace_analy = np.array([np.nan])
+    noise_init = noise_fun(domain_shape)
+    noise = noise_init.copy()
+    background = ensemble.mean(axis=1)[None, :]
+    analysis = background.copy()
+    advected = q[None, :, :].copy()
+    OI = advected.copy().ravel()[None, :]
+    used_sat = advected.copy()
+    for time_index in range(sat_time_range.size - 1):
+        sat_time = sat_time_range[time_index]
+        print('time_index: ' + str(time_index))
+        # *** manually adjust wind by .5***
+        int_index_wind = U.index.get_loc('2014-04-15 13:45:00', method='pad')
+        this_U = U.iloc[int_index_wind].values.reshape(U_shape) + .5
+        this_V = V.iloc[int_index_wind].values.reshape(V_shape)
+        cx = abs(U.values).max()
+        cy = abs(V.values).max()
+        T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)/C_max))
+        dt = (5*60)/T_steps
+        advection_number = int((
+            (sat_time_range[time_index + 1].value) -
+            (sat_time_range[time_index].value))*(10**(-9)/(60*5)))
+        for n in range(advection_number):
+            print('advection_number: ' + str(n))
+            q, noise, ensemble = advect_5min_distributed(
+                q, noise, ensemble, dt, this_U, dx,
+                this_V, dy, T_steps, wind_size, client)
+        # for whole image assimilation
+        advected = np.concatenate([advected, q[None, :, :]], axis=0)
+        q = sat.loc[sat_time_range[time_index + 1]].values.reshape(domain_shape)
+        used_sat = np.concatenate([used_sat, q[None, :, :]], axis=0)
+        noise = (noise - noise.min())
+        noise = noise/noise.max()
+        noise = noise.ravel()
+        background = np.concatenate(
+                [background, ensemble.mean(axis=1)[None,:]], axis=0)
+        trace_back = np.concatenate(
+            [trace_back,  np.array([ensemble.var(axis=1).mean()])])
+        ensemble[wind_size::] = (q.ravel()[:, None]*noise[:, None] +
+                                 ensemble[wind_size:, :]*(1 - noise[:, None]))
+        ensemble[wind_size::] = assimilate(
+            ensemble=ensemble[wind_size::],
+            observations=q.ravel(),
+            flat_sensor_indices=None, R_inverse=1/sat_sig**2,
+            inflation=sat_inflation,
+            domain_shape=domain_shape,
+            localization_length=localization_letkf,
+            assimilation_positions=assimilation_positions,
+            assimilation_positions_2d=assimilation_positions_2d,
+            full_positions_2d=full_positions_2d)
+        # for optimal interpolation
+        flat_correct = get_flat_correct(
+            cloud_height=cloud_height, dx=dx, dy=dy,
+            domain_shape=domain_shape, sat_azimuth=sat_azimuth,
+            sat_elevation=sat_elevation,
+            location=location, sensor_time=sat_time)
+        this_flat_sensor_loc_test = flat_sensor_loc_test + flat_correct
+        this_flat_sensor_loc_assim = flat_sensor_loc_assim + flat_correct
+        this_OI = optimal_interpolation(
+            q.ravel(), sat_sig, sensor_data_assim.ix[sat_time], sensor_sig,
+            q.ravel(), this_flat_sensor_loc_assim,
+            oi_localization, oi_inflation)
+        OI = np.concatenate(
+            [OI, this_OI[None, :]], axis=0)
+        # for sensor assimilation
+        ensemble = assimilate(ensemble, sensor_data_assim.ix[sat_time],
+                              this_flat_sensor_loc_assim + wind_size,
+                              1/sensor_sig**2, inflation=sensor_inflation)
+        trace_analy = np.concatenate(
+            [trace_analy,  np.array([ensemble.var(axis=1).mean()])])
+        analysis = np.concatenate(
+            [analysis, ensemble.mean(axis=1)[None, :]], axis=0)
+        noise = noise_init.copy()
+
+    to_return = (analysis, background, advected, used_sat, OI, sat_time_range,
+                 trace_back, trace_analy)
+    return to_return
+
 
 def main(
         sat, x, y, domain_shape,
@@ -848,7 +967,7 @@ def main(
                 plt.axis('equal')
                 ####
                 csi_ensemble = assimilate(csi_ensemble, sensor_data_assim.ix[sensor_time],
-                                  this_flat_sensor_loc_assim + wind_size,
+                                  this_flat_sensor_loc_assim + wind_size + coeff_size,
                                   1/sensor_sig**2, inflation=sensor_inflation)
                 ####
                 plt.figure()
