@@ -9,6 +9,7 @@ __pycache__/
 elevation_data/
 results/
 data/
+movies/
 
 *.nc
 *.txt
