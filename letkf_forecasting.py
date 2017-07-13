@@ -740,7 +740,7 @@ def only_durring_sat(sat, x, y, domain_shape,
                       .tz_localize('MST'))
     sat_time_range = sat_time_range.intersection(sat.index)
     sat_lats, sat_lons = prep.lcc_to_sphere(x, y)
-    sensor_loc = sensor_loc.sort_values(by='id', inplace=False)
+    sensor_loc.sort_values(by='id', inplace=True)
     sensor_loc_test = sensor_loc[sensor_loc.test==True]
     sensor_loc_assim = sensor_loc[sensor_loc.test==False]
     sensor_data_test = sensor_data[sensor_loc_test.id.values]
@@ -752,30 +752,42 @@ def only_durring_sat(sat, x, y, domain_shape,
     assimilation_positions, assimilation_positions_2d, full_positions_2d = (
         assimilation_position_generator(domain_shape, assimilation_grid_size))
     q = sat.loc[sat_time_range[0]].values.reshape(domain_shape)
-    # small CI_sigma not interested in fixing irradiance
     ensemble = ensemble_creator(
-        q, CI_sigma=0.001, wind_size=wind_size,
+        q, CI_sigma=CI_sigma, wind_size=wind_size,
         wind_sigma=wind_sigma, ens_size=ens_size)
-    trace_back =  np.array([ensemble.var(axis=1).mean()])
-    trace_analy = np.array([np.nan])
+
     noise_init = noise_fun(domain_shape)
     noise = noise_init.copy()
-    background = ensemble.mean(axis=1)[None, :]
+
+    background = pd.DataFrame(data=ensemble.mean(axis=1)[None, :],
+                              index=[sat_time_range[0]])
     analysis = background.copy()
-    advected = q[None, :, :].copy()
-    OI = advected.copy().ravel()[None, :]
+    advected = pd.DataFrame(data=q.ravel()[None, :],
+                            index=[sat_time_range[0]])
+    OI = advected.copy()
     used_sat = advected.copy()
-    background_error = np.zeros([1, sensor_loc_test.id.size])
-    analysis_error_sat = background_error.copy()
-    analysis_error_sat_sens = background_error.copy()
-    sat_error = background_error.copy()
-    oi_error = background_error.copy()
+
+    col_names = ['sat', 'back', 'analy_sat', 'analy_sat_sens', 'oi',
+                 'trace_back', 'trace_analy']
+    error_stats = pd.DataFrame(data=np.ones(len(col_names))[None, :]*np.nan,
+                               index=[sat_time_range[0]],
+                               columns=col_names)
+
+    # background_error = np.zeros([1, sensor_loc_test.id.size])
+    # analysis_error_sat = background_error.copy()
+    # analysis_error_sat_sens = background_error.copy()
+    # sat_error = background_error.copy()
+    # oi_error = background_error.copy()
+
+    # trace_back =  np.array([ensemble.var(axis=1).mean()])
+    # trace_analy = np.array([np.nan])
+
     for time_index in range(sat_time_range.size - 1):
-        sat_time = sat_time_range[time_index]
+        sat_time = sat_time_range[time_index] # time before advection
         print('sat_time: ' + str(sat_time))
         # *** manually adjust wind by .5***
         int_index_wind = U.index.get_loc('2014-04-15 13:45:00', method='pad')
-        this_U = U.iloc[int_index_wind].values.reshape(U_shape) + .5
+        this_U = U.iloc[int_index_wind].values.reshape(U_shape) # + .5
         this_V = V.iloc[int_index_wind].values.reshape(V_shape)
         cx = abs(U.values).max()
         cy = abs(V.values).max()
@@ -791,6 +803,8 @@ def only_durring_sat(sat, x, y, domain_shape,
                 this_V, dy, T_steps, wind_size, client)
         # for whole image assimilation
 
+        sat_time = sat_time_range[time_index + 1] # time after advection
+
         flat_correct = get_flat_correct(
             cloud_height=cloud_height, dx=dx, dy=dy,
             domain_shape=domain_shape, sat_azimuth=sat_azimuth,
@@ -803,26 +817,29 @@ def only_durring_sat(sat, x, y, domain_shape,
         ens_test = ensemble[
             this_flat_sensor_loc_test + wind_size].mean(axis=1)
         temp = ens_test - sensor_data_test.ix[sat_time].values
-        background_error = np.concatenate(
-            [background_error, temp[None, :]], axis=0)
+        error_stats.loc[sat_time, 'back'] = np.sqrt(temp**2).sum()
+        # background_error = np.concatenate(
+        #     [background_error, temp[None, :]], axis=0)
 
-        advected = np.concatenate([advected, q[None, :, :]], axis=0)
-        q = sat.loc[sat_time_range[time_index + 1]].values.reshape(domain_shape)
-        used_sat = np.concatenate([used_sat, q[None, :, :]], axis=0)
+        advected.loc[sat_time] = q.ravel()
+        q = sat.loc[sat_time].values.reshape(domain_shape)
+        used_sat.loc[sat_time] = q.ravel()
 
         # error from just using sat
         temp = (q.ravel()[this_flat_sensor_loc_test] -
                 sensor_data_test.ix[sat_time].values)
-        sat_error = np.concatenate(
-            [sat_error, temp[None, :]], axis=0)
+        error_stats.loc[sat_time, 'sat'] = np.sqrt(temp**2).sum()
+        # sat_error = np.concatenate(
+        #     [sat_error, temp[None, :]], axis=0)
 
         noise = (noise - noise.min())
         noise = noise/noise.max()
         noise = noise.ravel()
-        background = np.concatenate(
-                [background, ensemble.mean(axis=1)[None,:]], axis=0)
-        trace_back = np.concatenate(
-            [trace_back,  np.array([ensemble.var(axis=1).mean()])])
+        background.loc[sat_time] = ensemble.mean(axis=1)
+
+        error_stats.loc[sat_time, 'trace_back'] = ensemble.var(axis=1).mean()
+        # trace_back = np.concatenate(
+        #     [trace_back,  np.array([ensemble.var(axis=1).mean()])])
         ensemble[wind_size:] = (q.ravel()[:, None]*noise[:, None] +
                                  ensemble[wind_size:, :]*(1 - noise[:, None]))
         ensemble[wind_size:] = assimilate(
@@ -840,43 +857,49 @@ def only_durring_sat(sat, x, y, domain_shape,
         ens_test = ensemble[
             this_flat_sensor_loc_test + wind_size].mean(axis=1)
         temp = ens_test - sensor_data_test.ix[sat_time].values
-        analysis_error_sat = np.concatenate(
-            [analysis_error_sat, temp[None, :]], axis=0)
+        error_stats.loc[sat_time, 'analy_sat'] = np.sqrt(temp**2).sum()
+        # analysis_error_sat = np.concatenate(
+        #     [analysis_error_sat, temp[None, :]], axis=0)
 
         # for sensor assimilation
         ensemble = assimilate(ensemble, sensor_data_assim.ix[sat_time],
                               this_flat_sensor_loc_assim + wind_size,
                               1/sensor_sig**2, inflation=sensor_inflation)
-        trace_analy = np.concatenate(
-            [trace_analy,  np.array([ensemble.var(axis=1).mean()])])
-        analysis = np.concatenate(
-            [analysis, ensemble.mean(axis=1)[None, :]], axis=0)
+        error_stats.loc[sat_time, 'trace_analy'] = ensemble.var(axis=1).mean()
+        # trace_analy = np.concatenate(
+        #     [trace_analy,  np.array([ensemble.var(axis=1).mean()])])
+        analysis.loc[sat_time] = ensemble.mean(axis=1)
+        # analysis = np.concatenate(
+        #     [analysis, ensemble.mean(axis=1)[None, :]], axis=0)
+
         noise = noise_init.copy()
 
         # error from assimilating new sensor data as well
         ens_test = ensemble[
             this_flat_sensor_loc_test + wind_size].mean(axis=1)
         temp = ens_test - sensor_data_test.ix[sat_time].values
-        analysis_error_sat_sens = np.concatenate(
-            [analysis_error_sat_sens, temp[None, :]], axis=0)
+        error_stats.loc[sat_time, 'analy_sat_sens'] = np.sqrt(temp**2).sum()
+        # analysis_error_sat_sens = np.concatenate(
+        #     [analysis_error_sat_sens, temp[None, :]], axis=0)
 
         # for optimal interpolation
         this_OI = optimal_interpolation(
             q.ravel(), oi_sat_sig, sensor_data_assim.ix[sat_time], oi_sensor_sig,
             q.ravel(), this_flat_sensor_loc_assim,
             oi_localization, oi_inflation)
-        OI = np.concatenate(
-            [OI, this_OI[None, :]], axis=0)
+        OI.loc[sat_time] = this_OI
+        # OI = np.concatenate(
+        #     [OI, this_OI[None, :]], axis=0)
 
         # error from oi only
         temp = (this_OI[this_flat_sensor_loc_test] -
                 sensor_data_test.ix[sat_time].values)
-        oi_error = np.concatenate(
-            [oi_error, temp[None, :]], axis=0)
+        error_stats.loc[sat_time, 'oi'] = np.sqrt(temp**2).sum()
+        # oi_error = np.concatenate(
+        #     [oi_error, temp[None, :]], axis=0)
 
     to_return = (analysis, background, advected, used_sat, OI, sat_time_range,
-                 trace_back, trace_analy, background_error, analysis_error_sat,
-                 analysis_error_sat_sens, oi_error, sat_error)
+                 error_stats)
     return to_return
 
 def only_oi(sat, x, y, domain_shape,
@@ -1695,7 +1718,8 @@ def just_advection(sat, wind, u_pert, v_pert,
 def test_parallax(sat, domain_shape, dx, dy, lats, lons, sensor_data,
                   sensor_loc, start_time,
                   end_time, location, cloud_height,
-                  sat_azimuth, sat_elevation):
+                  sat_azimuth, sat_elevation,
+                  oi_sat_sig, oi_sensor_sig, oi_localization, oi_inflation):
     """Check back later."""
     ## NEED: Incorporate OI? Would need to reformulate so that P is smaller.
     sensor_loc = sensor_loc.sort_values(by='id', inplace=False)
@@ -1703,9 +1727,19 @@ def test_parallax(sat, domain_shape, dx, dy, lats, lons, sensor_data,
                   .tz_localize('MST'))
     all_time = sat.index
     time_range = np.intersect1d(time_range, all_time)
-    flat_sensor_loc = find_flat_loc(
-        lats, lons, sensor_loc)
-    error = np.ones([time_range.size, flat_sensor_loc.size])*np.nan
+
+    sensor_loc_test = sensor_loc[sensor_loc.test==True]
+    sensor_loc_assim = sensor_loc[sensor_loc.test==False]
+    sensor_data_test = sensor_data[sensor_loc_test.id.values]
+    sensor_data_assim = sensor_data[sensor_loc_assim.id.values]
+
+    flat_sensor_loc_test = find_flat_loc(
+        lats, lons, sensor_loc_test)
+    flat_sensor_loc_assim = find_flat_loc(
+        lats, lons, sensor_loc_assim)
+
+    sat_error = np.ones([time_range.size, flat_sensor_loc_test.size])*np.nan
+    oi_error = np.ones([time_range.size, flat_sensor_loc_test.size])*np.nan
     lat_correction = np.ones(time_range.size)*np.nan
     lon_correction = np.ones(time_range.size)*np.nan
     for time_index in range(time_range.size):
@@ -1716,9 +1750,18 @@ def test_parallax(sat, domain_shape, dx, dy, lats, lons, sensor_data,
                 domain_shape=domain_shape, sat_azimuth=sat_azimuth,
                 sat_elevation=sat_elevation,
                 location=location, sensor_time=sat_time)
-        this_flat_sensor_loc = flat_sensor_loc + flat_correct
-        error[time_index] = (q[this_flat_sensor_loc] -
-                             sensor_data.ix[sat_time].values)
+        this_flat_sensor_loc_test = flat_sensor_loc_test + flat_correct
+        sat_error[time_index] = (q[this_flat_sensor_loc_test] -
+                                 sensor_data_test.ix[sat_time].values)
+
+        this_flat_sensor_loc_assim = flat_sensor_loc_assim + flat_correct
+        this_OI = optimal_interpolation(
+            q.ravel(), oi_sat_sig, sensor_data_assim.ix[sat_time], oi_sensor_sig,
+            q.ravel(), this_flat_sensor_loc_assim,
+            oi_localization, oi_inflation)
+        oi_error[time_index] = (this_OI[this_flat_sensor_loc_test] -
+                                sensor_data_test.ix[sat_time].values)
+
         solar_position = location.get_solarposition(sat_time)
         x_correct, y_correct = parallax_shift(
             cloud_height, sat_azimuth, sat_elevation,
@@ -1730,4 +1773,4 @@ def test_parallax(sat, domain_shape, dx, dy, lats, lons, sensor_data,
         lon_correction[time_index] = lon_correct
 
         # for whole image assimilation
-    return error, lat_correction, lon_correction, time_range
+    return oi_error, sat_error, lat_correction, lon_correction, time_range
