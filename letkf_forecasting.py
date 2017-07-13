@@ -786,7 +786,7 @@ def only_durring_sat(sat, x, y, domain_shape,
         sat_time = sat_time_range[time_index] # time before advection
         print('sat_time: ' + str(sat_time))
         # *** manually adjust wind by .5***
-        int_index_wind = U.index.get_loc('2014-04-15 13:45:00', method='pad')
+        int_index_wind = U.index.get_loc(sat_time, method='pad')
         this_U = U.iloc[int_index_wind].values.reshape(U_shape) # + .5
         this_V = V.iloc[int_index_wind].values.reshape(V_shape)
         cx = abs(U.values).max()
@@ -817,7 +817,7 @@ def only_durring_sat(sat, x, y, domain_shape,
         ens_test = ensemble[
             this_flat_sensor_loc_test + wind_size].mean(axis=1)
         temp = ens_test - sensor_data_test.ix[sat_time].values
-        error_stats.loc[sat_time, 'back'] = np.sqrt(temp**2).sum()
+        error_stats.loc[sat_time, 'back'] = np.sqrt((temp**2).mean())
         # background_error = np.concatenate(
         #     [background_error, temp[None, :]], axis=0)
 
@@ -828,7 +828,7 @@ def only_durring_sat(sat, x, y, domain_shape,
         # error from just using sat
         temp = (q.ravel()[this_flat_sensor_loc_test] -
                 sensor_data_test.ix[sat_time].values)
-        error_stats.loc[sat_time, 'sat'] = np.sqrt(temp**2).sum()
+        error_stats.loc[sat_time, 'sat'] = np.sqrt((temp**2).mean())
         # sat_error = np.concatenate(
         #     [sat_error, temp[None, :]], axis=0)
 
@@ -857,7 +857,7 @@ def only_durring_sat(sat, x, y, domain_shape,
         ens_test = ensemble[
             this_flat_sensor_loc_test + wind_size].mean(axis=1)
         temp = ens_test - sensor_data_test.ix[sat_time].values
-        error_stats.loc[sat_time, 'analy_sat'] = np.sqrt(temp**2).sum()
+        error_stats.loc[sat_time, 'analy_sat'] = np.sqrt((temp**2).mean())
         # analysis_error_sat = np.concatenate(
         #     [analysis_error_sat, temp[None, :]], axis=0)
 
@@ -878,7 +878,7 @@ def only_durring_sat(sat, x, y, domain_shape,
         ens_test = ensemble[
             this_flat_sensor_loc_test + wind_size].mean(axis=1)
         temp = ens_test - sensor_data_test.ix[sat_time].values
-        error_stats.loc[sat_time, 'analy_sat_sens'] = np.sqrt(temp**2).sum()
+        error_stats.loc[sat_time, 'analy_sat_sens'] = np.sqrt((temp**2).mean())
         # analysis_error_sat_sens = np.concatenate(
         #     [analysis_error_sat_sens, temp[None, :]], axis=0)
 
@@ -894,7 +894,7 @@ def only_durring_sat(sat, x, y, domain_shape,
         # error from oi only
         temp = (this_OI[this_flat_sensor_loc_test] -
                 sensor_data_test.ix[sat_time].values)
-        error_stats.loc[sat_time, 'oi'] = np.sqrt(temp**2).sum()
+        error_stats.loc[sat_time, 'oi'] = np.sqrt((temp**2).mean())
         # oi_error = np.concatenate(
         #     [oi_error, temp[None, :]], axis=0)
 
