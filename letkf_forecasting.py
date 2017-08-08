@@ -9,6 +9,7 @@ import scipy.interpolate as interpolate
 import pvlib as pv
 import numexpr as ne
 from distributed import LocalCluster, Client
+from skimage import filters as ski_filters
 
 sys.path.append('/home/travis/python_code/letkf_forecasting/')
 import prepare_sat_data as prep
@@ -120,7 +121,7 @@ def parallax_shift(cloud_height,
                    solar_elevation):
     """Returns x and y shift required to match satellite pixel to earth location
     based on satellite and solar position. Units of x and y correction will be
-    in the units of cloud_height.v
+    in the units of cloud_height.
 
     Parameters
     ----------
@@ -425,6 +426,208 @@ def assimilate(ensemble, observations, flat_sensor_indices, R_inverse,
         return ensemble
 
 
+def assimilate_wind(ensemble, observations, flat_sensor_indices, R_inverse,
+                    inflation, wind_size):
+    """
+    *** NEED TO REWRITE
+    Assimilates observations into ensemble using the LETKF.
+
+    Parameters
+    ----------
+    ensemble : array
+         The ensemble of size kxn where k is the number of ensemble members
+         and n is the state vector size.
+    observations : array
+         An observation vector of length m
+    R_inverse : array
+         Inverse of observation error matrix. **will need changing**
+    inflation : float
+         Inflation parameter
+
+    Return
+    ------
+    winds
+    """
+
+    # LETKF without localization
+    Y_b = ensemble[wind_size:].copy()
+    y_b_bar = Y_b.mean(axis=1)
+    Y_b -= y_b_bar[:, None]
+    x_bar = ensemble.mean(axis=1) ## Need to bring this back
+    ensemble -= x_bar[:, None]
+    ens_size = ensemble.shape[1]
+    C = Y_b.T*R_inverse
+    eig_value, eig_vector = np.linalg.eigh(
+        (ens_size-1)*np.eye(ens_size)/inflation + C.dot(Y_b))
+    P_tilde = eig_vector.copy()
+    W_a = eig_vector.copy()
+    for i, num in enumerate(eig_value):
+        P_tilde[:, i] *= 1/num
+        W_a[:, i] *= 1/np.sqrt(num)
+    P_tilde = P_tilde.dot(eig_vector.T)
+    W_a = W_a.dot(eig_vector.T)*(np.sqrt(ens_size - 1))
+    # P_tilde = np.linalg.inv(
+    #     (ens_size - 1)*np.eye(ens_size)/inflation +
+    #     C.dot(Y_b))
+    # W_a = np.real(sp.linalg.sqrtm((ens_size - 1)*P_tilde))
+    w_a_bar = P_tilde.dot(C.dot(observations - y_b_bar))
+    W_a += w_a_bar[:, None]
+    ensemble = x_bar[:, None] + ensemble.dot(W_a)
+    return ensemble[:wind_size]
+
+
+
+
+def assimilate_enkf(ensemble, observations, flat_sensor_indices, R_inverse,
+                        inflation, domain_shape=False,
+                        localization_length=False, assimilation_positions=False,
+                        assimilation_positions_2d=False,
+                        full_positions_2d=False):
+    """
+    *** NEED TO REWRITE
+    Assimilates observations into ensemble using the LETKF.
+
+    Parameters
+    ----------
+    ensemble : array
+         The ensemble of size kxn where k is the number of ensemble members
+         and n is the state vector size.
+    observations : array
+         An observation vector of length m.
+    H : array
+         Forward observation matrix of size mxn. **may need changing**
+    R_inverse : array
+         Inverse of observation error matrix. **will need changing**
+    inflation : float
+         Inflation parameter.
+    localization_length : float
+         Localization distance in each direction so that assimilation will take
+         on (2*localization + 1)**2 elements. If equal to False then no
+         localization will take place.
+    assimilation_positions : array
+         Row and column index of state domain over which assimilation will
+         take place. First column contains row positions, second column
+         contains column positions, total number of rows is number of
+         assimilations. If False the assimilation will take place over
+         full_positions. If localization_length is False then this variable
+         will not be used.
+    full_positions : array
+         Array similar to assimilation_positions including the positions of
+         all elements of the state.
+
+    Return
+    ------
+    ensemble : array
+         Analysis ensemble of the same size as input ensemble
+    """
+    ## Change to allow for R to not be pre-inverted?
+    if localization_length is False:
+
+        ## this is not done
+        Y_b = ensemble[flat_sensor_indices, :]
+        y_b_bar = Y_b.mean(axis=1)
+        Y_b -= y_b_bar[:, None]
+        x_bar = ensemble.mean(axis=1) ## Need to bring this back
+        ensemble -= x_bar[:, None]
+        PHT = ensemble.dot(Y_b.T)
+        loc_mat = np.abs(x_bar[:, None] - x_bar[None, flat_locations])
+        loc_mat = np.exp(-loc_mat/(enkf_localization))
+        PHT = PHT*loc_mat
+        PHT = inflation*PHT
+        # K = sp.linalg.inv(
+        #     PHT[flat_locations, :] + o_sig**2*np.eye(flat_locations.size))
+        # K = PHT.dot(K)
+        K = sp.linalg.solve(
+            (PHT[flat_locations, :] + (1/R_inverse)*np.eye(flat_locations.size)),
+            PHT.T).T
+        background + K.dot(observations - background[flat_locations])
+
+        # # LETKF without localization
+        # Y_b = ensemble[flat_sensor_indices, :]
+        # y_b_bar = Y_b.mean(axis=1)
+        # Y_b -= y_b_bar[:, None]
+        # x_bar = ensemble.mean(axis=1) ## Need to bring this back
+        # ensemble -= x_bar[:, None]
+        # ens_size = ensemble.shape[1]
+        # # C = (Y_b.T).dot(R_inverse)
+        # C = Y_b.T*R_inverse
+        # ## Not working??
+        # eig_value, eig_vector = np.linalg.eigh(
+        #     (ens_size-1)*np.eye(ens_size)/inflation + C.dot(Y_b))
+        # P_tilde = eig_vector.copy()
+        # W_a = eig_vector.copy()
+        # for i, num in enumerate(eig_value):
+        #     P_tilde[:, i] *= 1/num
+        #     W_a[:, i] *= 1/np.sqrt(num)
+        # P_tilde = P_tilde.dot(eig_vector.T)
+        # W_a = W_a.dot(eig_vector.T)*(np.sqrt(ens_size - 1))
+        # # P_tilde = np.linalg.inv(
+        # #     (ens_size - 1)*np.eye(ens_size)/inflation +
+        # #     C.dot(Y_b))
+        # # W_a = np.real(sp.linalg.sqrtm((ens_size - 1)*P_tilde))
+        # w_a_bar = P_tilde.dot(C.dot(observations - y_b_bar))
+        # W_a += w_a_bar[:, None]
+        # ensemble = x_bar[:, None] + ensemble.dot(W_a)
+        # return ensemble
+
+    else:
+        # LETKF with localization assumes H is I
+        ## NEED: to include wind in ensemble will require reworking due to
+        ## new H and different localization.
+        ## NEED: Change to include some form of H for paralax correction??
+        ## Maybe: ^ not if paralax is only corrected when moving to ground sensors.
+        ## SHOULD: Will currently write as though R_inverse is a scalar.
+        ## May need to change at some point but will likely need to do
+        ## something clever since R_inverse.size is 400 billion
+        ## best option: form R_inverse inside of localization routine
+        ## good option: assimilate sat images at low resolution (probabily should do this either way)
+        x_bar = ensemble.mean(axis=1) ## Need to bring this back
+        ensemble -= x_bar[:, None]
+        ens_size = ensemble.shape[1]
+        kal_count = 0
+        W_interp = np.zeros([assimilation_positions.size, ens_size**2])
+        for interp_position in assimilation_positions:
+            local_positions = nearest_positions(interp_position, domain_shape,
+                                                localization_length)
+            local_ensemble = ensemble[local_positions]
+            local_x_bar = x_bar[local_positions]
+            local_obs = observations[local_positions] # assume H is I
+            C = (local_ensemble.T)*R_inverse  # assume R_inverse is diag+const
+
+            # This should be better, but I can't get it to work
+            eig_value, eig_vector = np.linalg.eigh(
+                (ens_size-1)*np.eye(ens_size)/inflation + C.dot(local_ensemble))
+            P_tilde = eig_vector.copy()
+            W_a = eig_vector.copy()
+            for i, num in enumerate(eig_value):
+                P_tilde[:, i] *= 1/num
+                W_a[:, i] *= 1/np.sqrt(num)
+            P_tilde = P_tilde.dot(eig_vector.T)
+            W_a = W_a.dot(eig_vector.T)*np.sqrt(ens_size - 1)
+
+            # P_tilde = np.linalg.inv(
+            #     (ens_size - 1)*np.eye(ens_size)/inflation +
+            #     C.dot(local_ensemble))
+            # W_a = np.real(sp.linalg.sqrtm((ens_size - 1)*P_tilde))
+            w_a_bar = P_tilde.dot(C.dot(local_obs - local_x_bar))
+            W_a += w_a_bar[:, None]
+            W_interp[kal_count] = np.ravel(W_a) ## separate w_bar??
+            kal_count += 1
+        if assimilation_positions_2d.size != full_positions_2d.size:
+            W_fun = interpolate.LinearNDInterpolator(assimilation_positions_2d,
+                                                     W_interp)
+            W_fine_mesh = W_fun(full_positions_2d)
+            W_fine_mesh = W_fine_mesh.reshape(domain_shape[0]*domain_shape[1],
+                                              ens_size, ens_size)
+        else:
+            W_fine_mesh = W_interp.reshape(domain_shape[0]*domain_shape[1],
+                                              ens_size, ens_size)
+        ensemble = x_bar[:, None] + np.einsum(
+            'ij, ijk->ik', ensemble, W_fine_mesh)
+
+        return ensemble
+
+
 def calc_sensor_error(sensor_values, sensor_loc, H, q, time):
     """check back later
     """
@@ -452,10 +655,36 @@ def ensemble_creator(sat_image, CI_sigma, wind_size, wind_sigma, ens_size):
         [ensemble,
          np.repeat(sat_image.ravel()[:, None], ens_size, axis=1)], axis=0)
     CI_pert = np.random.normal(loc=0, scale=CI_sigma, size=ens_size)
+    csi_min_pert = np.random.normal(loc=0, scale=CI_sigma, size=ens_size)
+    csi_max_pert = np.random.normal(loc=1, scale=CI_sigma*.2, size=ens_size)
+    ensemble[wind_size:] = ((csi_max_pert[None, :] - csi_min_pert[None, :])*
+                            ensemble[wind_size:] + csi_min_pert[None, :])
+    # ensemble[wind_size:] = ((1 - CI_pert[None, :])*ensemble[wind_size:] +
+    #                         CI_pert[None, :])
+    # ensemble[wind_size:] = ensemble[wind_size:] + CI_pert[None, :]
+    return ensemble
+
+
+def ensemble_creator_old(sat_image, CI_sigma, wind_size, wind_sigma, ens_size):
+    """check back later"""
+    half_wind = int(round(wind_size/2))
+    ens_wind = int(round(ens_size*half_wind))
+    ensemble = np.random.normal(
+        loc=0,
+        scale=wind_sigma[0],
+        size=ens_wind).reshape(half_wind, ens_size)
+    ensemble = np.concatenate(
+        [ensemble, np.random.normal(
+            loc=0,
+            scale=wind_sigma[1],
+            size=ens_wind).reshape(half_wind, ens_size)], axis=0)
+    ensemble = np.concatenate(
+        [ensemble,
+         np.repeat(sat_image.ravel()[:, None], ens_size, axis=1)], axis=0)
+    CI_pert = np.random.normal(loc=0, scale=CI_sigma, size=ens_size)
     ensemble[wind_size:] = ((1 - CI_pert[None, :])*ensemble[wind_size:] +
                             CI_pert[None, :])
     return ensemble
-
 
 
 def assimilation_position_generator(domain_shape, assimilation_grid_size):
@@ -495,8 +724,15 @@ def noise_fun(domain_shape):
     return noise_init
 
 
-def advect_5min(q, noise, ensemble, dt, U, dx, V, dy, T_steps, wind_size):
+def advect_5min(q, dt, U, dx, V, dy, T_steps):
     """Check back later"""
+    for t in range(T_steps):
+        q = time_deriv_3(q, dt, U, dx, V, dy)
+    return q
+
+
+def advect_5min_old(q, noise, ensemble, dt, U, dx, V, dy, T_steps, wind_size):
+    """This may be used in old code, should use distributed"""
     domain_shape = q.shape
     domain_size = domain_shape[0]*domain_shape[1]
     ens_size = ensemble.shape[1]
@@ -648,30 +884,72 @@ def main_only_sat(sat, x, y, domain_shape,
                   localization_letkf, sat_inflation,
                   sat_sig, ens_size,
                   wind_sigma, wind_size,
-                  client):
+                  CI_sigma,
+                  client, flat_error_domain,
+                  wind_inflation,
+                  wind_sat_sig,
+                  pert_sigma, pert_mean,
+                  rf_eig, rf_vectors, rf_approx_var,
+                  edge_weight,
+                  l_sat=None, l_x=None, l_y=None, l_shape=None,
+                  l_U=None, l_U_shape=None, l_V=None, l_V_shape=None):
     sat_time_range = (pd.date_range(start_time, end_time, freq='15 min')
                       .tz_localize('MST'))
     sat_time_range = sat_time_range.intersection(sat.index)
     assimilation_positions, assimilation_positions_2d, full_positions_2d = (
         assimilation_position_generator(domain_shape, assimilation_grid_size))
     q = sat.loc[sat_time_range[0]].values.reshape(domain_shape)
-    # small CI_sigma not interested in fixing irradiance
+    # if l_sat != None:
+    #     l_q = l_sat.loc[sat_time_range[0]].values.reshape(l_shape)
+    #     xi_1 = np.argwhere(l_x == x[0]).item()
+    #     xi_2 = np.argwhere(l_x == x[-1]).item()
+    #     yi_1 = np.argwhere(l_y == y[0]).item()
+    #     yi_2 = np.argwhere(l_y == y[-1]).item()
     ensemble = ensemble_creator(
-        q, CI_sigma=0.001, wind_size=wind_size,
+        q, CI_sigma=CI_sigma, wind_size=wind_size,
         wind_sigma=wind_sigma, ens_size=ens_size)
-    trace_back =  np.array([ensemble.var(axis=1).mean()])
-    trace_analy = np.array([np.nan])
     noise_init = noise_fun(domain_shape)
     noise = noise_init.copy()
-    background = ensemble.mean(axis=1)[None, :]
-    analysis = background.copy()
-    advected = q[None, :, :].copy()
+
+    background = pd.DataFrame(data=ensemble.mean(axis=1)[None, :],
+                              index=[sat_time_range[0]])
+    analysis = background.copy()*np.nan
+    advected = pd.DataFrame(data=q.ravel()[None, :],
+                            index=[sat_time_range[0]])
+    used_sat = advected.copy()
+    background_sd = pd.DataFrame(data=np.sqrt(ensemble.var(axis=1)[None, :]),
+                                 index=[sat_time_range[0]])
+    analysis_sd = background_sd.copy()*np.NaN
+
+    background_error = advected.copy()*np.nan
+    analysis_error = advected.copy()*np.nan
+    advected_error = advected.copy()*np.nan
+
+    col_names = ['back', 'analy', 'advected', 'back_sd', 'analy_sd']
+    error_stats = pd.DataFrame(data=np.ones(len(col_names))[None, :]*np.nan,
+                               index=[sat_time_range[0]],
+                               columns=col_names)
+
+    background_ni = background.copy()
+    background_error_ni = background_error.copy()
+    background_sd_ni = background_sd.copy()
+    advected_ni = advected.copy()
+    advected_error_ni = advected_error.copy()
+    used_sat_ni = used_sat.copy()
+
+    col_names = ['back', 'advected', 'back_sd']
+    error_stats_ni = pd.DataFrame(data=np.ones(len(col_names))[None, :]*np.nan,
+                               index=[sat_time_range[0]],
+                               columns=col_names)
+
+
+
     for time_index in range(sat_time_range.size - 1):
         sat_time = sat_time_range[time_index]
         print('time_index: ' + str(time_index))
         # *** manually adjust wind by .5***
-        int_index_wind = U.index.get_loc('2014-04-15 13:45:00', method='pad')
-        this_U = U.iloc[int_index_wind].values.reshape(U_shape) + .5
+        int_index_wind = U.index.get_loc(sat_time, method='pad') #changed from specific date!!
+        this_U = U.iloc[int_index_wind].values.reshape(U_shape)
         this_V = V.iloc[int_index_wind].values.reshape(V_shape)
         cx = abs(U.values).max()
         cy = abs(V.values).max()
@@ -685,20 +963,161 @@ def main_only_sat(sat, x, y, domain_shape,
             q, noise, ensemble = advect_5min_distributed(
                 q, noise, ensemble, dt, this_U, dx,
                 this_V, dy, T_steps, wind_size, client)
+            # if l_sat != None:
+            #     this_l_U = l_U.iloc[int_index_wind].values.reshape(l_U_shape)
+            #     this_l_V = l_V.iloc[int_index_wind].values.reshape(l_V_shape)
+            #     l_q = advect_5min(l_q, dt, this_l_U, dx,
+            #                       this_l_V, dy, T_steps)
 
-        # for whole image assimilation
-        advected = np.concatenate([advected, q[None, :, :]], axis=0)
-        q = sat.loc[sat_time_range[time_index + 1]].values.reshape(domain_shape)
+            # add pertubation
+            average = ensemble[wind_size:].mean(axis=1)
+            average = average.reshape(domain_shape)
+            target = ski_filters.sobel(average)
+            target = target/target.max()
+            target[target < 0.1] = 0
+            target = sp.ndimage.gaussian_filter(target, sigma=4)
+            target = target/target.max()
+            cloud_target = 1 - average
+            cloud_target = (cloud_target/cloud_target.max()).clip(min=0, max=1)
+            target = np.maximum(cloud_target, target*edge_weight)
+            target = target/target.max()
+            target = sp.ndimage.gaussian_filter(target, sigma=5)
+            target = target.ravel()
+            sample = np.random.randn(rf_eig.size, ens_size)
+            sample = rf_vectors.dot(np.sqrt(rf_eig[:, None])*sample)
+            target_mean = target.mean()
+            target_var = (target**2).mean()
+            cor_mean = pert_mean/target_mean
+            cor_sd = pert_sigma/np.sqrt(rf_approx_var*target_var)
+            ensemble[wind_size:] = (ensemble[wind_size:] +
+                                    (cor_sd*sample + cor_mean)*target[:, None])
+
+
+
+        # next image forecasting
+        q_ni = q.copy()
+        noise_ni = noise.copy()
+        ensemble_ni = ensemble.copy()
+        this_time = sat_time_range[time_index + 1]
+        if (time_index + 2) < sat_time_range.size:
+            next_time = sat_time_range[time_index + 2]
+        else:
+            next_time = sat.index.get_loc(this_time + pd.Timedelta('15min'),
+                                          method='bfill')
+            next_time = sat.index[next_time]
+
+        advection_number = int((next_time.value -
+                                this_time.value)*(10**(-9)/(60*5)))
+        for n in range(advection_number):
+            print('advection_number_ni: ' + str(n))
+            q_ni, noise_ni, ensemble_ni = advect_5min_distributed(
+                q_ni, noise_ni, ensemble_ni, dt, this_U, dx,
+                this_V, dy, T_steps, wind_size, client)
+
+            # add pertubation
+            average = ensemble_ni[wind_size:].mean(axis=1)
+            average = average.reshape(domain_shape)
+            target = ski_filters.sobel(average)
+            target = target/target.max()
+            target[target < 0.1] = 0
+            target = sp.ndimage.gaussian_filter(target, sigma=4)
+            target = target/target.max()
+            cloud_target = 1 - average
+            cloud_target = (cloud_target/cloud_target.max()).clip(min=0, max=1)
+            target = np.maximum(cloud_target, target*edge_weight)
+            target = target/target.max()
+            target = sp.ndimage.gaussian_filter(target, sigma=5)
+            target = target.ravel()
+            sample = np.random.randn(rf_eig.size, ens_size)
+            sample = rf_vectors.dot(np.sqrt(rf_eig[:, None])*sample)
+            target_mean = target.mean()
+            target_var = (target**2).mean()
+            cor_mean = pert_mean/target_mean
+            cor_sd = pert_sigma/np.sqrt(rf_approx_var*target_var)
+            ensemble_ni[wind_size:] = (ensemble_ni[wind_size:] +
+                                    (cor_sd*sample + cor_mean)*target[:, None])
+
+
+        ## next image info ##
+
+        # collect advected info
+        advected_ni.loc[next_time] = q_ni.ravel()
+        used_sat_ni.loc[next_time] = sat.loc[next_time].values
+        advected_error_ni.loc[next_time] = (
+            advected_ni.loc[next_time].values -
+            used_sat_ni.loc[next_time].values)
+        temp = advected_error_ni.loc[next_time].values[flat_error_domain]
+        error_stats_ni.loc[next_time, 'advected'] = np.sqrt((temp**2).mean())
+
+        # if l_sat != None:
+        #     mean_field = q - l_q[yi_1:(yi_2 + 1), xi_1:(xi_2 + 1)]
+        #     mean_field = sp.ndimage.uniform_filter(mean_field, size=41)
+        # collect background info
+        background_ni.loc[next_time] = ensemble_ni.mean(axis=1)
+        background_error_ni.loc[next_time] = (
+            ensemble_ni[wind_size:].mean(axis=1) -
+            used_sat_ni.loc[next_time].values)
+        ens_test = ensemble_ni[
+            flat_error_domain + wind_size].mean(axis=1).ravel()
+        temp = ens_test - used_sat_ni.loc[next_time].values[flat_error_domain]
+        error_stats_ni.loc[next_time, 'back'] = np.sqrt((temp**2).mean())
+        temp = np.sqrt(ensemble.var(axis=1))
+        background_sd_ni.loc[next_time] = temp
+        error_stats_ni.loc[next_time, 'back_sd'] = temp[
+            flat_error_domain + wind_size].mean()
+
+
+        ## for whole image assimilation ##
+
+        sat_time = sat_time_range[time_index + 1] # time after advection
+
+        # collect advected info
+        advected.loc[sat_time] = q.ravel()
+        q = sat.loc[sat_time].values.reshape(domain_shape)
+        advected_error.loc[sat_time] = (
+            advected.loc[sat_time].values - q.ravel())
+        temp = advected_error.loc[sat_time].values[flat_error_domain]
+        error_stats.loc[sat_time, 'advected'] = np.sqrt((temp**2).mean())
+
+        used_sat.loc[sat_time] = q.ravel()
+
+        # if l_sat != None:
+        #     mean_field = q - l_q[yi_1:(yi_2 + 1), xi_1:(xi_2 + 1)]
+        #     mean_field = sp.ndimage.uniform_filter(mean_field, size=41)
+
+        # collect background info
+        background.loc[sat_time] = ensemble.mean(axis=1)
+        background_error.loc[sat_time] = (
+            ensemble[wind_size:].mean(axis=1) - q.ravel())
+        ens_test = ensemble[
+            flat_error_domain + wind_size].mean(axis=1).ravel()
+        temp = ens_test - q.ravel()[flat_error_domain]
+        error_stats.loc[sat_time, 'back'] = np.sqrt((temp**2).mean())
+        temp = np.sqrt(ensemble.var(axis=1))
+        background_sd.loc[sat_time] = temp
+        error_stats.loc[sat_time, 'back_sd'] = temp[
+            flat_error_domain + wind_size].mean()
+
+        # replace noisy areas (Does not maintain variace)
         noise = (noise - noise.min())
         noise = noise/noise.max()
         noise = noise.ravel()
-        background = np.concatenate(
-                [background, ensemble.mean(axis=1)[None,:]], axis=0)
-        trace_back = np.concatenate(
-            [trace_back,  np.array([ensemble.var(axis=1).mean()])])
-        ensemble[wind_size::] = (q.ravel()[:, None]*noise[:, None] +
-                                 ensemble[wind_size:, :]*(1 - noise[:, None]))
-        ensemble[wind_size::] = assimilate(
+        ensemble[wind_size:] = (q.ravel()[:, None]*noise[:, None] +
+                                ensemble[wind_size:, :]*(1 - noise[:, None]))
+
+        # assimilate satellite image into wind portion of ensemble
+        wind_assimilate_positions = np.concatenate(
+            [np.arange(wind_size), flat_error_domain])
+        ensemble[:wind_size] = assimilate_wind(
+            ensemble=ensemble[wind_assimilate_positions],
+            observations=q.ravel()[flat_error_domain],
+            flat_sensor_indices=None,
+            R_inverse=1/wind_sat_sig**2,
+            inflation=wind_inflation,
+            wind_size=wind_size)
+
+        # assimilate satellite image into satellite portion of ensemble
+        ensemble[wind_size:] = assimilate(
             ensemble=ensemble[wind_size::],
             observations=q.ravel(),
             flat_sensor_indices=None, R_inverse=1/sat_sig**2,
@@ -708,12 +1127,27 @@ def main_only_sat(sat, x, y, domain_shape,
             assimilation_positions=assimilation_positions,
             assimilation_positions_2d=assimilation_positions_2d,
             full_positions_2d=full_positions_2d)
-        trace_analy = np.concatenate(
-            [trace_analy,  np.array([ensemble.var(axis=1).mean()])])
-        analysis = np.concatenate(
-            [analysis, ensemble.mean(axis=1)[None, :]], axis=0)
-        noise = noise_init.copy()
-    return analysis, background, advected, sat_time_range, trace_back, trace_analy
+
+        # collect analysis info
+        analysis.loc[sat_time] = ensemble.mean(axis=1)
+        analysis_error.loc[sat_time] = (
+            ensemble[wind_size:].mean(axis=1) - q.ravel())
+        ens_test = ensemble[
+            flat_error_domain + wind_size].mean(axis=1)
+        temp = ens_test - q.ravel()[flat_error_domain]
+        error_stats.loc[sat_time, 'analy'] = np.sqrt((temp**2).mean())
+        temp = np.sqrt(ensemble.var(axis=1))
+        analysis_sd.loc[sat_time]= temp
+        error_stats.loc[sat_time, 'analy_sd'] = temp[
+            flat_error_domain + wind_size].mean()
+        to_return = (analysis, analysis_error, analysis_sd,
+                     background, background_error, background_sd,
+                     advected, advected_error,
+                     used_sat, error_stats,
+                     background_ni, background_error_ni, background_sd_ni,
+                     advected_ni, advected_error_ni,
+                     used_sat_ni, error_stats_ni)
+    return to_return
 
 
 ## need to put everything into a pandas objects
@@ -900,7 +1334,7 @@ def only_durring_sat(sat, x, y, domain_shape,
 
     to_return = (analysis, background, advected, used_sat, OI, sat_time_range,
                  error_stats)
-    return to_return
+    return to_returnn
 
 def only_oi(sat, x, y, domain_shape,
             start_time, end_time,
@@ -1750,11 +2184,11 @@ def test_parallax(sat, domain_shape, dx, dy, lats, lons, sensor_data,
                 domain_shape=domain_shape, sat_azimuth=sat_azimuth,
                 sat_elevation=sat_elevation,
                 location=location, sensor_time=sat_time)
-        this_flat_sensor_loc_test = flat_sensor_loc_test + flat_correct
+        this_flat_sensor_loc_test = flat_sensor_loc_test - flat_correct # changed to -
         sat_error[time_index] = (q[this_flat_sensor_loc_test] -
                                  sensor_data_test.ix[sat_time].values)
 
-        this_flat_sensor_loc_assim = flat_sensor_loc_assim + flat_correct
+        this_flat_sensor_loc_assim = flat_sensor_loc_assim - flat_correct #changed to -
         this_OI = optimal_interpolation(
             q.ravel(), oi_sat_sig, sensor_data_assim.ix[sat_time], oi_sensor_sig,
             q.ravel(), this_flat_sensor_loc_assim,
