@@ -44,7 +44,7 @@ def main(time_range, wrf_path, save_path):
     time_range: pd.DatetimeIndex
     file_path: location of wrf dataset
     '''
-    dataset = xr.open_dataset(file_path)
+    dataset = xr.open_dataset(wrf_path)
     dataset['pressure'] = dataset['P'] + dataset['PB']
     dataset['temp'] = (dataset['T']+300)*(dataset['pressure']/100000)**0.2854
     dataset['rh'] = rh_calc(
@@ -57,32 +57,34 @@ def main(time_range, wrf_path, save_path):
         lambda x: pd.to_datetime(x.decode("utf-8").replace('_', ' ')))
     data_times = pd.Index(data_times).tz_localize('UTC').tz_convert('MST')
     start_time = time_range[0]
-    end_time = time_range[1]
+    end_time = time_range[-1]
     times_int = dataset.Time.values
     times_int = times_int[(data_times >= start_time) & (data_times <= end_time)]
-    num_of_times = times_int.size()
-    temp = dataset.sel(Time=Times_int[0])
+    num_of_times = times_int.size
+    temp = dataset.sel(Time=times_int[0])
     bottom_top = pd.Series()
-    bottom_top[Times[0]] = temp['bottom_top'].where(
+    bottom_top[data_times[0]] = temp['bottom_top'].where(
         temp['average_rh'] == temp['average_rh'].max(), drop=True).item()
     U = pd.DataFrame(
         data=temp['U'].sel(
-            bottom_top = bottom_top[Times[0]]).values.ravel()[None, :],
-        index=[Times[0]])
+            bottom_top=bottom_top[data_times[0]]).values.ravel()[None, :],
+        index=[data_times[0]])
     V = pd.DataFrame(
         data=temp['V'].sel(
-            bottom_top = bottom_top[Times[0]]).values.ravel()[None, :],
-        index=[Times[0]])
+            bottom_top=bottom_top[data_times[0]]).values.ravel()[None, :],
+        index=[data_times[0]])
     for t in np.arange(num_of_times - 1) + 1:
         temp = dataset.isel(Time=t)
-        bottom_top[Times[t]] = temp['bottom_top'].where(
+        bottom_top[data_times[t]] = temp['bottom_top'].where(
             temp['average_rh'] == temp['average_rh'].max(), drop=True).item()
         U_temp = pd.DataFrame(
-            data=temp['U'].sel(bottom_top = bottom_top[Times[t]]).values.ravel()[None, :],
-            index=[Times[t]])
+            data=temp['U'].sel(
+                bottom_top=bottom_top[data_times[t]]).values.ravel()[None, :],
+            index=[data_times[t]])
         V_temp = pd.DataFrame(
-            data=temp['V'].sel(bottom_top = bottom_top[Times[t]]).values.ravel()[None, :],
-            index=[Times[t]])
+            data=temp['V'].sel(
+                bottom_top=bottom_top[data_times[t]]).values.ravel()[None, :],
+            index=[data_times[t]])
         U = U.append(U_temp)
         V = V.append(V_temp)
     wind_lats = dataset['XLAT'].values.ravel()
@@ -91,7 +93,7 @@ def main(time_range, wrf_path, save_path):
     V_shape = dataset['V'].isel(Time=0, bottom_top=0).shape
 
     suffix = '_' + str(start_time.month) + '_' + str(start_time.day)
-    save_path = save_path + 'for' + suffix + '/'
+    save_path = save_path + 'for' + suffix + '/' + 'raw_winds/'
     print(save_path)
     if not os.path.exists(save_path):
         os.mkdir(save_path)
