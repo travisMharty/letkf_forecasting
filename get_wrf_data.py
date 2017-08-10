@@ -93,20 +93,19 @@ def main(time_range, wrf_path, save_path):
     V_shape = dataset['V'].isel(Time=0, bottom_top=0).shape
 
     suffix = '_' + str(start_time.month) + '_' + str(start_time.day)
-    save_path = save_path + 'for' + suffix + '/' + 'raw_winds/'
-    print(save_path)
+    save_path = save_path + 'for' + suffix + '/'
     if not os.path.exists(save_path):
         os.mkdir(save_path)
-    file = save_path + '{variable}{suffix}.h5'
-    U.to_hdf(file.format(variable='U', suffix=suffix), 'U'+suffix)
-    V.to_hdf(file.format(variable='V', suffix=suffix), 'V'+suffix)
+    save_path = save_path + 'raw_winds/'
+    if not os.path.exists(save_path):
+        os.mkdir(save_path)
+    print(save_path)
+    file = save_path + '{var}'
+    U.to_hdf(file.format(var='U.h5'), 'U')
+    V.to_hdf(file.format(var='V.h5'), 'V')
     bottom_top.to_hdf(
-        file.format(variable='bottom_top', suffix=suffix), 'bottom_top'+suffix)
-    np.save(file.format(variable='wind_lats', suffix=suffix)[:-3],
-            wind_lats)
-    np.save(file.format(variable='wind_lons', suffix=suffix)[:-3],
-            wind_lons)
-    np.save(file.format(variable='U_shape', suffix=suffix)[:-3],
-            U_shape)
-    np.save(file.format(variable='V_shape', suffix=suffix)[:-3],
-            V_shape)
+        file.format(var='bottom_top.h5'), 'bottom_top')
+    np.save(file.format(var='wind_lats'), wind_lats)
+    np.save(file.format(var='wind_lons'), wind_lons)
+    np.save(file.format(var='U_shape'), U_shape)
+    np.save(file.format(var='V_shape'), V_shape)
