@@ -74,6 +74,12 @@ def interp_wind(save_path, date):
     load_path = (save_path + 'for' + suffix + '/raw_winds/{var}')
     U = pd.read_hdf(load_path.format(var='U.h5'))
     V = pd.read_hdf(load_path.format(var='V.h5'))
+
+    ## delete after addressing bug
+    U.index = U.index.tz_convert('MST')
+    V.index = V.index.tz_convert('MST')
+    ## delete after addressing bug
+
     U_shape = np.load(load_path.format(var='U_shape.npy'))
     V_shape = np.load(load_path.format(var='V_shape.npy'))
     wind_lats = np.load(
@@ -167,7 +173,7 @@ def interp_wind(save_path, date):
         V_fine = V_fine.append(temp)
 
     save_path = save_path + 'for' + suffix + '/' + '{var}'
-    U_fine.to_hdf(save_path.format(var='U.h5'), 'U_fine')
-    V_fine.to_hdf(save_path.format(var='V.h5'), 'V_fine')
+    U_fine.to_hdf(save_path.format(var='U.h5'), 'U')
+    V_fine.to_hdf(save_path.format(var='V.h5'), 'V')
     np.save(save_path.format(var='U_shape'), U_fine_shape)
     np.save(save_path.format(var='V_shape'), V_fine_shape)
