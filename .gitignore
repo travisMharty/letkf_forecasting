@@ -17,3 +17,4 @@ movies/
 *.h5
 *.lprof
 *_old*
+*Copy*.ipynb
