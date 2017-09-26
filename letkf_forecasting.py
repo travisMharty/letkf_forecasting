@@ -10,6 +10,8 @@ import pvlib as pv
 import numexpr as ne
 from distributed import LocalCluster, Client
 from skimage import filters as ski_filters
+import fenics as fe
+import cv2
 
 sys.path.append('/home/travis/python_code/letkf_forecasting/')
 import prepare_sat_data as prep
@@ -207,7 +209,7 @@ def to_nearest_indices(array, values):
         if idx[i] > 0 and (idx[i] == len(array) or
                            np.abs(values[i] - array[idx[i] - 1]) <
                            np.abs(values[i] - array[idx[i]])):
-            idx[i] =  idx[i] - 1
+            idx[i] = idx[i] - 1
     return idx
 
 def to_lat_lon(x, y, loc_lat):
@@ -273,11 +275,19 @@ def nearest_positions(loc, shape, dist):
 def optimal_interpolation(background, b_sig,
                           observations, o_sig,
                           P_field,
-                          flat_locations, localization, sat_inflation):
+                          flat_locations, localization, sat_inflation,
+                          spacial_localization=False, x=None, y=None):
 
-    PHT = np.abs(P_field[:, None] - P_field[None, flat_locations])
-    PHT = np.exp(-PHT/(localization))
-    PHT = sat_inflation*PHT*b_sig**2
+    if spacial_localization:
+        PHT = np.sqrt((x[:, None] - x[None, flat_locations])**2 +
+                      (y[:, None] - y[None, flat_locations])**2)
+        PHT = np.exp(-PHT/(localization))
+        PHT = sat_inflation*PHT*b_sig**2
+
+    if P_field is not None:
+        PHT = np.abs(P_field[:, None] - P_field[None, flat_locations])
+        PHT = np.exp(-PHT/(localization))
+        PHT = sat_inflation*PHT*b_sig**2
     # K = sp.linalg.inv(
     #     PHT[flat_locations, :] + o_sig**2*np.eye(flat_locations.size))
     # K = PHT.dot(K)
@@ -476,8 +486,6 @@ def assimilate_wind(ensemble, observations, flat_sensor_indices, R_inverse,
     return ensemble[:wind_size]
 
 
-
-
 def assimilate_enkf(ensemble, observations, flat_sensor_indices, R_inverse,
                         inflation, domain_shape=False,
                         localization_length=False, assimilation_positions=False,
@@ -665,6 +673,40 @@ def ensemble_creator(sat_image, CI_sigma, wind_size, wind_sigma, ens_size):
     return ensemble
 
 
+def ensemble_creator_wind(sat_image, u, v, CI_sigma, wind_sigma, ens_size):
+    """need to change later"""
+    random_nums = np.random.normal(
+        loc=0,
+        scale=wind_sigma,
+        size=ens_size)
+    half_wind = int(round(wind_size/2))
+    ens_wind = int(round(ens_size*half_wind))
+    ensemble = u.ravel()[:, None] + random_nums[None, :]
+
+    random_nums = np.random.normal(
+        loc=0,
+        scale=wind_sigma,
+        size=ens_size)
+    ensemble = np.concatenate(
+        ensemble,
+        v.ravel()[:, None] + random_nums[None, :],
+        axis=0)
+    ensemble = np.concatenate(
+        [ensemble,
+         np.repeat(sat_image.ravel()[:, None], ens_size, axis=1)],
+        axis=0)
+    wind_size = u.size + v.size
+    CI_pert = np.random.normal(loc=0, scale=CI_sigma, size=ens_size)
+    csi_min_pert = np.random.normal(loc=0, scale=CI_sigma, size=ens_size)
+    csi_max_pert = np.random.normal(loc=1, scale=CI_sigma*.2, size=ens_size)
+    ensemble[wind_size:] = ((csi_max_pert[None, :] - csi_min_pert[None, :])*
+                            ensemble[wind_size:] + csi_min_pert[None, :])
+    # ensemble[wind_size:] = ((1 - CI_pert[None, :])*ensemble[wind_size:] +
+    #                         CI_pert[None, :])
+    # ensemble[wind_size:] = ensemble[wind_size:] + CI_pert[None, :]
+    return ensemble
+
+
 def ensemble_creator_old(sat_image, CI_sigma, wind_size, wind_sigma, ens_size):
     """check back later"""
     half_wind = int(round(wind_size/2))
@@ -710,8 +752,6 @@ def assimilation_position_generator(domain_shape, assimilation_grid_size):
                                          domain_shape)
     full_positions_2d = np.stack(full_positions_2d, axis=1)
     return assimilation_positions, assimilation_positions_2d, full_positions_2d
-
-
 
 
 def noise_fun(domain_shape):
@@ -877,8 +917,174 @@ def get_flat_correct(
 #     return flat_correct
 
 
-def main_only_sat(sat, x, y, domain_shape,
-                  U, U_shape, V, V_shape,
+def preturb_irradiance(ensemble, domain_shape, edge_weight, pert_mean,
+                       pert_sigma, rf_approx_var, rf_eig, rf_vectors):
+    ens_size = ensemble.shape[1]
+    average = ensemble.mean(axis=1)
+    average = average.reshape(domain_shape)
+    target = ski_filters.sobel(average)
+    target = target/target.max()
+    target[target < 0.1] = 0
+    target = sp.ndimage.gaussian_filter(target, sigma=4)
+    target = target/target.max()
+    cloud_target = 1 - average
+    cloud_target = (cloud_target/cloud_target.max()).clip(min=0,
+                                                          max=1)
+    target = np.maximum(cloud_target, target*edge_weight)
+    target = target/target.max()
+    target = sp.ndimage.gaussian_filter(target, sigma=5)
+    target = target.ravel()
+    sample = np.random.randn(rf_eig.size, ens_size)
+    sample = rf_vectors.dot(np.sqrt(rf_eig[:, None])*sample)
+    target_mean = target.mean()
+    target_var = (target**2).mean()
+    cor_mean = pert_mean/target_mean
+    cor_sd = pert_sigma/np.sqrt(rf_approx_var*target_var)
+    ensemble = (
+        ensemble +
+        (cor_sd*sample + cor_mean)*target[:, None])
+    return ensemble
+
+
+def coarsen(array, coarseness):
+    old_shape = np.array(array.shape, dtype=float)
+    new_shape = coarseness * np.ceil(old_shape / coarseness).astype(int)
+
+    row_add = int(new_shape[0] - old_shape[0])
+    col_add = int(new_shape[1] - old_shape[1])
+    padded = np.pad(array, ((0, row_add),(0, col_add)), mode='edge')
+    temp = padded.reshape(new_shape[0] // coarseness, coarseness,
+                          new_shape[1] // coarseness, coarseness)
+    array = np.sum(temp, axis=(1, 3))/coarseness**2
+    return array
+
+
+def divergence(u, v, dx, dy):
+    dudy, dudx = np.gradient(u, dy, dx)
+    dvdy, dvdx = np.gradient(v, dy, dx)
+    return dudx + dvdy
+
+
+def optical_flow(image0, image1, time0, time1, u, v):
+    var_size = 7
+    # win_var_size = 11
+    var_sig = 2
+    var_thresh = 300
+    sd_num = 2                  # for removing u_of & v_of
+    coarseness = 4
+    feature_params = dict( maxCorners = 5000,
+                           qualityLevel = 0.0001,
+                           minDistance = 10,
+                           blockSize = 4)
+    winSize = (50, 50) #(int(round(80/coarseness)), int(round(80/coarseness)))
+    maxLevel = 5
+    lk_params = dict( winSize  = winSize,
+                      maxLevel = maxLevel,
+                      criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 50, 0.03))
+
+    image0 = coarsen(array=image0, coarseness=coarseness)
+    image1 = coarsen(array=image1, coarseness=coarseness)
+
+    c_min = min(image0.min(), image1.min())
+    c_max = max(image0.max(), image1.max())
+    image0 = (image0 - c_min)/(c_max - c_min)*255
+    image1 = (image1 - c_min)/(c_max - c_min)*255
+    image0 = image0.astype('uint8')
+    image1 = image1.astype('uint8')
+
+    u = coarsen(array=u, coarseness=coarseness)
+    v = coarsen(array=v, coarseness=coarseness)
+    U_median = np.median(u)
+    V_median = np.median(v)
+
+    x_step = (time1 - time0).seconds*U_median/(250*coarseness)
+    y_step = (time1 - time0).seconds*V_median/(250*coarseness)
+    x_step = int(np.round(x_step))
+    y_step = int(np.round(y_step))
+
+    p0 = cv2.goodFeaturesToTrack(
+        image0,
+        **feature_params)
+    p0_resh = p0.reshape(p0.shape[0], p0.shape[2])
+
+    means = filters.uniform_filter(image0.astype('float'), (var_size, var_size))
+    second_moments = filters.uniform_filter(image0.astype('float')**2, (var_size, var_size))
+    variances = second_moments - means**2
+    win_vars = filters.gaussian_filter(variances, sigma=var_sig)
+    win_vars = win_vars[(p0[:, :, 1].astype('int'), p0[:, :, 0].astype('int'))].ravel()
+
+    p0 = p0[win_vars > var_thresh]
+    p0_resh = p0.reshape(p0.shape[0], p0.shape[2])
+
+    p1_guess = p0 + np.array([x_step, y_step])[None, None, :]
+    p1, status, err = cv2.calcOpticalFlowPyrLK(
+        image0, image1, p0, p1_guess, **lk_params)
+    status = status.ravel().astype('bool')
+    p1 = p1[status, :, :]
+    p0 = p0[status, :, :]
+    in_domain = np.logical_and(p1>0, p1<image0.shape[0]).all(axis=-1) # assumes clouds0 is square
+    in_domain = in_domain.ravel()
+    p1 = p1[in_domain, :, :]
+    p0 = p0[in_domain, :, :]
+
+    err = err.ravel()[status]
+    p0_resh = p0.reshape(p0.shape[0], p0.shape[2])
+    p1_resh = p1.reshape(p1.shape[0], p1.shape[2])
+
+    time_step0 = (time1 - time0).seconds
+
+    u_of = (p1_resh[:, 0] - p0_resh[:, 0])*(250*coarseness/(time_step0))
+    v_of = (p1_resh[:, 1] - p0_resh[:, 1])*(250*coarseness/(time_step0))
+
+    u_mu = u.mean()
+    u_sd = np.sqrt(u.var())
+    v_mu = v.mean()
+    v_sd = np.sqrt(v.var())
+    good_wind = ((u > u_mu - u_sd*sd_num) & (u < u_mu + u_sd*sd_num) &
+                 (v > v_mu - v_sd*sd_num) & (v < v_mu + v_sd*sd_num))
+    u = u[good_wind]
+    v = v[good_wind]
+    p0_good = p0_resh[good_wind]
+    return u, v, p0_good
+
+
+def remove_divergence(u, v):
+    ## this could be improved by increasing the order in V
+    c_shape = u.shape
+    mesh = fe.RectangleMesh(fe.Point(0,0),
+                            fe.Point(c_shape[0] - 1, c_shape[1] - 1),
+                            c_shape[0] - 1, c_shape[1] - 1)
+    c_shape = u.shape
+    mesh = fe.RectangleMesh(fe.Point(0,0),
+                            fe.Point(c_shape[0] - 1, c_shape[1] - 1),
+                            c_shape[0] - 1, c_shape[1] - 1)
+    V = fe.FunctionSpace(mesh, 'P', 1)
+
+    V_div = divergence(u, v, 1, 1)
+    ff = fe.Function(V)
+    d2v_map = fe.dof_to_vertex_map(V)
+    array_ff = V_div.ravel()
+    array_ff = array_ff[d2v_map]
+    ff.vector().set_local(array_ff)
+    uu = fe.TrialFunction(V)
+    vv = fe.TestFunction(V)
+    a = fe.dot(fe.grad(uu), fe.grad(vv))*fe.dx
+    L = ff*vv*fe.dx
+    uu = fe.Function(V)
+    fe.solve(a == L, uu)
+    phi = uu.compute_vertex_values().reshape(c_shape)
+    grad_phi = np.gradient(phi, 1, 1)
+    u_corrected = u + grad_phi[1]
+    v_corrected = v + grad_phi[0]
+    sigma = 2
+    u_corrected = sp.filters.gaussian_filter(u_corrected, sigma=sigma)
+    v_corrected = sp.filters.gaussian_filter(v_corrected, sigma=sigma)
+    return u_corrected, v_corrected
+
+
+def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
+                  U, U_shape, U_crop_cols, U_crop_shape,
+                  V, V_shape, V_crop_cols, V_crop_shape,
                   start_time, end_time, dx, dy, C_max,
                   assimilation_grid_size,
                   localization_letkf, sat_inflation,
@@ -893,210 +1099,238 @@ def main_only_sat(sat, x, y, domain_shape,
                   edge_weight,
                   l_sat=None, l_x=None, l_y=None, l_shape=None,
                   l_U=None, l_U_shape=None, l_V=None, l_V_shape=None):
-    sat_time_range = (pd.date_range(start_time, end_time, freq='15 min')
-                      .tz_localize('MST'))
-    sat_time_range = sat_time_range.intersection(sat.index)
+    if (start_time is None) & (end_time is None):
+        sat_time_range = sat.index
+    else:
+        sat_time_range = (pd.date_range(start_time, end_time, freq='15 min')
+                          .tz_localize('MST'))
+        sat_time_range = sat_time_range.intersection(sat.index)
+    sat_crop = sat[domain_crop_cols]
+    sat_crop.colums = np.arange(domain_crop_cols.size, dtype='int')
+    x_crop = x[domain_crop_cols]
+    y_crop = y[domain_crop_cols]
+    U_crop = U[U_crop_cols]
+    U_crop.columns = np.arange(U_crop_cols.size, dtype='int')
+    V_crop = V[V_crop_cols]
+    V_crop.columns = np.arange(V_crop_cols.size, dtype='int')
     assimilation_positions, assimilation_positions_2d, full_positions_2d = (
         assimilation_position_generator(domain_shape, assimilation_grid_size))
-    q = sat.loc[sat_time_range[0]].values.reshape(domain_shape)
-    # if l_sat != None:
-    #     l_q = l_sat.loc[sat_time_range[0]].values.reshape(l_shape)
-    #     xi_1 = np.argwhere(l_x == x[0]).item()
-    #     xi_2 = np.argwhere(l_x == x[-1]).item()
-    #     yi_1 = np.argwhere(l_y == y[0]).item()
-    #     yi_2 = np.argwhere(l_y == y[-1]).item()
-    ensemble = ensemble_creator(
+    q = sat_crop.loc[sat_time_range[0]].values.reshape(domain_shape)
+    # ensemble = ensemble_creator(
+    #     q, CI_sigma=CI_sigma, wind_size=wind_size,
+    #     wind_sigma=wind_sigma, ens_size=ens_size)
+    ensemble = ensemble_creator_wind(
         q, CI_sigma=CI_sigma, wind_size=wind_size,
         wind_sigma=wind_sigma, ens_size=ens_size)
+    ens_shape = ensemble.shape
+    ensemble_15 = pd.DataFrame(data=ensemble.ravel()[None, :]*np.nan,
+                               index=[sat_time_range[0]])
+    ensemble_30 = ensemble_15.copy()
+    ensemble_45 = ensemble_15.copy()
+    ensemble_analy = ensemble_15.copy()
+
     noise_init = noise_fun(domain_shape)
     noise = noise_init.copy()
 
-    background = pd.DataFrame(data=ensemble.mean(axis=1)[None, :],
-                              index=[sat_time_range[0]])
-    analysis = background.copy()*np.nan
-    advected = pd.DataFrame(data=q.ravel()[None, :],
-                            index=[sat_time_range[0]])
-    used_sat = advected.copy()
-    background_sd = pd.DataFrame(data=np.sqrt(ensemble.var(axis=1)[None, :]),
-                                 index=[sat_time_range[0]])
-    analysis_sd = background_sd.copy()*np.NaN
+    # background = pd.DataFrame(data=ensemble.mean(axis=1)[None, :]*np.nan,
+    #                           index=[sat_time_range[0]])
+    # analysis = background.copy()*np.nan
+    advected_15 = pd.DataFrame(data=q.ravel()[None, :]*np.nan,
+                               index=[sat_time_range[0]])
+    advected_30 = advected_15.copy()
+    advected_45 = advected_15.copy()
+    # used_sat = advected_15.copy()
+    # background_sd = pd.DataFrame(data=np.sqrt(ensemble.var(axis=1)[None, :]),
+    #                              index=[sat_time_range[0]])
+    # analysis_sd = background_sd.copy()*np.NaN
 
-    background_error = advected.copy()*np.nan
-    analysis_error = advected.copy()*np.nan
-    advected_error = advected.copy()*np.nan
+    # background_error = advected_15.copy()*np.nan
+    # analysis_error = advected_15.copy()*np.nan
+    # advected_error = advected_15.copy()*np.nan
 
-    col_names = ['back', 'analy', 'advected', 'back_sd', 'analy_sd']
-    error_stats = pd.DataFrame(data=np.ones(len(col_names))[None, :]*np.nan,
-                               index=[sat_time_range[0]],
-                               columns=col_names)
+    # col_names = ['back', 'analy', 'advected', 'back_sd', 'analy_sd']
+    # error_stats = pd.DataFrame(data=np.ones(len(col_names))[None, :]*np.nan,
+    #                            index=[sat_time_range[0]],
+    #                            columns=col_names)
 
-    background_ni = background.copy()
-    background_error_ni = background_error.copy()
-    background_sd_ni = background_sd.copy()
-    advected_ni = advected.copy()
-    advected_error_ni = advected_error.copy()
-    used_sat_ni = used_sat.copy()
+    # background_ni = background.copy()
+    # background_error_ni = background_error.copy()
+    # background_sd_ni = background_sd.copy()
+    # advected_ni = advected.copy()
+    # advected_error_ni = advected_error.copy()
+    # used_sat_ni = used_sat.copy()
 
-    col_names = ['back', 'advected', 'back_sd']
-    error_stats_ni = pd.DataFrame(data=np.ones(len(col_names))[None, :]*np.nan,
-                               index=[sat_time_range[0]],
-                               columns=col_names)
-
-
+    # col_names = ['back', 'advected', 'back_sd']
+    # error_stats_ni = pd.DataFrame(data=np.ones(len(col_names))[None, :]*np.nan,
+    #                               index=[sat_time_range[0]],
+    #                               columns=col_names)
 
     for time_index in range(sat_time_range.size - 1):
         sat_time = sat_time_range[time_index]
-        print('time_index: ' + str(time_index))
+        print(sat_time)
         # *** manually adjust wind by .5***
-        int_index_wind = U.index.get_loc(sat_time, method='pad') #changed from specific date!!
-        this_U = U.iloc[int_index_wind].values.reshape(U_shape)
-        this_V = V.iloc[int_index_wind].values.reshape(V_shape)
-        cx = abs(U.values).max()
-        cy = abs(V.values).max()
+        int_index_wind = U_crop.index.get_loc(sat_time, method='pad')
+        this_U = U_crop.iloc[int_index_wind].values.reshape(U_crop_shape)
+        this_V = V_crop.iloc[int_index_wind].values.reshape(V_crop_shape)
+        cx = abs(U_crop.values).max()
+        cy = abs(V_crop.values).max()
         T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)/C_max))
         dt = (5*60)/T_steps
-        advection_number = int((
+        num_of_advec = int((
             (sat_time_range[time_index + 1].value) -
-            (sat_time_range[time_index].value))*(10**(-9)/(60*5)))
-        for n in range(advection_number):
-            print('advection_number: ' + str(n))
-            q, noise, ensemble = advect_5min_distributed(
-                q, noise, ensemble, dt, this_U, dx,
-                this_V, dy, T_steps, wind_size, client)
-            # if l_sat != None:
-            #     this_l_U = l_U.iloc[int_index_wind].values.reshape(l_U_shape)
-            #     this_l_V = l_V.iloc[int_index_wind].values.reshape(l_V_shape)
-            #     l_q = advect_5min(l_q, dt, this_l_U, dx,
-            #                       this_l_V, dy, T_steps)
+            (sat_time_range[time_index].value))*(10**(-9)/(60*5))/3)
 
-            # add pertubation
-            average = ensemble[wind_size:].mean(axis=1)
-            average = average.reshape(domain_shape)
-            target = ski_filters.sobel(average)
-            target = target/target.max()
-            target[target < 0.1] = 0
-            target = sp.ndimage.gaussian_filter(target, sigma=4)
-            target = target/target.max()
-            cloud_target = 1 - average
-            cloud_target = (cloud_target/cloud_target.max()).clip(min=0, max=1)
-            target = np.maximum(cloud_target, target*edge_weight)
-            target = target/target.max()
-            target = sp.ndimage.gaussian_filter(target, sigma=5)
-            target = target.ravel()
-            sample = np.random.randn(rf_eig.size, ens_size)
-            sample = rf_vectors.dot(np.sqrt(rf_eig[:, None])*sample)
-            target_mean = target.mean()
-            target_var = (target**2).mean()
-            cor_mean = pert_mean/target_mean
-            cor_sd = pert_sigma/np.sqrt(rf_approx_var*target_var)
-            ensemble[wind_size:] = (ensemble[wind_size:] +
-                                    (cor_sd*sample + cor_mean)*target[:, None])
+        temp_ensemble = ensemble.copy()
+        temp_noise = noise.copy()
 
-
-
-        # next image forecasting
-        q_ni = q.copy()
-        noise_ni = noise.copy()
-        ensemble_ni = ensemble.copy()
-        this_time = sat_time_range[time_index + 1]
-        if (time_index + 2) < sat_time_range.size:
-            next_time = sat_time_range[time_index + 2]
-        else:
-            next_time = sat.index.get_loc(this_time + pd.Timedelta('15min'),
-                                          method='bfill')
-            next_time = sat.index[next_time]
-
-        advection_number = int((next_time.value -
-                                this_time.value)*(10**(-9)/(60*5)))
-        for n in range(advection_number):
-            print('advection_number_ni: ' + str(n))
-            q_ni, noise_ni, ensemble_ni = advect_5min_distributed(
-                q_ni, noise_ni, ensemble_ni, dt, this_U, dx,
+        print('15 min')
+        for n in range(3):
+            # print('advection_number_15: ' + str(n))
+            q, temp_noise, temp_ensemble = advect_5min_distributed(
+                q, temp_noise, temp_ensemble, dt, this_U, dx,
                 this_V, dy, T_steps, wind_size, client)
 
             # add pertubation
-            average = ensemble_ni[wind_size:].mean(axis=1)
-            average = average.reshape(domain_shape)
-            target = ski_filters.sobel(average)
-            target = target/target.max()
-            target[target < 0.1] = 0
-            target = sp.ndimage.gaussian_filter(target, sigma=4)
-            target = target/target.max()
-            cloud_target = 1 - average
-            cloud_target = (cloud_target/cloud_target.max()).clip(min=0, max=1)
-            target = np.maximum(cloud_target, target*edge_weight)
-            target = target/target.max()
-            target = sp.ndimage.gaussian_filter(target, sigma=5)
-            target = target.ravel()
-            sample = np.random.randn(rf_eig.size, ens_size)
-            sample = rf_vectors.dot(np.sqrt(rf_eig[:, None])*sample)
-            target_mean = target.mean()
-            target_var = (target**2).mean()
-            cor_mean = pert_mean/target_mean
-            cor_sd = pert_sigma/np.sqrt(rf_approx_var*target_var)
-            ensemble_ni[wind_size:] = (ensemble_ni[wind_size:] +
-                                    (cor_sd*sample + cor_mean)*target[:, None])
+            if pert_sigma != 0:
+                average = temp_ensemble[wind_size:].mean(axis=1)
+                average = average.reshape(domain_shape)
+                target = ski_filters.sobel(average)
+                target = target/target.max()
+                target[target < 0.1] = 0
+                target = sp.ndimage.gaussian_filter(target, sigma=4)
+                target = target/target.max()
+                cloud_target = 1 - average
+                cloud_target = (cloud_target/cloud_target.max()).clip(min=0,
+                                                                      max=1)
+                target = np.maximum(cloud_target, target*edge_weight)
+                target = target/target.max()
+                target = sp.ndimage.gaussian_filter(target, sigma=5)
+                target = target.ravel()
+                sample = np.random.randn(rf_eig.size, ens_size)
+                sample = rf_vectors.dot(np.sqrt(rf_eig[:, None])*sample)
+                target_mean = target.mean()
+                target_var = (target**2).mean()
+                cor_mean = pert_mean/target_mean
+                cor_sd = pert_sigma/np.sqrt(rf_approx_var*target_var)
+                temp_ensemble[wind_size:] = (
+                    temp_ensemble[wind_size:] +
+                    (cor_sd*sample + cor_mean)*target[:, None])
+        ensemble_15.loc[sat_time_range[time_index] + pd.Timedelta('15min')] = (
+            temp_ensemble.ravel())
+        advected_15.loc[sat_time_range[time_index] + pd.Timedelta('15min')] = (
+            q.ravel())
+        if num_of_advec == 1:
+            ensemble = temp_ensemble.copy()
+            noise = temp_noise.copy()
 
+        print('30 min')
+        for n in range(3):
+            # print('advection_number_30: ' + str(n))
+            q, temp_noise, temp_ensemble = advect_5min_distributed(
+                q, temp_noise, temp_ensemble, dt, this_U, dx,
+                this_V, dy, T_steps, wind_size, client)
 
-        ## next image info ##
+            # add pertubation
+            if pert_sigma != 0:
+                average = temp_ensemble[wind_size:].mean(axis=1)
+                average = average.reshape(domain_shape)
+                target = ski_filters.sobel(average)
+                target = target/target.max()
+                target[target < 0.1] = 0
+                target = sp.ndimage.gaussian_filter(target, sigma=4)
+                target = target/target.max()
+                cloud_target = 1 - average
+                cloud_target = (cloud_target/cloud_target.max()).clip(min=0,
+                                                                      max=1)
+                target = np.maximum(cloud_target, target*edge_weight)
+                target = target/target.max()
+                target = sp.ndimage.gaussian_filter(target, sigma=5)
+                target = target.ravel()
+                sample = np.random.randn(rf_eig.size, ens_size)
+                sample = rf_vectors.dot(np.sqrt(rf_eig[:, None])*sample)
+                target_mean = target.mean()
+                target_var = (target**2).mean()
+                cor_mean = pert_mean/target_mean
+                cor_sd = pert_sigma/np.sqrt(rf_approx_var*target_var)
+                temp_ensemble[wind_size:] = (
+                    temp_ensemble[wind_size:] +
+                    (cor_sd*sample + cor_mean)*target[:, None])
+        ensemble_30.loc[sat_time_range[time_index] + pd.Timedelta('30min')] = (
+            temp_ensemble.ravel())
+        advected_30.loc[sat_time_range[time_index] + pd.Timedelta('30min')] = (
+            q.ravel())
+        if num_of_advec == 2:
+            ensemble = temp_ensemble.copy()
+            noise = temp_noise.copy()
 
-        # collect advected info
-        advected_ni.loc[next_time] = q_ni.ravel()
-        used_sat_ni.loc[next_time] = sat.loc[next_time].values
-        advected_error_ni.loc[next_time] = (
-            advected_ni.loc[next_time].values -
-            used_sat_ni.loc[next_time].values)
-        temp = advected_error_ni.loc[next_time].values[flat_error_domain]
-        error_stats_ni.loc[next_time, 'advected'] = np.sqrt((temp**2).mean())
+        print('45 min')
+        for n in range(3):
+            # print('advection_number_45: ' + str(n))
+            q, temp_noise, temp_ensemble = advect_5min_distributed(
+                q, temp_noise, temp_ensemble, dt, this_U, dx,
+                this_V, dy, T_steps, wind_size, client)
 
-        # if l_sat != None:
-        #     mean_field = q - l_q[yi_1:(yi_2 + 1), xi_1:(xi_2 + 1)]
-        #     mean_field = sp.ndimage.uniform_filter(mean_field, size=41)
-        # collect background info
-        background_ni.loc[next_time] = ensemble_ni.mean(axis=1)
-        background_error_ni.loc[next_time] = (
-            ensemble_ni[wind_size:].mean(axis=1) -
-            used_sat_ni.loc[next_time].values)
-        ens_test = ensemble_ni[
-            flat_error_domain + wind_size].mean(axis=1).ravel()
-        temp = ens_test - used_sat_ni.loc[next_time].values[flat_error_domain]
-        error_stats_ni.loc[next_time, 'back'] = np.sqrt((temp**2).mean())
-        temp = np.sqrt(ensemble.var(axis=1))
-        background_sd_ni.loc[next_time] = temp
-        error_stats_ni.loc[next_time, 'back_sd'] = temp[
-            flat_error_domain + wind_size].mean()
-
+            # add pertubation
+            if pert_sigma != 0:
+                average = temp_ensemble[wind_size:].mean(axis=1)
+                average = average.reshape(domain_shape)
+                target = ski_filters.sobel(average)
+                target = target/target.max()
+                target[target < 0.1] = 0
+                target = sp.ndimage.gaussian_filter(target, sigma=4)
+                target = target/target.max()
+                cloud_target = 1 - average
+                cloud_target = (cloud_target/cloud_target.max()).clip(min=0, max=1)
+                target = np.maximum(cloud_target, target*edge_weight)
+                target = target/target.max()
+                target = sp.ndimage.gaussian_filter(target, sigma=5)
+                target = target.ravel()
+                sample = np.random.randn(rf_eig.size, ens_size)
+                sample = rf_vectors.dot(np.sqrt(rf_eig[:, None])*sample)
+                target_mean = target.mean()
+                target_var = (target**2).mean()
+                cor_mean = pert_mean/target_mean
+                cor_sd = pert_sigma/np.sqrt(rf_approx_var*target_var)
+                temp_ensemble[wind_size:] = (
+                    temp_ensemble[wind_size:] +
+                    (cor_sd*sample + cor_mean)*target[:, None])
+        ensemble_45.loc[sat_time_range[time_index] + pd.Timedelta('45min')] = (
+            temp_ensemble.ravel())
+        advected_45.loc[sat_time_range[time_index] + pd.Timedelta('45min')] = (
+            q.ravel())
+        if num_of_advec == 3:
+            ensemble = temp_ensemble.copy()
+            noise = temp_noise.copy()
 
         ## for whole image assimilation ##
+        sat_time = sat_time_range[time_index + 1]
+        print('Assimilation')
+        print(sat_time)
 
-        sat_time = sat_time_range[time_index + 1] # time after advection
+        ## collect advected info
 
-        # collect advected info
-        advected.loc[sat_time] = q.ravel()
-        q = sat.loc[sat_time].values.reshape(domain_shape)
-        advected_error.loc[sat_time] = (
-            advected.loc[sat_time].values - q.ravel())
-        temp = advected_error.loc[sat_time].values[flat_error_domain]
-        error_stats.loc[sat_time, 'advected'] = np.sqrt((temp**2).mean())
+        # advected.loc[sat_time] = q.ravel()
+        q = sat_crop.loc[sat_time].values.reshape(domain_shape)
+        # advected_error.loc[sat_time] = (
+        #     advected.loc[sat_time].values - q.ravel())
+        # temp = advected_error.loc[sat_time].values[flat_error_domain]
+        # error_stats.loc[sat_time, 'advected'] = np.sqrt((temp**2).mean())
 
-        used_sat.loc[sat_time] = q.ravel()
+        # used_sat.loc[sat_time] = q.ravel()
 
-        # if l_sat != None:
-        #     mean_field = q - l_q[yi_1:(yi_2 + 1), xi_1:(xi_2 + 1)]
-        #     mean_field = sp.ndimage.uniform_filter(mean_field, size=41)
 
-        # collect background info
-        background.loc[sat_time] = ensemble.mean(axis=1)
-        background_error.loc[sat_time] = (
-            ensemble[wind_size:].mean(axis=1) - q.ravel())
-        ens_test = ensemble[
-            flat_error_domain + wind_size].mean(axis=1).ravel()
-        temp = ens_test - q.ravel()[flat_error_domain]
-        error_stats.loc[sat_time, 'back'] = np.sqrt((temp**2).mean())
-        temp = np.sqrt(ensemble.var(axis=1))
-        background_sd.loc[sat_time] = temp
-        error_stats.loc[sat_time, 'back_sd'] = temp[
-            flat_error_domain + wind_size].mean()
+        # # collect background info
+        # background.loc[sat_time] = ensemble.mean(axis=1)
+        # background_error.loc[sat_time] = (
+        #     ensemble[wind_size:].mean(axis=1) - q.ravel())
+        # ens_test = ensemble[
+        #     flat_error_domain + wind_size].mean(axis=1).ravel()
+        # temp = ens_test - q.ravel()[flat_error_domain]
+        # error_stats.loc[sat_time, 'back'] = np.sqrt((temp**2).mean())
+        # temp = np.sqrt(ensemble.var(axis=1))
+        # background_sd.loc[sat_time] = temp
+        # error_stats.loc[sat_time, 'back_sd'] = temp[
+        #     flat_error_domain + wind_size].mean()
 
         # replace noisy areas (Does not maintain variace)
         noise = (noise - noise.min())
@@ -1129,24 +1363,29 @@ def main_only_sat(sat, x, y, domain_shape,
             full_positions_2d=full_positions_2d)
 
         # collect analysis info
-        analysis.loc[sat_time] = ensemble.mean(axis=1)
-        analysis_error.loc[sat_time] = (
-            ensemble[wind_size:].mean(axis=1) - q.ravel())
-        ens_test = ensemble[
-            flat_error_domain + wind_size].mean(axis=1)
-        temp = ens_test - q.ravel()[flat_error_domain]
-        error_stats.loc[sat_time, 'analy'] = np.sqrt((temp**2).mean())
-        temp = np.sqrt(ensemble.var(axis=1))
-        analysis_sd.loc[sat_time]= temp
-        error_stats.loc[sat_time, 'analy_sd'] = temp[
-            flat_error_domain + wind_size].mean()
-        to_return = (analysis, analysis_error, analysis_sd,
-                     background, background_error, background_sd,
-                     advected, advected_error,
-                     used_sat, error_stats,
-                     background_ni, background_error_ni, background_sd_ni,
-                     advected_ni, advected_error_ni,
-                     used_sat_ni, error_stats_ni)
+        ensemble_analy.loc[sat_time] = ensemble.ravel()
+        # analysis.loc[sat_time] = ensemble.mean(axis=1)
+        # analysis_error.loc[sat_time] = (
+        #     ensemble[wind_size:].mean(axis=1) - q.ravel())
+        # ens_test = ensemble[
+        #     flat_error_domain + wind_size].mean(axis=1)
+        # temp = ens_test - q.ravel()[flat_error_domain]
+        # error_stats.loc[sat_time, 'analy'] = np.sqrt((temp**2).mean())
+        # temp = np.sqrt(ensemble.var(axis=1))
+        # analysis_sd.loc[sat_time]= temp
+        # error_stats.loc[sat_time, 'analy_sd'] = temp[
+        #     flat_error_domain + wind_size].mean()
+
+    # ensemble_15 = ensemble_15.dropna()
+    # ensemble_30 = ensemble_30.dropna()
+    # ensemble_45 = ensemble_45.dropna()
+    # ensemble_analy = ensemble_analy.dropna()
+    # advected_15 = advected_15.dropna()
+    # advected_30 = advected_30.dropna()
+    # advected_45 = advected_45.dropna()
+    to_return = (ensemble_15, ensemble_30, ensemble_45,
+                 ensemble_analy, ens_shape,
+                 advected_15, advected_30, advected_45)
     return to_return
 
 
@@ -1154,7 +1393,7 @@ def main_only_sat(sat, x, y, domain_shape,
 def only_durring_sat(sat, x, y, domain_shape,
                      U, U_shape, V, V_shape,
                      start_time, end_time, dx, dy, C_max,
-                     assimilation_grid_size,
+                 assimilation_grid_size,
                      localization_letkf, sat_inflation,
                      sat_sig, ens_size,
                      wind_sigma, wind_size,
@@ -1446,7 +1685,6 @@ def only_oi(sat, x, y, domain_shape,
     to_return = (analysis, background, advected, used_sat, OI, sat_time_range,
                  trace_back, trace_analy)
     return to_return
-
 
 
 def main(
