@@ -1192,29 +1192,33 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
 
             # add pertubation
             if pert_sigma != 0:
-                average = temp_ensemble[wind_size:].mean(axis=1)
-                average = average.reshape(domain_shape)
-                target = ski_filters.sobel(average)
-                target = target/target.max()
-                target[target < 0.1] = 0
-                target = sp.ndimage.gaussian_filter(target, sigma=4)
-                target = target/target.max()
-                cloud_target = 1 - average
-                cloud_target = (cloud_target/cloud_target.max()).clip(min=0,
-                                                                      max=1)
-                target = np.maximum(cloud_target, target*edge_weight)
-                target = target/target.max()
-                target = sp.ndimage.gaussian_filter(target, sigma=5)
-                target = target.ravel()
-                sample = np.random.randn(rf_eig.size, ens_size)
-                sample = rf_vectors.dot(np.sqrt(rf_eig[:, None])*sample)
-                target_mean = target.mean()
-                target_var = (target**2).mean()
-                cor_mean = pert_mean/target_mean
-                cor_sd = pert_sigma/np.sqrt(rf_approx_var*target_var)
-                temp_ensemble[wind_size:] = (
-                    temp_ensemble[wind_size:] +
-                    (cor_sd*sample + cor_mean)*target[:, None])
+                temp_ensemble[wind_size:] = preturb_irradiance(
+                    temp_ensemble[wind_size:], domain_crop_shape,
+                    edge_weight, pert_mean, pert_sigma,
+                    rf_approx_var, rf_eig, rf_vectors)
+                # average = temp_ensemble[wind_size:].mean(axis=1)
+                # average = average.reshape(domain_shape)
+                # target = ski_filters.sobel(average)
+                # target = target/target.max()
+                # target[target < 0.1] = 0
+                # target = sp.ndimage.gaussian_filter(target, sigma=4)
+                # target = target/target.max()
+                # cloud_target = 1 - average
+                # cloud_target = (cloud_target/cloud_target.max()).clip(min=0,
+                #                                                       max=1)
+                # target = np.maximum(cloud_target, target*edge_weight)
+                # target = target/target.max()
+                # target = sp.ndimage.gaussian_filter(target, sigma=5)
+                # target = target.ravel()
+                # sample = np.random.randn(rf_eig.size, ens_size)
+                # sample = rf_vectors.dot(np.sqrt(rf_eig[:, None])*sample)
+                # target_mean = target.mean()
+                # target_var = (target**2).mean()
+                # cor_mean = pert_mean/target_mean
+                # cor_sd = pert_sigma/np.sqrt(rf_approx_var*target_var)
+                # temp_ensemble[wind_size:] = (
+                #     temp_ensemble[wind_size:] +
+                #     (cor_sd*sample + cor_mean)*target[:, None])
         ensemble_15.loc[sat_time_range[time_index] + pd.Timedelta('15min')] = (
             temp_ensemble.ravel())
         advected_15.loc[sat_time_range[time_index] + pd.Timedelta('15min')] = (
@@ -1232,29 +1236,33 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
 
             # add pertubation
             if pert_sigma != 0:
-                average = temp_ensemble[wind_size:].mean(axis=1)
-                average = average.reshape(domain_shape)
-                target = ski_filters.sobel(average)
-                target = target/target.max()
-                target[target < 0.1] = 0
-                target = sp.ndimage.gaussian_filter(target, sigma=4)
-                target = target/target.max()
-                cloud_target = 1 - average
-                cloud_target = (cloud_target/cloud_target.max()).clip(min=0,
-                                                                      max=1)
-                target = np.maximum(cloud_target, target*edge_weight)
-                target = target/target.max()
-                target = sp.ndimage.gaussian_filter(target, sigma=5)
-                target = target.ravel()
-                sample = np.random.randn(rf_eig.size, ens_size)
-                sample = rf_vectors.dot(np.sqrt(rf_eig[:, None])*sample)
-                target_mean = target.mean()
-                target_var = (target**2).mean()
-                cor_mean = pert_mean/target_mean
-                cor_sd = pert_sigma/np.sqrt(rf_approx_var*target_var)
-                temp_ensemble[wind_size:] = (
-                    temp_ensemble[wind_size:] +
-                    (cor_sd*sample + cor_mean)*target[:, None])
+                temp_ensemble[wind_size:] = preturb_irradiance(
+                    temp_ensemble[wind_size:], domain_crop_shape,
+                    edge_weight, pert_mean, pert_sigma,
+                    rf_approx_var, rf_eig, rf_vectors)
+                # average = temp_ensemble[wind_size:].mean(axis=1)
+                # average = average.reshape(domain_shape)
+                # target = ski_filters.sobel(average)
+                # target = target/target.max()
+                # target[target < 0.1] = 0
+                # target = sp.ndimage.gaussian_filter(target, sigma=4)
+                # target = target/target.max()
+                # cloud_target = 1 - average
+                # cloud_target = (cloud_target/cloud_target.max()).clip(min=0,
+                #                                                       max=1)
+                # target = np.maximum(cloud_target, target*edge_weight)
+                # target = target/target.max()
+                # target = sp.ndimage.gaussian_filter(target, sigma=5)
+                # target = target.ravel()
+                # sample = np.random.randn(rf_eig.size, ens_size)
+                # sample = rf_vectors.dot(np.sqrt(rf_eig[:, None])*sample)
+                # target_mean = target.mean()
+                # target_var = (target**2).mean()
+                # cor_mean = pert_mean/target_mean
+                # cor_sd = pert_sigma/np.sqrt(rf_approx_var*target_var)
+                # temp_ensemble[wind_size:] = (
+                #     temp_ensemble[wind_size:] +
+                #     (cor_sd*sample + cor_mean)*target[:, None])
         ensemble_30.loc[sat_time_range[time_index] + pd.Timedelta('30min')] = (
             temp_ensemble.ravel())
         advected_30.loc[sat_time_range[time_index] + pd.Timedelta('30min')] = (
@@ -1272,28 +1280,32 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
 
             # add pertubation
             if pert_sigma != 0:
-                average = temp_ensemble[wind_size:].mean(axis=1)
-                average = average.reshape(domain_shape)
-                target = ski_filters.sobel(average)
-                target = target/target.max()
-                target[target < 0.1] = 0
-                target = sp.ndimage.gaussian_filter(target, sigma=4)
-                target = target/target.max()
-                cloud_target = 1 - average
-                cloud_target = (cloud_target/cloud_target.max()).clip(min=0, max=1)
-                target = np.maximum(cloud_target, target*edge_weight)
-                target = target/target.max()
-                target = sp.ndimage.gaussian_filter(target, sigma=5)
-                target = target.ravel()
-                sample = np.random.randn(rf_eig.size, ens_size)
-                sample = rf_vectors.dot(np.sqrt(rf_eig[:, None])*sample)
-                target_mean = target.mean()
-                target_var = (target**2).mean()
-                cor_mean = pert_mean/target_mean
-                cor_sd = pert_sigma/np.sqrt(rf_approx_var*target_var)
-                temp_ensemble[wind_size:] = (
-                    temp_ensemble[wind_size:] +
-                    (cor_sd*sample + cor_mean)*target[:, None])
+                temp_ensemble[wind_size:] = preturb_irradiance(
+                    temp_ensemble[wind_size:], domain_crop_shape,
+                    edge_weight, pert_mean, pert_sigma,
+                    rf_approx_var, rf_eig, rf_vectors)
+                # average = temp_ensemble[wind_size:].mean(axis=1)
+                # average = average.reshape(domain_shape)
+                # target = ski_filters.sobel(average)
+                # target = target/target.max()
+                # target[target < 0.1] = 0
+                # target = sp.ndimage.gaussian_filter(target, sigma=4)
+                # target = target/target.max()
+                # cloud_target = 1 - average
+                # cloud_target = (cloud_target/cloud_target.max()).clip(min=0, max=1)
+                # target = np.maximum(cloud_target, target*edge_weight)
+                # target = target/target.max()
+                # target = sp.ndimage.gaussian_filter(target, sigma=5)
+                # target = target.ravel()
+                # sample = np.random.randn(rf_eig.size, ens_size)
+                # sample = rf_vectors.dot(np.sqrt(rf_eig[:, None])*sample)
+                # target_mean = target.mean()
+                # target_var = (target**2).mean()
+                # cor_mean = pert_mean/target_mean
+                # cor_sd = pert_sigma/np.sqrt(rf_approx_var*target_var)
+                # temp_ensemble[wind_size:] = (
+                #     temp_ensemble[wind_size:] +
+                #     (cor_sd*sample + cor_mean)*target[:, None])
         ensemble_45.loc[sat_time_range[time_index] + pd.Timedelta('45min')] = (
             temp_ensemble.ravel())
         advected_45.loc[sat_time_range[time_index] + pd.Timedelta('45min')] = (
