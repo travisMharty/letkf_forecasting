@@ -972,10 +972,10 @@ def optical_flow(image0, image1, time0, time1, u, v):
     var_thresh = 300
     sd_num = 2                  # for removing u_of & v_of
     coarseness = 4
-    feature_params = dict( maxCorners=5000,
-                           qualityLevel=0.0001,
-                           minDistance=10,
-                           blockSize=4)
+    feature_params = dict(maxCorners=5000,
+                          qualityLevel=0.0001,
+                          minDistance=10,
+                          blockSize=4)
     winSize = (50, 50)
     # windSize = (int(round(80/coarseness)), int(round(80/coarseness)))
     maxLevel = 5
@@ -1009,11 +1009,14 @@ def optical_flow(image0, image1, time0, time1, u, v):
         **feature_params)
     p0_resh = p0.reshape(p0.shape[0], p0.shape[2])
 
-    means = ndimage.filters.uniform_filter(image0.astype('float'), (var_size, var_size))
-    second_moments = ndimage.filters.uniform_filter(image0.astype('float')**2, (var_size, var_size))
+    means = ndimage.filters.uniform_filter(image0.astype('float'),
+                                           (var_size, var_size))
+    second_moments = ndimage.filters.uniform_filter(image0.astype('float')**2,
+                                                    (var_size, var_size))
     variances = second_moments - means**2
     win_vars = ndimage.filters.gaussian_filter(variances, sigma=var_sig)
-    win_vars = win_vars[(p0[:, :, 1].astype('int'), p0[:, :, 0].astype('int'))].ravel()
+    win_vars = win_vars[
+        (p0[:, :, 1].astype('int'), p0[:, :, 0].astype('int'))].ravel()
 
     p0 = p0[win_vars > var_thresh]
     p0_resh = p0.reshape(p0.shape[0], p0.shape[2])
@@ -1024,7 +1027,9 @@ def optical_flow(image0, image1, time0, time1, u, v):
     status = status.ravel().astype('bool')
     p1 = p1[status, :, :]
     p0 = p0[status, :, :]
-    in_domain = np.logical_and(p1>0, p1<image0.shape[0]).all(axis=-1) # assumes clouds0 is square
+
+    # assumes clouds0 is square
+    in_domain = np.logical_and(p1>0, p1<image0.shape[0]).all(axis=-1)
     in_domain = in_domain.ravel()
     p1 = p1[in_domain, :, :]
     p0 = p0[in_domain, :, :]
@@ -1038,16 +1043,16 @@ def optical_flow(image0, image1, time0, time1, u, v):
     u_of = (p1_resh[:, 0] - p0_resh[:, 0])*(250*coarseness/(time_step0))
     v_of = (p1_resh[:, 1] - p0_resh[:, 1])*(250*coarseness/(time_step0))
 
-    u_mu = u.mean()
+    u_mu = u_of.mean()
     u_sd = np.sqrt(u.var())
-    v_mu = v.mean()
-    v_sd = np.sqrt(v.var())
-    good_wind = ((u > u_mu - u_sd*sd_num) & (u < u_mu + u_sd*sd_num) &
-                 (v > v_mu - v_sd*sd_num) & (v < v_mu + v_sd*sd_num))
-    u = u[good_wind]
-    v = v[good_wind]
+    v_mu = v_of.mean()
+    v_sd = np.sqrt(v_of.var())
+    good_wind = ((u_of > u_mu - u_sd*sd_num) & (u_of < u_mu + u_sd*sd_num) &
+                 (v_of > v_mu - v_sd*sd_num) & (v_of < v_mu + v_sd*sd_num))
+    u_of = u_of[good_wind]
+    v_of = v_of[good_wind]
     p0_good = p0_resh[good_wind]
-    return u, v, p0_good
+    return u_of, v_of, p0_good
 
 
 def remove_divergence(u, v):
