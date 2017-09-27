@@ -972,15 +972,17 @@ def optical_flow(image0, image1, time0, time1, u, v):
     var_thresh = 300
     sd_num = 2                  # for removing u_of & v_of
     coarseness = 4
-    feature_params = dict( maxCorners = 5000,
-                           qualityLevel = 0.0001,
-                           minDistance = 10,
-                           blockSize = 4)
-    winSize = (50, 50) #(int(round(80/coarseness)), int(round(80/coarseness)))
+    feature_params = dict( maxCorners=5000,
+                           qualityLevel=0.0001,
+                           minDistance=10,
+                           blockSize=4)
+    winSize = (50, 50)
+    # windSize = (int(round(80/coarseness)), int(round(80/coarseness)))
     maxLevel = 5
-    lk_params = dict( winSize  = winSize,
-                      maxLevel = maxLevel,
-                      criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 50, 0.03))
+    lk_params = dict(winSize=winSize,
+                     maxLevel=maxLevel,
+                     criteria=(cv2.TERM_CRITERIA_EPS |
+                               cv2.TERM_CRITERIA_COUNT, 50, 0.03))
 
     image0 = coarsen(array=image0, coarseness=coarseness)
     image1 = coarsen(array=image1, coarseness=coarseness)
@@ -1007,10 +1009,10 @@ def optical_flow(image0, image1, time0, time1, u, v):
         **feature_params)
     p0_resh = p0.reshape(p0.shape[0], p0.shape[2])
 
-    means = filters.uniform_filter(image0.astype('float'), (var_size, var_size))
-    second_moments = filters.uniform_filter(image0.astype('float')**2, (var_size, var_size))
+    means = ndimage.filters.uniform_filter(image0.astype('float'), (var_size, var_size))
+    second_moments = ndimage.filters.uniform_filter(image0.astype('float')**2, (var_size, var_size))
     variances = second_moments - means**2
-    win_vars = filters.gaussian_filter(variances, sigma=var_sig)
+    win_vars = ndimage.filters.gaussian_filter(variances, sigma=var_sig)
     win_vars = win_vars[(p0[:, :, 1].astype('int'), p0[:, :, 0].astype('int'))].ravel()
 
     p0 = p0[win_vars > var_thresh]
