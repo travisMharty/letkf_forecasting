@@ -5,12 +5,19 @@ run_file_old.ipynb
 profiler_script.py
 run_file_5_29.ipynb
 
+ens_shape_movie.npy
+ensemble_movie.hdf
+poisson_eq.ipynb
+test_remove_divergence.ipynb
+optimal_optical.py
+
 
 __pycache__/
 elevation_data/
 results/
 data/
 movies/
+plots/
 
 *.nc
 *.txt
@@ -18,3 +25,7 @@ movies/
 *.lprof
 *_old*
 *Copy*.ipynb
+plot*.ipynb
+delete*
+Untitled*
+optical_flow*
