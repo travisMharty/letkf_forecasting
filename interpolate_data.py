@@ -14,6 +14,7 @@ def interp_sat(cloudy_times, clear_times, dx, save_path):
     sat_x = np.load(save_path + 'x.npy')
     sat_y = np.load(save_path + 'y.npy')
     cloudiness_index = pd.read_hdf(save_path + 'cloudiness_index.h5')
+    cloudiness_index.index = cloudiness_index.index.tz_convert('MST')
     # clearsky = pd.read_hdf(save_path + 'clearsky.h5')
     # pixel = pd.read_hdf(save_path + 'pixel.h5')
 
@@ -53,6 +54,7 @@ def interp_sat(cloudy_times, clear_times, dx, save_path):
     if not os.path.exists(save_path):
         os.mkdir(save_path)
     save_path = save_path + '{var}'
+    print(save_path)
     csi_fine.to_hdf(save_path.format(var='csi.h5'), 'csi')
     np.save(save_path.format(var='x'), x_fine)
     np.save(save_path.format(var='y'), y_fine)
