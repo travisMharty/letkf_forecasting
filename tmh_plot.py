@@ -9,7 +9,7 @@ def ensemble_stamps(
     cmap = 'Blues'
     vmin = 0
     vmax = 1
-    nc = 10
+    nc = 11
     bounds = np.linspace(vmin, vmax, nc)
     norm = colors.BoundaryNorm(boundaries=bounds, ncolors=256)
     fraction = 0.10
@@ -30,6 +30,7 @@ def ensemble_stamps(
             this_other,
             cmap=cmap,
             norm=norm)
+        #delete
         ax[0, j].set_title(other_titles[j])
         ax[0, j].axis('off')
     try:
@@ -40,7 +41,7 @@ def ensemble_stamps(
         ensemble.mean(axis=1).reshape(domain_shape),
         cmap=cmap,
         norm=norm)
-    ax[0, j + 1].set_title('Mean')
+    # ax[0, j + 1].set_title('Mean')
     ax[0, j + 1].axis('off')
 
     ens_count = 0
@@ -62,7 +63,7 @@ def ensemble_stamps(
 
     for i in range(nrows):
         for j in range(ncols):
-            ax[i, j].set(xlim=[0, domain_shape[1]], ylim=[0, domain_shape[0]])
+            ax[i, j].set(xlim=[100, domain_shape[1]], ylim=[0, domain_shape[0]])
             ax[i, j].set(aspect='equal', adjustable='box-forced')
 
     plt.subplots_adjust(wspace=0.02, hspace=0.02)
@@ -89,7 +90,7 @@ def ensemble_stamps(
     return fig, ax
 
 def subplots(data, x, y, subplot_titles, axes_label, sup_title=None,
-             cb_label=None, cmap='Blues', vmax=None):
+             cb_label=None, cmap='Blues', vmax=None, adjust=1):
     """
     data and subplot_titles are lists of the same length
     """
@@ -108,10 +109,10 @@ def subplots(data, x, y, subplot_titles, axes_label, sup_title=None,
     nrows, ncols = 1, len(data)
     dy, dx = x.shape
     if cb_label is None:
-        figsize = plt.figaspect(float(dy * nrows) / float(dx * ncols))
+        figsize = plt.figaspect(float(dy * nrows) / float(adjust*dx * ncols))
     else:
         figsize = plt.figaspect(float(dy * nrows) /
-                                ((1 + fraction + pad)*float(dx * ncols)))
+                                ((1 + fraction + pad)*float(adjust*dx * ncols)))
     fig, ax = plt.subplots(nrows, ncols, sharey=True, sharex=True,
                            figsize=figsize)
     if sup_title is not None:
