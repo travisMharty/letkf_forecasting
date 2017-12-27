@@ -1548,7 +1548,7 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
                   l_sat=None, l_x=None, l_y=None, l_shape=None,
                   l_U=None, l_U_shape=None, l_V=None, l_V_shape=None,
                   wind_in_ensemble=True, of_test=True, div_test=True,
-                  logging_file='letkf.log', logging_level=logging.DEBUG):
+                  logging_file='./letkf.log', logging_level=logging.DEBUG):
     logging.basicConfig(filename=logging_file, level=logging_level)
     remove_divergence_test = False
     if (start_time is None) & (end_time is None):
