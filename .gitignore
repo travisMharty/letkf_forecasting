@@ -23,6 +23,7 @@ plots/
 *.txt
 *.h5
 *.lprof
+*.png
 *_old*
 *Copy*.ipynb
 plot*.ipynb
