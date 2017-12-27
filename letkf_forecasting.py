@@ -1,4 +1,5 @@
 import sys
+import logging
 import numpy as np
 import pandas as pd
 import scipy as sp
@@ -514,7 +515,7 @@ def assimilate(ensemble, observations, flat_sensor_indices, R_inverse,
         return ensemble
 
 def assimilate_full_wind(ensemble, observations, flat_sensor_indices,
-                         R_inverse, inflation, wind_inflation,
+                         R_inverse, R_inverse_wind, inflation, wind_inflation,
                          domain_shape=False, U_shape=False, V_shape=False,
                          localization_length=False, localization_length_wind=False,
                          assimilation_positions=False,
@@ -614,7 +615,7 @@ def assimilate_full_wind(ensemble, observations, flat_sensor_indices,
         local_ensemble = ensemble_csi[local_positions]
         local_x_bar = x_bar_csi[local_positions]
         local_obs = observations[local_positions] # assume H is I
-        C = (local_ensemble.T)*R_inverse  # assume R_inverse is diag+const
+        C = (local_ensemble.T)*R_inverse_wind  # assume R_inverse is diag+const
         eig_value, eig_vector = np.linalg.eigh(
             (ens_size-1)*np.eye(ens_size)/wind_inflation + C.dot(local_ensemble))
         P_tilde = eig_vector.copy()
@@ -1149,12 +1150,7 @@ def advect_5min_distributed(
                              CI_fields, u_perts, v_perts)
         q = futures[0].result()
         q = q.reshape(domain_shape)
-        noise = futures[1].result()
-        noise = noise.reshape(domain_shape)
-        temp = client.gather(futures[2:])
-        temp = np.stack(temp, axis=1)
-        ensemble[wind_size:] = temp
-        return q, noise, ensemble
+ 
 
 
 def advect_5min_distributed_wind(
@@ -1533,22 +1529,27 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
                   U, U_shape, U_crop_cols, U_crop_shape,
                   V, V_shape, V_crop_cols, V_crop_shape,
                   start_time, end_time, dx, dy, C_max,
+                  wind_size, client, flat_error_domain,
+                  rf_eig, rf_vectors, rf_approx_var,
                   assimilation_grid_size,
                   assimilation_grid_size_wind,
+                  assimilation_grid_size_wrf,
                   localization_letkf,
-                  sat_inflation, of_inflation, wrf_inflation,
-                  sat_sig, ens_size,
-                  wind_sigma, wind_size,
-                  CI_sigma, wrf_sig, of_sig,
-                  client, flat_error_domain,
-                  localization_length_wind, wind_inflation,
-                  wind_sat_sig,
+                  localization_wrf,
+                  localization_of,
+                  inflation_sat, inflation_of, inflation_wrf,
+                  sig_sat, ens_size,
+                  wind_sigma,
+                  CI_sigma, sig_wrf, sig_of,
+                  localization_wind, inflation_wind,
+                  sig_wind_sat,
                   pert_sigma, pert_mean,
-                  rf_eig, rf_vectors, rf_approx_var,
                   edge_weight,
                   l_sat=None, l_x=None, l_y=None, l_shape=None,
                   l_U=None, l_U_shape=None, l_V=None, l_V_shape=None,
-                  wind_in_ensemble=True, of_test=True, div_test=True):
+                  wind_in_ensemble=True, of_test=True, div_test=True,
+                  logging_file='letkf.log', logging_level=logging.DEBUG):
+    logging.basicConfig(filename=logging_file, level=logging_level)
     remove_divergence_test = False
     if (start_time is None) & (end_time is None):
         sat_time_range = sat.index
@@ -1590,6 +1591,12 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
     assimilation_positions_V, assimilation_positions_2d_V, full_positions_2d_V = (
         assimilation_position_generator(V_crop_shape,
                                         assimilation_grid_size_wind))
+    assimilation_positions_U_wrf, assimilation_positions_2d_U_wrf, full_positions_2d_U_wrf = (
+        assimilation_position_generator(U_crop_shape,
+                                        assimilation_grid_size_wrf))
+    assimilation_positions_V_wrf, assimilation_positions_2d_V_wrf, full_positions_2d_V_wrf = (
+        assimilation_position_generator(V_crop_shape,
+                                        assimilation_grid_size_wrf))
 
     q = sat_crop.loc[sat_time_range[0]].values.reshape(domain_crop_shape)
     # ensemble = ensemble_creator(
@@ -1608,6 +1615,7 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
             q, CI_sigma=CI_sigma, wind_size=wind_size, wind_sigma=wind_sigma,
             ens_size=ens_size)
     ens_shape = ensemble.shape
+    
 
     # # delete
     # ensemble_movie = pd.DataFrame(data=ensemble.ravel()[None, :],
@@ -1618,6 +1626,7 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
                                index=[sat_time_range[0]])
     ensemble_30 = ensemble_15.copy()
     ensemble_45 = ensemble_15.copy()
+    ensemble_60 = ensemble_15.copy()
     ensemble_analy = ensemble_15.copy()
 
     noise_init = noise_fun(domain_crop_shape)
@@ -1627,13 +1636,14 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
                                index=[sat_time_range[0]])
     advected_30 = advected_15.copy()
     advected_45 = advected_15.copy()
+    advected_60 = advected_15.copy()
 
     for time_index in range(sat_time_range.size - 1):
         sat_time = sat_time_range[time_index]
-        print(sat_time)
+        logging.info(sat_time)
 
         if of_test and (time_index != 0):
-            print('calc of')
+            logging.debug('calc of')
             # retreive OF vectors
             time0 = sat.index.get_loc(sat_time - pd.Timedelta('15min'), method='ffill')
             time0 = sat.index[time0]
@@ -1669,47 +1679,47 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
 
         # assimilate new winds
         if wind_in_ensemble:
-            if sat_time in U_crop.index:
-                print('assim wrf')
+            if (sat_time in U_crop.index) and (time_index != 0):
+                logging.debug('assim wrf')
                 remove_divergence_test = True
                 ensemble[:U_crop_size] = assimilate_wrf(
                     ensemble=ensemble[:U_crop_size],
                     observations=this_U.ravel(),
-                    R_inverse=1/wrf_sig**2,
-                    wind_inflation=wrf_inflation,
+                    R_inverse=1/sig_wrf**2,
+                    wind_inflation=inflation_wrf,
                     wind_shape=U_crop_shape,
-                    localization_length_wind=localization_length_wind,
-                    assimilation_positions=assimilation_positions_U,
-                    assimilation_positions_2d=assimilation_positions_2d_U,
-                    full_positions_2d=full_positions_2d_U)
+                    localization_length_wind=localization_wrf,
+                    assimilation_positions=assimilation_positions_U_wrf,
+                    assimilation_positions_2d=assimilation_positions_2d_U_wrf,
+                    full_positions_2d=full_positions_2d_U_wrf)
 
                 ensemble[U_crop_size: U_crop_size + V_crop_size] = assimilate_wrf(
                     ensemble=ensemble[U_crop_size: U_crop_size + V_crop_size],
                     observations=this_V.ravel(),
-                    R_inverse=1/wrf_sig**2,
-                    wind_inflation=wind_inflation,
+                    R_inverse=1/sig_wrf**2,
+                    wind_inflation=inflation_wind,
                     wind_shape=V_crop_shape,
-                    localization_length_wind=localization_length_wind,
-                    assimilation_positions=assimilation_positions_V,
-                    assimilation_positions_2d=assimilation_positions_2d_V,
-                    full_positions_2d=full_positions_2d_V)
+                    localization_length_wind=localization_wrf,
+                    assimilation_positions=assimilation_positions_V_wrf,
+                    assimilation_positions_2d=assimilation_positions_2d_V_wrf,
+                    full_positions_2d=full_positions_2d_V_wrf)
 
             if of_test and (time_index != 0):
-                print('assim of')
+                logging.debug('assim of')
                 remove_divergence_test = True
                 ensemble[:U_crop_size] = assimilate(
                     ensemble=ensemble[:U_crop_size],
                     observations=u_of,
-                    flat_sensor_indices=u_of_flat_pos, R_inverse=1/of_sig**2,
-                    inflation=of_inflation)
+                    flat_sensor_indices=u_of_flat_pos, R_inverse=1/sig_of**2,
+                    inflation=inflation_of)
 
                 ensemble[U_crop_size:U_crop_size + V_crop_size] = assimilate(
                     ensemble=ensemble[U_crop_size:U_crop_size + V_crop_size],
                     observations=v_of,
-                    flat_sensor_indices=v_of_flat_pos, R_inverse=1/of_sig**2,
-                    inflation=of_inflation)
+                    flat_sensor_indices=v_of_flat_pos, R_inverse=1/sig_of**2,
+                    inflation=inflation_of)
         if div_test and remove_divergence_test and wind_in_ensemble:
-            print('remove divergence')
+            logging.debug('remove divergence')
             remove_divergence_test = False
             ensemble[:wind_size] = remove_divergence_ensemble(
                 FunctionSpace_wind, ensemble[:wind_size], U_crop_shape, V_crop_shape, 4) #hard wired smoothign
@@ -1724,7 +1734,7 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
         temp_ensemble = ensemble.copy()
         temp_noise = noise.copy()
 
-        print('15 min')
+        logging.info('15 min')
         for n in range(3):
             # print('advection_number_15: ' + str(n))
             if wind_in_ensemble:
@@ -1732,7 +1742,7 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
                     q, temp_noise, temp_ensemble, dt, this_U, dx,
                     this_V, dy, T_steps, wind_size, client)
             else:
-                print(n)
+                #print(n)
                 q, temp_noise, temp_ensemble = advect_5min_distributed(
                     q, temp_noise, temp_ensemble, dt, this_U, dx,
                     this_V, dy, T_steps, wind_size, client)
@@ -1762,7 +1772,7 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
 
         # # delete
         # if num_of_advec == 2:
-        print('30 min')
+        logging.info('30 min')
         for n in range(3):
             if wind_in_ensemble:
                 q, temp_noise, temp_ensemble = advect_5min_distributed_wind(
@@ -1794,36 +1804,61 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
             ensemble = temp_ensemble.copy()
             noise = temp_noise.copy()
 
-        # print('45 min')
-        # for n in range(3):
-        #     if wind_in_ensemble:
-        #         q, temp_noise, temp_ensemble = advect_5min_distributed_wind(
-        #             q, temp_noise, temp_ensemble, dt, this_U, dx,
-        #             this_V, dy, T_steps, wind_size, client)
-        #     else:
-        #         q, temp_noise, temp_ensemble = advect_5min_distributed(
-        #             q, temp_noise, temp_ensemble, dt, this_U, dx,
-        #             this_V, dy, T_steps, wind_size, client)
+        logging.info('45 min')
+        for n in range(3):
+            if wind_in_ensemble:
+                q, temp_noise, temp_ensemble = advect_5min_distributed_wind(
+                    q, temp_noise, temp_ensemble, dt, this_U, dx,
+                    this_V, dy, T_steps, wind_size, client)
+            else:
+                q, temp_noise, temp_ensemble = advect_5min_distributed(
+                    q, temp_noise, temp_ensemble, dt, this_U, dx,
+                    this_V, dy, T_steps, wind_size, client)
 
-        #     # add pertubation
-        #     if pert_sigma != 0:
-        #         temp_ensemble[wind_size:] = perturb_irradiance(
-        #             temp_ensemble[wind_size:], domain_crop_shape,
-        #             edge_weight, pert_mean, pert_sigma,
-        #             rf_approx_var, rf_eig, rf_vectors)
+            # add pertubation
+            if pert_sigma != 0:
+                temp_ensemble[wind_size:] = perturb_irradiance(
+                    temp_ensemble[wind_size:], domain_crop_shape,
+                    edge_weight, pert_mean, pert_sigma,
+                    rf_approx_var, rf_eig, rf_vectors)
 
-        # ensemble_45.loc[sat_time_range[time_index] + pd.Timedelta('45min')] = (
-        #     temp_ensemble.ravel())
-        # advected_45.loc[sat_time_range[time_index] + pd.Timedelta('45min')] = (
-        #     q.ravel())
-        # if num_of_advec == 3:
-        #     ensemble = temp_ensemble.copy()
-        #     noise = temp_noise.copy()
+        ensemble_45.loc[sat_time_range[time_index] + pd.Timedelta('45min')] = (
+            temp_ensemble.ravel())
+        advected_45.loc[sat_time_range[time_index] + pd.Timedelta('45min')] = (
+            q.ravel())
+        if num_of_advec == 3:
+            ensemble = temp_ensemble.copy()
+            noise = temp_noise.copy()
+
+        logging.info('60 min')
+        for n in range(3):
+            if wind_in_ensemble:
+                q, temp_noise, temp_ensemble = advect_5min_distributed_wind(
+                    q, temp_noise, temp_ensemble, dt, this_U, dx,
+                    this_V, dy, T_steps, wind_size, client)
+            else:
+                q, temp_noise, temp_ensemble = advect_5min_distributed(
+                    q, temp_noise, temp_ensemble, dt, this_U, dx,
+                    this_V, dy, T_steps, wind_size, client)
+
+            # add pertubation
+            if pert_sigma != 0:
+                temp_ensemble[wind_size:] = perturb_irradiance(
+                    temp_ensemble[wind_size:], domain_crop_shape,
+                    edge_weight, pert_mean, pert_sigma,
+                    rf_approx_var, rf_eig, rf_vectors)
+
+        ensemble_60.loc[sat_time_range[time_index] + pd.Timedelta('60min')] = (
+            temp_ensemble.ravel())
+        advected_60.loc[sat_time_range[time_index] + pd.Timedelta('60min')] = (
+            q.ravel())
+        if num_of_advec == 4:
+            ensemble = temp_ensemble.copy()
+            noise = temp_noise.copy()
 
         ## for whole image assimilation ##
         sat_time = sat_time_range[time_index + 1]
-        print('Assimilation')
-        print(sat_time)
+        logging.debug('Assimilation')
         q = sat_crop.loc[sat_time].values.reshape(domain_crop_shape)
 
 
@@ -1838,17 +1873,17 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
 
 
         if wind_in_ensemble:#and time_index != 2:
-            print(time_index)
             # assimilate wind and irradiance simultaneously
             ensemble = assimilate_full_wind(
                 ensemble=ensemble,
                 observations=q.ravel(),
-                flat_sensor_indices=None, R_inverse=1/sat_sig**2,
-                inflation=sat_inflation, wind_inflation=wind_inflation,
+                flat_sensor_indices=None, R_inverse=1/sig_sat**2,
+                R_inverse_wind=1/sig_wind_sat**2,
+                inflation=inflation_sat, wind_inflation=inflation_wind,
                 domain_shape=domain_crop_shape,
                 U_shape=U_crop_shape, V_shape=V_crop_shape,
                 localization_length=localization_letkf,
-                localization_length_wind=localization_length_wind,
+                localization_length_wind=localization_wind,
                 assimilation_positions=assimilation_positions,
                 assimilation_positions_2d=assimilation_positions_2d,
                 full_positions_2d=full_positions_2d)
@@ -1863,16 +1898,16 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
         #         ensemble=ensemble[wind_assimilate_positions],
         #         observations=q.ravel()[flat_error_domain],
         #         flat_sensor_indices=None,
-        #         R_inverse=1/wind_sat_sig**2,
-        #         inflation=wind_inflation,
+        #         R_inverse=1/sig_wind_sat**2,
+        #         inflation=inflation_wind,
         #         wind_size=wind_size)
 
         #     # assimilate satellite image into satellite portion of ensemble
         #     ensemble[wind_size:] = assimilate(
         #         ensemble=ensemble[wind_size::],
         #         observations=q.ravel(),
-        #         flat_sensor_indices=None, R_inverse=1/sat_sig**2,
-        #         inflation=sat_inflation,
+        #         flat_sensor_indices=None, R_inverse=1/sig_sat**2,
+        #         inflation=inflation_sat,
         #         domain_shape=domain_crop_shape,
         #         localization_length=localization_letkf,
         #         assimilation_positions=assimilation_positions,
@@ -1882,9 +1917,9 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
         # collect analysis info
         ensemble_analy.loc[sat_time] = ensemble.ravel()
 
-    to_return = (ensemble_15, ensemble_30, ensemble_45,
+    to_return = (ensemble_15, ensemble_30, ensemble_45, ensemble_60,
                  ensemble_analy, ens_shape,
-                 advected_15, advected_30, advected_45,
+                 advected_15, advected_30, advected_45, advected_60
                  )
     return to_return
     # return ensemble_movie, ens_shape
