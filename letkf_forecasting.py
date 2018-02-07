@@ -21,6 +21,7 @@ a = 6371000  # average radius of earth when modeled as a sphere From wikipedia
 
 from numba import jit
 
+@jit
 def time_deriv_3(q, dt, u, dx, v, dy):
     k = space_deriv_4(q, u, dx, v, dy)
     k = space_deriv_4(q + dt/3*k, u, dx, v, dy)
@@ -28,7 +29,8 @@ def time_deriv_3(q, dt, u, dx, v, dy):
     qout = q + dt*k
     return qout
 
-@jit
+
+@jit(nopython=True)
 def time_deriv_3_numba(q, dt, u, dx, v, dy):
     k = space_deriv_4_numba(q, u, dx, v, dy)
     k = space_deriv_4_numba(q + dt/3*k, u, dx, v, dy)
@@ -36,7 +38,7 @@ def time_deriv_3_numba(q, dt, u, dx, v, dy):
     qout = q + dt*k
     return qout
 
-
+@jit
 def space_deriv_4(q, u, dx, v, dy):
     qout = np.zeros_like(q)
     F_x = np.zeros_like(u)
@@ -123,7 +125,7 @@ def space_deriv_4(q, u, dx, v, dy):
 
 ### Numba test
 
-@jit
+@jit(nopython=True)
 def space_deriv_4_numba(q, u, dx, v, dy):
     qout = np.zeros_like(q)
     F_x = np.zeros_like(u)
@@ -164,8 +166,20 @@ def space_deriv_4_numba(q, u, dx, v, dy):
 
 
     # boundary calculation
-    u_w = u[:, 0:2].clip(max=0)
-    u_e = u[:, -2:].clip(min=0)
+    # u_w = u[:, 0:2].clip(max=0)
+    u_w = u[:, 0:2]
+    # u_w[u_w > 0] = 0
+    for j in range(u_w[0,:].size):
+        for i in range(u_w[:, 0].size):
+            if u_w[i, j] > 0:
+                u_w[i, j] = 0
+    # u_e = u[:, -2:].clip(min=0)
+    u_e = u[:, -2:]
+    # u_e[u_e < 0] = 0
+    for j in range(u_e[0,:].size):
+        for i in range(u_e[:, 0].size):
+            if u_e[i, j] < 0:
+                u_e[i, j] = 0
     qout[:, 0:2] = qout[:, 0:2] - ((u_w/dx)*(
         q[:, 1:3] - q[:, 0:2]) + (q[:, 0:2]/dx)*(u[:, 1:3] - u[:, 0:2]))
     qout[:, -2:] = qout[:, -2:] - ((u_e/dx)*(
@@ -185,8 +199,21 @@ def space_deriv_4_numba(q, u, dx, v, dy):
     # u31 = u[:, -3:-1]
     # qout[:, -2:] = ne.evaluate('qo2 - ((u_e/dx)*(q2 - q31) + (q2/dx)*(u2 - u31))')
 
-    v_n = v[-2:, :].clip(min=0)
-    v_s = v[0:2, :].clip(max=0)
+    # v_n = v[-2:, :].clip(min=0)
+    v_n = v[-2:, :]
+    # v_n[v_n < 0] = 0
+    for j in range(v_n[0,:].size):
+        for i in range(v_n[:, 0].size):
+            if v_n[i, j] < 0:
+                v_n[i, j] = 0
+    
+    # v_s = v[0:2, :].clip(max=0)
+    v_s = v[0:2, :]
+    # v_s[v_s > 0] = 0 
+    for j in range(v_s[0,:].size):
+        for i in range(v_s[:, 0].size):
+            if v_s[i, j] > 0:
+                v_s[i, j] = 0
     qout[0:2, :] = qout[0:2, :] - ((v_s/dx)*(
         q[1:3, :] - q[0:2, :]) + (q[0:2, :]/dx)*(v[1:3, :] - v[0:2, :]))
     qout[-2:, :] = qout[-2:, :] - ((v_n/dx)*(
