@@ -114,7 +114,7 @@ def subplots(data, x, y, subplot_titles, axes_label, sup_title=None,
         figsize = plt.figaspect(float(dy * nrows) /
                                 ((1 + fraction + pad)*float(adjust*dx * ncols)))
     fig, ax = plt.subplots(nrows, ncols, sharey=True, sharex=True,
-                           figsize=figsize)
+                           figsize=figsize, dpi=300)
     if sup_title is not None:
         plt.suptitle(sup_title, x=suptitle_x)
     for j in range(ncols):
