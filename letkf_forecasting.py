@@ -19,11 +19,20 @@ import prepare_sat_data as prep
 
 a = 6371000  # average radius of earth when modeled as a sphere From wikipedia
 
+from numba import jit
 
 def time_deriv_3(q, dt, u, dx, v, dy):
     k = space_deriv_4(q, u, dx, v, dy)
     k = space_deriv_4(q + dt/3*k, u, dx, v, dy)
     k = space_deriv_4(q + dt/2*k, u, dx, v, dy)
+    qout = q + dt*k
+    return qout
+
+@jit
+def time_deriv_3_numba(q, dt, u, dx, v, dy):
+    k = space_deriv_4_numba(q, u, dx, v, dy)
+    k = space_deriv_4_numba(q + dt/3*k, u, dx, v, dy)
+    k = space_deriv_4_numba(q + dt/2*k, u, dx, v, dy)
     qout = q + dt*k
     return qout
 
@@ -111,6 +120,93 @@ def space_deriv_4(q, u, dx, v, dy):
     qout[-2:, :] = ne.evaluate('qo2 - ((v_n/dx)*(q2 - q31) + (q2/dx)*(v2 - v31))')
     return qout
 
+
+### Numba test
+
+@jit
+def space_deriv_4_numba(q, u, dx, v, dy):
+    qout = np.zeros_like(q)
+    F_x = np.zeros_like(u)
+    F_y = np.zeros_like(v)
+
+    # middle calculation
+    F_x[:, 2:-2] = u[:, 2:-2]/12*(
+        7*(q[:, 2:-1] + q[:, 1:-2]) - (q[:, 3:] + q[:, :-3]))
+    F_y[2:-2, :] = v[2:-2, :]/12*(
+        7*(q[2:-1, :] + q[1:-2, :]) - (q[3:, :] + q[:-3, :]))
+    qout[:, 2:-2] = qout[:, 2:-2] - (F_x[:, 3:-2] - F_x[:, 2:-3])/dx
+    qout[2:-2, :] = qout[2:-2, :] - (F_y[3:-2, :] - F_y[2:-3, :])/dy
+
+    # # with numexpr
+    # u22 = u[:, 2:-2]
+    # q21 = q[:, 2:-1]
+    # q12 = q[:, 1:-2]
+    # q3 = q[:, 3:]
+    # qn3 = q[:, :-3]
+    # F_x[:, 2:-2] = ne.evaluate('u22 / 12 * (7 * (q21 + q12) - (q3 + qn3))')
+
+    # v22 = v[2:-2, :]
+    # q21 = q[2:-1, :]
+    # q12 = q[1:-2, :]
+    # q3 = q[3:, :]
+    # qn3 = q[:-3, :]
+    # F_y[2:-2, :] = ne.evaluate('v22 / 12 * (7 * (q21 + q12) - (q3 + qn3))')
+
+    # qo22 = qout[:, 2:-2]
+    # fx32 = F_x[:, 3:-2]
+    # fx23 = F_x[:, 2:-3]
+    # qout[:, 2:-2] = ne.evaluate('qo22 - (fx32 - fx23) / dx')
+
+    # qo22 = qout[2:-2, :]
+    # fy32 = F_y[3:-2, :]
+    # fy23 = F_y[2:-3, :]
+    # qout[2:-2, :] = ne.evaluate('qo22 - (fy32 - fy23) / dy')
+
+
+    # boundary calculation
+    u_w = u[:, 0:2].clip(max=0)
+    u_e = u[:, -2:].clip(min=0)
+    qout[:, 0:2] = qout[:, 0:2] - ((u_w/dx)*(
+        q[:, 1:3] - q[:, 0:2]) + (q[:, 0:2]/dx)*(u[:, 1:3] - u[:, 0:2]))
+    qout[:, -2:] = qout[:, -2:] - ((u_e/dx)*(
+       q[:, -2:] - q[:, -3:-1]) + (q[:, -2:]/dx)*(u[:, -2:] - u[:, -3:-1]))
+
+    # qo02 = qout[:, 0:2]
+    # q13 = q[:, 1:3]
+    # q02 = q[:, 0:2]
+    # u13 = u[:, 1:3]
+    # u02 = u[:, 0:2]
+    # qout[:, 0:2] = ne.evaluate('qo02 - ((u_w/dx)*(q13 - q02) + (q02/dx)*(u13 - u02))')
+
+    # qo2 = qout[:, -2:]
+    # q2 = q[:, -2:]
+    # q31 = q[:, -3:-1]
+    # u2 = u[:, -2:]
+    # u31 = u[:, -3:-1]
+    # qout[:, -2:] = ne.evaluate('qo2 - ((u_e/dx)*(q2 - q31) + (q2/dx)*(u2 - u31))')
+
+    v_n = v[-2:, :].clip(min=0)
+    v_s = v[0:2, :].clip(max=0)
+    qout[0:2, :] = qout[0:2, :] - ((v_s/dx)*(
+        q[1:3, :] - q[0:2, :]) + (q[0:2, :]/dx)*(v[1:3, :] - v[0:2, :]))
+    qout[-2:, :] = qout[-2:, :] - ((v_n/dx)*(
+        q[-2:, :] - q[-3:-1, :]) + (q[-2:, :]/dx)*(v[-2:, :] - v[-3:-1, :]))
+
+    # qo02 = qout[0:2, :]
+    # q13 = q[1:3, :]
+    # q02 = q[0:2, :]
+    # v13 = v[1:3, :]
+    # v02 = v[0:2, :]
+    # qout[0:2, :] = ne.evaluate('qo02 - ((v_s/dx)*(q13 - q02) + (q02/dx)*(v13 - v02))')
+
+    # qo2 = qout[-2:, :]
+    # q2 = q[-2:, :]
+    # q31 = q[-3:-1, :]
+    # v2 = v[-2:, :]
+    # v31 = v[-3:-1, :]
+    # qout[-2:, :] = ne.evaluate('qo2 - ((v_n/dx)*(q2 - q31) + (q2/dx)*(v2 - v31))')
+    return qout
+### Numba test
 
 def cot(theta):
     """Why doesn't numpy have cot?"""
@@ -382,6 +478,40 @@ def optimal_interpolation(background, b_sig,
 
 
     return background + K.dot(observations - background[flat_locations])
+
+
+def reduced_enkf(ensemble, 
+                 observations, R_sig,
+                 flat_locations, inflation,
+                 localization=None, x=None, y=None):
+
+    if localization is not None:
+        rhoHT = ((x[:, None] - x[None, flat_locations])**2 +
+                 (y[:, None] - y[None, flat_locations])**2)
+        rhoHT = np.exp(-rhoHT/(2*localization**2))
+    ens_num = ensemble.shape[1]
+    obs_size = observations.size
+    PHT = ensemble.dot(ensemble[flat_locations].T)
+    PHT = PHT*rhoHT
+    # K = sp.linalg.inv(
+    #     PHT[flat_locations, :] + o_sig**2*np.eye(flat_locations.size))
+    # K = PHT.dot(K)
+    K = sp.linalg.solve(
+        (PHT[flat_locations, :] + R_sig**2*np.eye(flat_locations.size)),
+        PHT.T).T
+    rand_obs = np.random.normal(
+        loc=0.0, scale=R_sig, size=ens_num*obs_size)
+    rand_obs = rand_obs.reshape(obs_size, ens_num)
+    rand_obs += observations[:, None]
+    # ###
+    # plt.figure()
+    # plt.plot(observations)
+    # plt.plot(background[flat_locations])
+    # plt.plot(observations - background[flat_locations])
+    # ###
+
+
+    return ensemble + K.dot(rand_obs - ensemble[flat_locations])
 
 
 def assimilate(ensemble, observations, flat_sensor_indices, R_inverse,
@@ -675,6 +805,175 @@ def assimilate_full_wind(ensemble, observations, flat_sensor_indices,
     # ensemble_V = ensemble_V + x_bar_V[:, None]
     # ### delete
 
+    ensemble = np.concatenate([ensemble_U, ensemble_V, ensemble_csi], axis=0)
+
+    return ensemble
+
+
+def assimilate_sat_to_wind(ensemble, observations, flat_sensor_indices,
+                           R_inverse, R_inverse_wind, inflation, wind_inflation,
+                           domain_shape=False, U_shape=False, V_shape=False,
+                           localization_length=False, localization_length_wind=False,
+                           assimilation_positions=False,
+                           assimilation_positions_2d=False,
+                           full_positions_2d=False):
+    ## seperate out localization in irradiance and wind
+    """
+    *** NEED TO REWRITE Documentation
+    Assimilates observations into ensemble using the LETKF.
+
+    Parameters
+    ----------
+    ensemble : array
+         The ensemble of size kxn where k is the number of ensemble members
+         and n is the state vector size.
+    observations : array
+         An observation vector of length m.
+    H : array
+         Forward observation matrix of size mxn. **may need changing**
+    R_inverse : array
+         Inverse of observation error matrix. **will need changing**
+    inflation : float
+         Inflation parameter.
+    localization_length : float
+         Localization distance in each direction so that assimilation will take
+         on (2*localization + 1)**2 elements. If equal to False then no
+         localization will take place.
+    assimilation_positions : array
+         Row and column index of state domain over which assimilation will
+         take place. First column contains row positions, second column
+         contains column positions, total number of rows is number of
+         assimilations. If False the assimilation will take place over
+         full_positions. If localization_length is False then this variable
+         will not be used.
+    full_positions : array
+         Array similar to assimilation_positions including the positions of
+         all elements of the state.
+
+    Return
+    ------
+    ensemble : array
+         Analysis ensemble of the same size as input ensemble
+    """
+
+    # LETKF with localization assumes H is I
+    ## NEED: to include wind in ensemble will require reworking due to
+    ## new H and different localization.
+    ## NEED: Change to include some form of H for paralax correction??
+    ## Maybe: ^ not if paralax is only corrected when moving to ground sensors.
+    ## SHOULD: Will currently write as though R_inverse is a scalar.
+    ## May need to change at some point but will likely need to do
+    ## something clever since R_inverse.size is 400 billion
+    ## best option: form R_inverse inside of localization routine
+    ## good option: assimilate sat images at low resolution (probabily should do this either way)
+
+    U_size = U_shape[0]*U_shape[1]
+    V_size = V_shape[0]*V_shape[1]
+    ensemble_U = ensemble[:U_size]
+    x_bar_U = ensemble_U.mean(axis=1)
+    ensemble_U -= x_bar_U[:, None]
+    ensemble_V = ensemble[U_size:V_size + U_size]
+    x_bar_V = ensemble_V.mean(axis=1)
+    ensemble_V -= x_bar_V[:, None]
+    ensemble_csi = ensemble[U_size + V_size:]
+    x_bar_csi = ensemble_csi.mean(axis=1)
+    ensemble_csi -= x_bar_csi[:, None]
+    ens_size = ensemble.shape[1]
+    kal_count = 0
+    W_interp = np.zeros([assimilation_positions.size, ens_size**2])
+    W_interp_wind = W_interp.copy()*np.nan
+    bad_count = 0
+    for interp_position in assimilation_positions:
+        # # for the irradiance portion of the ensemble
+        local_positions = nearest_positions(interp_position, domain_shape,
+                                            localization_length)
+        # local_ensemble = ensemble_csi[local_positions]
+        # local_x_bar = x_bar_csi[local_positions]
+        # local_obs = observations[local_positions] # assume H is I
+        # C = (local_ensemble.T)*R_inverse  # assume R_inverse is diag+const
+        
+        # eig_value, eig_vector = np.linalg.eigh(
+        #     (ens_size-1)*np.eye(ens_size)/inflation + C.dot(local_ensemble))
+        # P_tilde = eig_vector.copy()
+        # W_a = eig_vector.copy()
+        # for i, num in enumerate(eig_value):
+        #     P_tilde[:, i] *= 1/num
+        #     W_a[:, i] *= 1/np.sqrt(num)
+        # P_tilde = P_tilde.dot(eig_vector.T)
+        # W_a = W_a.dot(eig_vector.T)*np.sqrt(ens_size - 1)
+        # w_a_bar = P_tilde.dot(C.dot(local_obs - local_x_bar))
+        # W_a += w_a_bar[:, None]
+        # W_interp[kal_count] = np.ravel(W_a) # separate w_bar??
+        
+        # should eventually change to assimilate on coarser wind grid
+        local_positions = nearest_positions(interp_position, domain_shape,
+                                            localization_length_wind)
+        local_ensemble = ensemble_csi[local_positions]
+        local_x_bar = x_bar_csi[local_positions]
+        local_obs = observations[local_positions] # assume H is I
+        C = (local_ensemble.T)*R_inverse_wind  # assume R_inverse is diag+const
+        eig_value, eig_vector = np.linalg.eigh(
+            (ens_size-1)*np.eye(ens_size)/wind_inflation + C.dot(local_ensemble))
+        P_tilde = eig_vector.copy()
+        W_a = eig_vector.copy()
+        for i, num in enumerate(eig_value):
+            P_tilde[:, i] *= 1/num
+            W_a[:, i] *= 1/np.sqrt(num)
+        P_tilde = P_tilde.dot(eig_vector.T)
+        W_a = W_a.dot(eig_vector.T)*np.sqrt(ens_size - 1)
+        w_a_bar = P_tilde.dot(C.dot(local_obs - local_x_bar))
+        W_a += w_a_bar[:, None]
+        W_interp_wind[kal_count] = np.ravel(W_a) # separate w_bar??
+
+
+        kal_count += 1
+    if assimilation_positions_2d.size != full_positions_2d.size:
+        # W_fun = interpolate.LinearNDInterpolator(assimilation_positions_2d,
+        #                                          W_interp)
+        # W_interp = W_fun(full_positions_2d)
+
+        W_fun = interpolate.LinearNDInterpolator(assimilation_positions_2d,
+                                                 W_interp_wind)
+        W_interp_wind = W_fun(full_positions_2d)
+
+    # W_fun = interpolate.LinearNDInterpolator(assimilation_positions_2d[::4],
+    #                                          W_interp_wind[::4])
+    # W_interp_wind = W_fun(full_positions_2d)
+        
+    # W_fine_mesh = W_interp.reshape(domain_shape[0]*domain_shape[1],
+    #                                ens_size, ens_size)
+    #change this to its own variable
+    W_interp = W_interp_wind.reshape(domain_shape[0], domain_shape[1], ens_size,
+                                ens_size)
+    # ensemble_csi = x_bar_csi[:, None] + np.einsum(
+    #     'ij, ijk->ik', ensemble_csi, W_fine_mesh)
+    # W_fine_mesh = 0.5*(np.pad(W_interp, [(0, 0), (0, 1), (0, 0), (0, 0)],
+    #                           mode='edge') +
+    #                    np.pad(W_interp, [(0, 0), (1, 0), (0, 0), (0, 0)],
+    #                           mode='edge')
+    #                    ).reshape(U_size, ens_size, ens_size)
+    W_fine_mesh = (np.pad(W_interp, [(0, 0), (0, 1), (0, 0), (0, 0)],
+                          mode='edge')).reshape(U_size, ens_size, ens_size)
+    ensemble_U = x_bar_U[:, None] + np.einsum(
+        'ij, ijk->ik', ensemble_U, W_fine_mesh)
+
+    # W_fine_mesh = 0.5*(np.pad(W_interp, [(0, 1), (0, 0), (0, 0), (0, 0)],
+    #                           mode='edge') +
+    #                    np.pad(W_interp, [(1, 0), (0, 0), (0, 0), (0, 0)],
+    #                           mode='edge')).reshape(V_size, ens_size, ens_size)
+    W_fine_mesh = (np.pad(W_interp, [(0, 1), (0, 0), (0, 0), (0, 0)],
+                          mode='edge')).reshape(V_size, ens_size, ens_size)
+    ensemble_V = x_bar_V[:, None] + np.einsum(
+        'ij, ijk->ik', ensemble_V, W_fine_mesh)
+
+    # ### delete
+    # ensemble_U = ensemble_U + x_bar_U[:, None]
+    # ensemble_V = ensemble_V + x_bar_V[:, None]
+    # ### delete
+
+    # leave csi unchanged
+    ensemble_csi += x_bar_csi[:, None]
+    
     ensemble = np.concatenate([ensemble_U, ensemble_V, ensemble_csi], axis=0)
 
     return ensemble
@@ -1548,9 +1847,11 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
                   l_sat=None, l_x=None, l_y=None, l_shape=None,
                   l_U=None, l_U_shape=None, l_V=None, l_V_shape=None,
                   wind_in_ensemble=True, of_test=True, div_test=True,
-                  logging_file='./letkf.log', logging_level=logging.DEBUG):
-    logging.basicConfig(filename=logging_file, level=logging_level)
-    remove_divergence_test = False
+                  assim_sat_test=False):
+                  # logging_file='./logs/letkf.log', logging_level=logging.DEBUG):
+    # logging.basicConfig(filename=logging_file, filemode='w', level=logging_level)
+    # remove_divergence_test = False
+    remove_divergence_test = True
     if (start_time is None) & (end_time is None):
         sat_time_range = sat.index
     else:
@@ -1620,7 +1921,7 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
     # # delete
     # ensemble_movie = pd.DataFrame(data=ensemble.ravel()[None, :],
     #                            index=[sat_time_range[0]])
-    # # delte
+    # # delete
     
     ensemble_15 = pd.DataFrame(data=ensemble.ravel()[None, :]*np.nan,
                                index=[sat_time_range[0]])
@@ -1640,7 +1941,7 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
 
     for time_index in range(sat_time_range.size - 1):
         sat_time = sat_time_range[time_index]
-        logging.info(sat_time)
+        logging.info(str(sat_time))
 
         if of_test and (time_index != 0):
             logging.debug('calc of')
@@ -1706,23 +2007,89 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
 
             if of_test and (time_index != 0):
                 logging.debug('assim of')
-                remove_divergence_test = True
-                ensemble[:U_crop_size] = assimilate(
-                    ensemble=ensemble[:U_crop_size],
-                    observations=u_of,
-                    flat_sensor_indices=u_of_flat_pos, R_inverse=1/sig_of**2,
-                    inflation=inflation_of)
+                # # delete
+                # plt.figure()
+                # im = plt.pcolormesh(ensemble[:U_crop_size].mean(axis=1).reshape(U_crop_shape))
+                # plt.axes().set_aspect('equal')
+                # plt.title('assim of U')
+                # plt.colorbar(im)
 
-                ensemble[U_crop_size:U_crop_size + V_crop_size] = assimilate(
+                # plt.figure()
+                # im = plt.pcolormesh(ensemble[U_crop_size:U_crop_size + V_crop_size]
+                #                     .mean(axis=1).reshape(V_crop_shape))
+                # plt.axes().set_aspect('equal')
+                # plt.title('assim of V')
+                # plt.colorbar(im)
+                # # delete
+                remove_divergence_test = True
+                x_temp = np.arange(U_crop_shape[1])*dx/1000 # in km not m
+                y_temp = np.arange(U_crop_shape[0])*dx/1000
+                x_temp, y_temp = np.meshgrid(x_temp, y_temp)
+                ensemble[:U_crop_size] = reduced_enkf(
+                    ensemble=ensemble[:U_crop_size],
+                    observations=u_of, R_sig=sig_of,
+                    flat_locations=u_of_flat_pos,
+                    inflation=inflation_of, localization=localization_of,
+                    x=x_temp.ravel(), y=y_temp.ravel())
+
+                x_temp = np.arange(V_crop_shape[1])*dx/1000 
+                y_temp = np.arange(V_crop_shape[0])*dx/1000
+                x_temp, y_temp = np.meshgrid(x_temp, y_temp)
+                ensemble[U_crop_size:U_crop_size + V_crop_size] = reduced_enkf(
                     ensemble=ensemble[U_crop_size:U_crop_size + V_crop_size],
-                    observations=v_of,
-                    flat_sensor_indices=v_of_flat_pos, R_inverse=1/sig_of**2,
-                    inflation=inflation_of)
+                    observations=v_of, R_sig=sig_of,
+                    flat_locations=v_of_flat_pos,
+                    inflation=inflation_of, localization=localization_of,
+                    x=x_temp.ravel(), y=y_temp.ravel())
+                # print('u_of')
+                # print(u_of)
+                # print('v_of')
+                # print(v_of)
+                # # delete
+                # plt.figure()
+                # im = plt.pcolormesh(ensemble[:U_crop_size].mean(axis=1).reshape(U_crop_shape))
+                # plt.axes().set_aspect('equal')
+                # plt.title('assim of U')
+                # plt.colorbar(im)
+
+                # plt.figure()
+                # im = plt.pcolormesh(ensemble[U_crop_size:U_crop_size + V_crop_size]
+                #                     .mean(axis=1).reshape(V_crop_shape))
+                # plt.axes().set_aspect('equal')
+                # plt.title('assim of V')
+                # plt.colorbar(im)
+                # # delete
+                
+                # ensemble[:U_crop_size] = assimilate(
+                #     ensemble=ensemble[:U_crop_size],
+                #     observations=u_of,
+                #     flat_sensor_indices=u_of_flat_pos, R_inverse=1/sig_of**2,
+                #     inflation=inflation_of)
+
+                # ensemble[U_crop_size:U_crop_size + V_crop_size] = assimilate(
+                #     ensemble=ensemble[U_crop_size:U_crop_size + V_crop_size],
+                #     observations=v_of,
+                #     flat_sensor_indices=v_of_flat_pos, R_inverse=1/sig_of**2,
+                #     inflation=inflation_of)
         if div_test and remove_divergence_test and wind_in_ensemble:
             logging.debug('remove divergence')
             remove_divergence_test = False
             ensemble[:wind_size] = remove_divergence_ensemble(
                 FunctionSpace_wind, ensemble[:wind_size], U_crop_shape, V_crop_shape, 4) #hard wired smoothign
+            # # delete
+            # plt.figure()
+            # im = plt.pcolormesh(ensemble[:U_crop_size].mean(axis=1).reshape(U_crop_shape))
+            # plt.axes().set_aspect('equal')
+            # plt.title('remove div')
+            # plt.colorbar(im)
+
+            # plt.figure()
+            # im = plt.pcolormesh(ensemble[U_crop_size:U_crop_size + V_crop_size]
+            #                     .mean(axis=1).reshape(V_crop_shape))
+            # plt.axes().set_aspect('equal')
+            # plt.title('remove div')
+            # plt.colorbar(im)
+            # # delete
         cx = abs(U_crop.values).max()
         cy = abs(V_crop.values).max()
         T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)/C_max))
@@ -1734,6 +2101,32 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
         temp_ensemble = ensemble.copy()
         temp_noise = noise.copy()
 
+        # # delete
+        # plt.figure()
+        # im = plt.pcolormesh(ensemble[:U_crop_size].mean(axis=1).reshape(U_crop_shape))
+        # plt.axes().set_aspect('equal')
+        # plt.title('U used')
+        # plt.colorbar(im)
+        # plt.show()
+
+        # plt.figure()
+        # im = plt.pcolormesh(ensemble[U_crop_size:U_crop_size + V_crop_size]
+        #                     .mean(axis=1).reshape(V_crop_shape))
+        # plt.axes().set_aspect('equal')
+        # plt.title('V used')
+        # plt.colorbar(im)
+        # plt.show()
+
+        # plt.figure()
+        # im = plt.pcolormesh(ensemble[wind_size:]
+        #                     .mean(axis=1).reshape(domain_crop_shape))
+        # plt.axes().set_aspect('equal')
+        # plt.title('field used')
+        # plt.colorbar(im)
+        # plt.show()
+        # # delete
+        
+        logging.info(str(num_of_advec))
         logging.info('15 min')
         for n in range(3):
             # print('advection_number_15: ' + str(n))
@@ -1754,6 +2147,15 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
                     edge_weight, pert_mean, pert_sigma,
                     rf_approx_var, rf_eig, rf_vectors)
 
+            # delete
+            plt.figure()
+            im = plt.pcolormesh(ensemble[wind_size:]
+                                .mean(axis=1).reshape(domain_crop_shape))
+            plt.axes().set_aspect('equal')
+            plt.title('after 5 min')
+            plt.colorbar(im)
+            # delete
+
             # # delete
             # # print('start save')
             # ensemble_movie.loc[
@@ -1761,6 +2163,13 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
             #     (n + 1)*pd.Timedelta('5min')] = temp_ensemble.ravel()
             # # print('saved')
             # # delete
+
+        # # delete
+        # plt.figure()
+        # im = plt.pcolormesh(temp_ensemble[wind_size:].mean(axis=1).reshape(domain_crop_shape))
+        # plt.axes().set_aspect('equal')
+        # plt.colorbar(im)
+        # # delete
             
         ensemble_15.loc[sat_time_range[time_index] + pd.Timedelta('15min')] = (
             temp_ensemble.ravel())
@@ -1796,6 +2205,13 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
                 #     (n + 1)*pd.Timedelta('5min')] = temp_ensemble.ravel()
                 # # delete
 
+        # # delete
+        # plt.figure()
+        # im = plt.pcolormesh(temp_ensemble[wind_size:].mean(axis=1).reshape(domain_crop_shape))
+        # plt.axes().set_aspect('equal')
+        # plt.colorbar(im)
+        # # delete
+
         ensemble_30.loc[sat_time_range[time_index] + pd.Timedelta('30min')] = (
             temp_ensemble.ravel())
         advected_30.loc[sat_time_range[time_index] + pd.Timedelta('30min')] = (
@@ -1830,6 +2246,13 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
             ensemble = temp_ensemble.copy()
             noise = temp_noise.copy()
 
+        # # delete
+        # plt.figure()
+        # im = plt.pcolormesh(temp_ensemble[wind_size:].mean(axis=1).reshape(domain_crop_shape))
+        # plt.axes().set_aspect('equal')
+        # plt.colorbar(im)
+        # # delete
+
         logging.info('60 min')
         for n in range(3):
             if wind_in_ensemble:
@@ -1848,6 +2271,13 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
                     edge_weight, pert_mean, pert_sigma,
                     rf_approx_var, rf_eig, rf_vectors)
 
+        # # delete
+        # plt.figure()
+        # im = plt.pcolormesh(temp_ensemble[wind_size:].mean(axis=1).reshape(domain_crop_shape))
+        # plt.axes().set_aspect('equal')
+        # plt.colorbar(im)
+        # # delete
+
         ensemble_60.loc[sat_time_range[time_index] + pd.Timedelta('60min')] = (
             temp_ensemble.ravel())
         advected_60.loc[sat_time_range[time_index] + pd.Timedelta('60min')] = (
@@ -1858,36 +2288,75 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
 
         ## for whole image assimilation ##
         sat_time = sat_time_range[time_index + 1]
-        logging.debug('Assimilation')
         q = sat_crop.loc[sat_time].values.reshape(domain_crop_shape)
-
-
-        # # collect background info
 
         # replace noisy areas (Does not maintain variace)
         noise = (noise - noise.min())
         noise = noise/noise.max()
+
+        # # delete
+        # plt.figure()
+        # im = plt.pcolormesh(noise)
+        # plt.axes().set_aspect('equal')
+        # plt.colorbar(im)
+        # plt.title('noise')
+    
+        # plt.figure()
+        # im = plt.pcolormesh(ensemble[wind_size:].mean(axis=1).reshape(domain_crop_shape))
+        # plt.axes().set_aspect('equal')
+        # plt.colorbar(im)
+        # plt.title('before replace noise')
+        # # delete
+        
         noise = noise.ravel()
         ensemble[wind_size:] = (q.ravel()[:, None]*noise[:, None] +
                                 ensemble[wind_size:, :]*(1 - noise[:, None]))
 
-
+        noise = noise_init.copy()
+        
+        # # delete
+        # plt.figure()
+        # im = plt.pcolormesh(ensemble[wind_size:].mean(axis=1).reshape(domain_crop_shape))
+        # plt.axes().set_aspect('equal')
+        # plt.colorbar(im)
+        # plt.title('before assim')
+        # # delete
+        
         if wind_in_ensemble:#and time_index != 2:
             # assimilate wind and irradiance simultaneously
-            ensemble = assimilate_full_wind(
-                ensemble=ensemble,
-                observations=q.ravel(),
-                flat_sensor_indices=None, R_inverse=1/sig_sat**2,
-                R_inverse_wind=1/sig_wind_sat**2,
-                inflation=inflation_sat, wind_inflation=inflation_wind,
-                domain_shape=domain_crop_shape,
-                U_shape=U_crop_shape, V_shape=V_crop_shape,
-                localization_length=localization_letkf,
-                localization_length_wind=localization_wind,
-                assimilation_positions=assimilation_positions,
-                assimilation_positions_2d=assimilation_positions_2d,
-                full_positions_2d=full_positions_2d)
-            remove_divergence_test = True
+            if assim_sat_test:
+                logging.debug('Assimilate new sat both')
+                ensemble = assimilate_full_wind(
+                    ensemble=ensemble,
+                    observations=q.ravel(),
+                    flat_sensor_indices=None, R_inverse=1/sig_sat**2,
+                    R_inverse_wind=1/sig_wind_sat**2,
+                    inflation=inflation_sat, wind_inflation=inflation_wind,
+                    domain_shape=domain_crop_shape,
+                    U_shape=U_crop_shape, V_shape=V_crop_shape,
+                    localization_length=localization_letkf,
+                    localization_length_wind=localization_wind,
+                    assimilation_positions=assimilation_positions,
+                    assimilation_positions_2d=assimilation_positions_2d,
+                    full_positions_2d=full_positions_2d)
+                remove_divergence_test = True
+            else:
+                logging.debug('Assimilate sat to winds')
+                ensemble = assimilate_sat_to_wind(
+                    ensemble=ensemble,
+                    observations=q.ravel(),
+                    flat_sensor_indices=None, R_inverse=1/sig_sat**2,
+                    R_inverse_wind=1/sig_wind_sat**2,
+                    inflation=inflation_sat, wind_inflation=inflation_wind,
+                    domain_shape=domain_crop_shape,
+                    U_shape=U_crop_shape, V_shape=V_crop_shape,
+                    localization_length=localization_letkf,
+                    localization_length_wind=localization_wind,
+                    assimilation_positions=assimilation_positions,
+                    assimilation_positions_2d=assimilation_positions_2d,
+                    full_positions_2d=full_positions_2d)
+                remove_divergence_test = True
+                ensemble[wind_size:] = q.ravel()[:, None]
 
         # else:
         #     # old method for linear perturbations
@@ -1916,6 +2385,18 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
 
         # collect analysis info
         ensemble_analy.loc[sat_time] = ensemble.ravel()
+
+        # # delete
+        # plt.figure()
+        # im = plt.pcolormesh(ensemble[wind_size:].mean(axis=1).reshape(domain_crop_shape))
+        # plt.axes().set_aspect('equal')
+        # plt.colorbar(im)
+        # plt.title('after assim')
+        # # delete
+
+        # delete
+        plt.close('all')
+        # delete
 
     to_return = (ensemble_15, ensemble_30, ensemble_45, ensemble_60,
                  ensemble_analy, ens_shape,
