@@ -2494,6 +2494,8 @@ def forecast_system(ci_file_path, winds_file_path,
         assim_pos, assim_pos_2d, full_pos_2d = (
             assimilation_position_generator(ci_crop_shape,
                                             assim_gs_sat2sat))
+        noise_init = noise_fun(domain_crop_shape)
+        noise = noise_init.copy()
     if assim_sat2wind_test:
         assim_pos_U, assim_pos_2d_U, full_pos_2d_U = (
             assimilation_position_generator(U_crop_shape,
@@ -2507,8 +2509,7 @@ def forecast_system(ci_file_path, winds_file_path,
                                             assim_gs_wrf))
         assim_pos_V_wrf, assim_pos_2d_V_wrf, full_pos_2d_V_wrf = (
             assimilation_position_generator(V_crop_shape,
-                                            assim_gs_wrf))
-        
+                                            assim_gs_wrf))        
     if assim_of_test:
         U_crop_pos = np.unravel_index(U_crop_cols, U_shape)
         V_crop_pos = np.unravel_index(V_crop_cols, V_shape)
@@ -2535,31 +2536,15 @@ def forecast_system(ci_file_path, winds_file_path,
     this_U = U_crop.iloc[int_index_wind].values
     this_V = V_crop.iloc[int_index_wind].values
 
-    if wind_in_ensemble:
-        ensemble = ensemble_creator_wind(
-            q, this_U, this_V,
-            CI_sigma=CI_sigma, wind_sigma=wind_sigma, ens_size=ens_size)
-    else:
-        ensemble = ensemble_creator(
-            q, CI_sigma=CI_sigma, wind_size=wind_size, wind_sigma=wind_sigma,
-            ens_size=ens_size)
-    ens_shape = ensemble.shape
-    
-    ensemble_15 = pd.DataFrame(data=ensemble.ravel()[None, :]*np.nan,
-                               index=[sat_time_range[0]])
-    ensemble_30 = ensemble_15.copy()
-    ensemble_45 = ensemble_15.copy()
-    ensemble_60 = ensemble_15.copy()
-    ensemble_analy = ensemble_15.copy()
-
-    noise_init = noise_fun(domain_crop_shape)
-    noise = noise_init.copy()
-
-    advected_15 = pd.DataFrame(data=q.ravel()[None, :]*np.nan,
-                               index=[sat_time_range[0]])
-    advected_30 = advected_15.copy()
-    advected_45 = advected_15.copy()
-    advected_60 = advected_15.copy()
+    # if wind_in_ensemble:
+    #     ensemble = ensemble_creator_wind(
+    #         q, this_U, this_V,
+    #         CI_sigma=CI_sigma, wind_sigma=wind_sigma, ens_size=ens_size)
+    # else:
+    #     ensemble = ensemble_creator(
+    #         q, CI_sigma=CI_sigma, wind_size=wind_size, wind_sigma=wind_sigma,
+    #         ens_size=ens_size)
+    # ens_shape = ensemble.shape
 
     for time_index in range(sat_time_range.size - 1):
         sat_time = sat_time_range[time_index]
