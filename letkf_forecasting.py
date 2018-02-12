@@ -2435,8 +2435,8 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
 
 def forecast_system(ci_file_path, winds_file_path,
                     assim_test=False, perturbation_test=False,
-                    wind_in_ensemble_test=False, of_test=False,
-                    div_test=False, assim_sat2sat_test=False,
+                    wind_in_ensemble_test=False, div_test=False,
+                    assim_of_test=False, assim_sat2sat_test=False,
                     assim_sat2wind_test=False, assim_wrf_test=False,
                     start_time=None, end_time=None, C_max=0.7,
                     sig_sat2sat=None, loc_sat2sat=None,
@@ -2469,8 +2469,10 @@ def forecast_system(ci_file_path, winds_file_path,
         v_metadata = dict(store.get('V_metadata'))
     U_shape = u_metadata['shape']
     U_crop_shape = u_metadata['crop_shape']
+    U_crop_size = U_crop_shape[0]*U_crop_shape[1]
     V_shape = u_metadata['shape']
     V_crop_shape = v_metadata['crop_shape']
+    V_crop_size = V_crop_shape[0]*V_crop_shape[1]
         
     # Use all possible satellite images in system unless told to limit to only
     if (start_time is None) & (end_time is None):
@@ -2487,7 +2489,7 @@ def forecast_system(ci_file_path, winds_file_path,
                                 V_crop_shape[1] - 1, U_crop_shape[0] - 1)
         FunctionSpace_wind = fe.FunctionSpace(mesh, 'P', 1)
 
-    # Create assimilation positions
+    # Create things needed for assimilations
     if assim_sat2sat_test:
         assim_pos, assim_pos_2d, full_pos_2d = (
             assimilation_position_generator(ci_crop_shape,
@@ -2506,29 +2508,21 @@ def forecast_system(ci_file_path, winds_file_path,
         assim_pos_V_wrf, assim_pos_2d_V_wrf, full_pos_2d_V_wrf = (
             assimilation_position_generator(V_crop_shape,
                                             assim_gs_wrf))
-
+        
+    if assim_of_test:
+        U_crop_pos = np.unravel_index(U_crop_cols, U_shape)
+        V_crop_pos = np.unravel_index(V_crop_cols, V_shape)
+        wind_x_range = (np.max([U_crop_pos[1].min(), V_crop_pos[1].min()]),
+                        np.min([U_crop_pos[1].max(), V_crop_pos[1].max()]))
+        wind_y_range = (np.max([U_crop_pos[0].min(), V_crop_pos[0].min()]),
+                        np.min([U_crop_pos[0].max(), V_crop_pos[0].max()]))
+        del U_crop_pos, V_crop_pos
 
 
     return
-        
 
-    U_crop_size = U_crop_shape[0]*U_crop_shape[1]
-    V_crop_size = V_crop_shape[0]*V_crop_shape[1]
-    sat_crop = sat[domain_crop_cols]
-    sat_crop.colums = np.arange(domain_crop_cols.size, dtype='int')
-    x_crop = x[domain_crop_cols]
-    y_crop = y[domain_crop_cols]
-    U_crop = U[U_crop_cols]
-    U_crop.columns = np.arange(U_crop_cols.size, dtype='int')
-    U_crop_pos = np.unravel_index(U_crop_cols, U_shape)
-    V_crop = V[V_crop_cols]
-    V_crop.columns = np.arange(V_crop_cols.size, dtype='int')
-    V_crop_pos = np.unravel_index(V_crop_cols, V_shape)
-    wind_x_range = (np.max([U_crop_pos[1].min(), V_crop_pos[1].min()]),
-                    np.min([U_crop_pos[1].max(), V_crop_pos[1].max()]))
-    wind_y_range = (np.max([U_crop_pos[0].min(), V_crop_pos[0].min()]),
-                    np.min([U_crop_pos[0].max(), V_crop_pos[0].max()]))
     int_index_wind = U_crop.index.get_loc(sat_time_range[0], method='pad')
+
     this_U = U_crop.iloc[int_index_wind].values.reshape(U_crop_shape)
     this_V = V_crop.iloc[int_index_wind].values.reshape(V_crop_shape)
     
