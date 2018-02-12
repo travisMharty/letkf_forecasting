@@ -1,4 +1,5 @@
 import sys
+import os
 import logging
 import numpy as np
 import pandas as pd
@@ -2486,6 +2487,29 @@ def forecast_system(ci_file_path, winds_file_path,
     # Advection calculations
     num_of_horizons = (max_horizon/15).seconds/60
 
+    # Create path to save results
+    date = sat_time_range[0].date()
+    year = date.year
+    month = date.month
+    day = date.day
+    home = os.path.expanduser('~')
+    run_num = 0
+    file_path_r = f'{home}/results/{year:04}/{month:02}/{day:02}/run{run_num:03}'
+    if not os.path.exists(file_path_r):
+        os.makedirs(file_path_r)
+        ci_file_path_r = os.path.join(file_path_r, 'ci_results.h5')
+        winds_file_path_r = os.path.join(file_path_r, 'winds_results.h5')
+    else:
+        file_path_r = os.path.split(file_path_r)[0]
+        run_num = os.listdir(file_path_r)
+        run_num.sort()
+        run_num = run_num[-1]
+        run_num = int(run_num[-3:]) + 1
+        file_path_r = os.path.join(file_path_r, f'run{run_num:03}')
+        os.makedirs(file_path_r)
+        ci_file_path_r = os.path.join(file_path_r, 'ci_results.h5')
+        winds_file_path_r = os.path.join(file_path_r, 'winds_results.h5')
+
     # Create Function Space to be used to remove divergence
     if div_test:
         mesh = fe.RectangleMesh(fe.Point(0, 0),
@@ -2563,7 +2587,7 @@ def forecast_system(ci_file_path, winds_file_path,
             for m in range(num_of_horizons):
                 for n in range(3):
                     q = advect_5min(q, dt, this_U, dx, this_V, dy, T_steps)
-                with 
+                
         
         else:
             for horizon_num in range(num_of_horizons):
