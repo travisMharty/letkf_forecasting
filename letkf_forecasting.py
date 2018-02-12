@@ -2439,6 +2439,7 @@ def forecast_system(ci_file_path, winds_file_path,
                     assim_of_test=False, assim_sat2sat_test=False,
                     assim_sat2wind_test=False, assim_wrf_test=False,
                     start_time=None, end_time=None, C_max=0.7,
+                    max_horizon=pd.Timedelta('15min'),
                     sig_sat2sat=None, loc_sat2sat=None,
                     infl_sat2sat=None, assim_gs_sat2sat=None,
                     sig_sat2wind=None, loc_sat2wind=None,
@@ -2474,13 +2475,16 @@ def forecast_system(ci_file_path, winds_file_path,
     V_crop_shape = v_metadata['crop_shape']
     V_crop_size = V_crop_shape[0]*V_crop_shape[1]
         
-    # Use all possible satellite images in system unless told to limit to only
+    # Use all possible satellite images in system unless told to limit
     if (start_time is None) & (end_time is None):
         sat_time_range = sat_dates
     else:
         sat_time_range = (pd.date_range(start_time, end_time, freq='15 min')
                           .tz_localize('MST'))
         sat_time_range = sat_time_range.intersection(sat_dates)
+
+    # Advection calculations
+    num_of_horizons = (max_horizon/15).seconds/60
 
     # Create Function Space to be used to remove divergence
     if div_test:
@@ -2522,20 +2526,6 @@ def forecast_system(ci_file_path, winds_file_path,
 
     return
 
-    int_index_wind = U_crop.index.get_loc(sat_time_range[0], method='pad')
-
-    this_U = U_crop.iloc[int_index_wind].values.reshape(U_crop_shape)
-    this_V = V_crop.iloc[int_index_wind].values.reshape(V_crop_shape)
-    
-
-    q = sat_crop.loc[sat_time_range[0]].values.reshape(domain_crop_shape)
-    # ensemble = ensemble_creator(
-    #     q, CI_sigma=CI_sigma, wind_size=wind_size,
-    #     wind_sigma=wind_sigma, ens_size=ens_size)
-    int_index_wind = U_crop.index.get_loc(sat_time_range[0], method='pad')
-    this_U = U_crop.iloc[int_index_wind].values
-    this_V = V_crop.iloc[int_index_wind].values
-
     # if wind_in_ensemble:
     #     ensemble = ensemble_creator_wind(
     #         q, this_U, this_V,
@@ -2549,221 +2539,143 @@ def forecast_system(ci_file_path, winds_file_path,
     for time_index in range(sat_time_range.size - 1):
         sat_time = sat_time_range[time_index]
         logging.info(str(sat_time))
-
-        if of_test and (time_index != 0):
-            logging.debug('calc of')
-            # retreive OF vectors
-            time0 = sat.index.get_loc(sat_time - pd.Timedelta('15min'), method='ffill')
-            time0 = sat.index[time0]
-            int_index_wind = U_crop.index.get_loc(time0, method='pad')
-            this_U = U.iloc[int_index_wind].values.reshape(U_shape)
-            this_V = V.iloc[int_index_wind].values.reshape(V_shape)
-            image0 = sat.loc[time0].values.reshape(domain_shape)
-            image1 = sat.loc[sat_time].values.reshape(domain_shape)
-            u_of, v_of, pos = optical_flow(image0, image1, time0, sat_time,
-                                           this_U, this_V)
-            pos = pos*4 # optical flow done on coarse grid
-
-            # need to select only pos in crop domain need conversion to crop index
-            keep = np.logical_and(
-                np.logical_and(pos[:, 0] >= wind_x_range[0],
-                               pos[:, 0] <= wind_x_range[1]),
-                np.logical_and(pos[:, 1] >= wind_y_range[0],
-                               pos[:, 1] <= wind_y_range[1]))
-            pos = pos[keep]
-            u_of = u_of[keep]
-            v_of = v_of[keep]
-            pos[:, 0] -= wind_x_range[0]
-            pos[:, 1] -= wind_y_range[0]
-            pos = pos.T
-            pos = pos[::-1]
-            u_of_flat_pos = np.ravel_multi_index(pos, U_crop_shape)
-            v_of_flat_pos = np.ravel_multi_index(pos, V_crop_shape)
-            # retrieve OF vectors
-                                       
-        int_index_wind = U_crop.index.get_loc(sat_time, method='pad')
-        this_U = U_crop.iloc[int_index_wind].values.reshape(U_crop_shape)
-        this_V = V_crop.iloc[int_index_wind].values.reshape(V_crop_shape)
-
-        # assimilate new winds
-        if wind_in_ensemble:
-            if (sat_time in U_crop.index) and (time_index != 0):
-                logging.debug('assim wrf')
-                remove_divergence_test = True
-                ensemble[:U_crop_size] = assimilate_wrf(
-                    ensemble=ensemble[:U_crop_size],
-                    observations=this_U.ravel(),
-                    R_inverse=1/sig_wrf**2,
-                    wind_inflation=inflation_wrf,
-                    wind_shape=U_crop_shape,
-                    localization_length_wind=localization_wrf,
-                    assimilation_positions=assimilation_positions_U_wrf,
-                    assimilation_positions_2d=assimilation_positions_2d_U_wrf,
-                    full_positions_2d=full_positions_2d_U_wrf)
-
-                ensemble[U_crop_size: U_crop_size + V_crop_size] = assimilate_wrf(
-                    ensemble=ensemble[U_crop_size: U_crop_size + V_crop_size],
-                    observations=this_V.ravel(),
-                    R_inverse=1/sig_wrf**2,
-                    wind_inflation=inflation_wind,
-                    wind_shape=V_crop_shape,
-                    localization_length_wind=localization_wrf,
-                    assimilation_positions=assimilation_positions_V_wrf,
-                    assimilation_positions_2d=assimilation_positions_2d_V_wrf,
-                    full_positions_2d=full_positions_2d_V_wrf)
-
-            if of_test and (time_index != 0):
-                logging.debug('assim of')
-                remove_divergence_test = True
-                x_temp = np.arange(U_crop_shape[1])*dx/1000 # in km not m
-                y_temp = np.arange(U_crop_shape[0])*dx/1000
-                x_temp, y_temp = np.meshgrid(x_temp, y_temp)
-                ensemble[:U_crop_size] = reduced_enkf(
-                    ensemble=ensemble[:U_crop_size],
-                    observations=u_of, R_sig=sig_of,
-                    flat_locations=u_of_flat_pos,
-                    inflation=inflation_of, localization=localization_of,
-                    x=x_temp.ravel(), y=y_temp.ravel())
-
-                x_temp = np.arange(V_crop_shape[1])*dx/1000 
-                y_temp = np.arange(V_crop_shape[0])*dx/1000
-                x_temp, y_temp = np.meshgrid(x_temp, y_temp)
-                ensemble[U_crop_size:U_crop_size + V_crop_size] = reduced_enkf(
-                    ensemble=ensemble[U_crop_size:U_crop_size + V_crop_size],
-                    observations=v_of, R_sig=sig_of,
-                    flat_locations=v_of_flat_pos,
-                    inflation=inflation_of, localization=localization_of,
-                    x=x_temp.ravel(), y=y_temp.ravel())
-        if div_test and remove_divergence_test and wind_in_ensemble:
-            logging.debug('remove divergence')
-            remove_divergence_test = False
-            ensemble[:wind_size] = remove_divergence_ensemble(
-                FunctionSpace_wind, ensemble[:wind_size], U_crop_shape, V_crop_shape, 4) #hard wired smoothign
-        cx = abs(U_crop.values).max()
-        cy = abs(V_crop.values).max()
+        q = sat_crop.loc[sat_time_range[0]].values.reshape(domain_crop_shape)
+        # ensemble = ensemble_creator(
+        #     q, CI_sigma=CI_sigma, wind_size=wind_size,
+        #     wind_sigma=wind_sigma, ens_size=ens_size)
+        int_index_wind = U_crop.index.get_loc(sat_time_range[0], method='pad')
+        this_U = U_crop.iloc[int_index_wind].values
+        this_V = V_crop.iloc[int_index_wind].values
+        cx = abs(this_U.values).max()
+        cy = abs(this_V.values).max()
         T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)/C_max))
         dt = (5*60)/T_steps
         num_of_advec = int((
-            (sat_time_range[time_index + 1].value) -
-            (sat_time_range[time_index].value))*(10**(-9)/(60*5))/3)
+            sat_time_range[time_index + 1] -
+            sat_time_range[time_index].value).seconds/(60*15))
 
-        temp_ensemble = ensemble.copy()
-        temp_noise = noise.copy()
-        
+        # temp_ensemble = ensemble.copy()
+        # temp_noise = noise.copy()
+
         logging.info(str(num_of_advec))
         logging.info('15 min')
-        for n in range(3):
-            # print('advection_number_15: ' + str(n))
-            if wind_in_ensemble:
-                q, temp_noise, temp_ensemble = advect_5min_distributed_wind(
-                    q, temp_noise, temp_ensemble, dt, this_U, dx,
-                    this_V, dy, T_steps, wind_size, client)
-            else:
-                #print(n)
-                q, temp_noise, temp_ensemble = advect_5min_distributed(
-                    q, temp_noise, temp_ensemble, dt, this_U, dx,
-                    this_V, dy, T_steps, wind_size, client)
+        if not assim_test: # assums no perturbation
+            for m in range(num_of_horizons):
+                for n in range(3):
+                    q = advect_5min(q, dt, this_U, dx, this_V, dy, T_steps)
+                with 
+        
+        else:
+            for horizon_num in range(num_of_horizons):
+                for n in range(3):
+                    # print('advection_number_15: ' + str(n))
+                    if wind_in_ensemble:
+                        q, temp_noise, temp_ensemble = advect_5min_distributed_wind(
+                            q, temp_noise, temp_ensemble, dt, this_U, dx,
+                            this_V, dy, T_steps, wind_size, client)
+                    else:
+                        #print(n)
+                        q, temp_noise, temp_ensemble = advect_5min_distributed(
+                            q, temp_noise, temp_ensemble, dt, this_U, dx,
+                            this_V, dy, T_steps, wind_size, client)
 
-            # add pertubation
-            if pert_sigma != 0:
-                temp_ensemble[wind_size:] = perturb_irradiance(
-                    temp_ensemble[wind_size:], domain_crop_shape,
-                    edge_weight, pert_mean, pert_sigma,
-                    rf_approx_var, rf_eig, rf_vectors)
-            
-        ensemble_15.loc[sat_time_range[time_index] + pd.Timedelta('15min')] = (
-            temp_ensemble.ravel())
-        advected_15.loc[sat_time_range[time_index] + pd.Timedelta('15min')] = (
-            q.ravel())
-        if num_of_advec == 1:
-            ensemble = temp_ensemble.copy()
-            noise = temp_noise.copy()
+                    # add pertubation
+                    if perturbation_test:
+                        temp_ensemble[wind_size:] = perturb_irradiance(
+                            temp_ensemble[wind_size:], domain_crop_shape,
+                            edge_weight, pert_mean, pert_sigma,
+                            rf_approx_var, rf_eig, rf_vectors)
+                if num_of_advec == horizon_num:
+                    ensemble = temp_ensemble.copy()
+                    noise = temp_noise.copy()
 
-        # # delete
-        # if num_of_advec == 2:
-        logging.info('30 min')
-        for n in range(3):
-            if wind_in_ensemble:
-                q, temp_noise, temp_ensemble = advect_5min_distributed_wind(
-                    q, temp_noise, temp_ensemble, dt, this_U, dx,
-                    this_V, dy, T_steps, wind_size, client)
-            else:
-                q, temp_noise, temp_ensemble = advect_5min_distributed(
-                    q, temp_noise, temp_ensemble, dt, this_U, dx,
-                    this_V, dy, T_steps, wind_size, client)
+        # if of_test and (time_index != 0):
+        #     logging.debug('calc of')
+        #     # retreive OF vectors
+        #     time0 = sat.index.get_loc(sat_time - pd.Timedelta('15min'), method='ffill')
+        #     time0 = sat.index[time0]
+        #     int_index_wind = U_crop.index.get_loc(time0, method='pad')
+        #     this_U = U.iloc[int_index_wind].values.reshape(U_shape)
+        #     this_V = V.iloc[int_index_wind].values.reshape(V_shape)
+        #     image0 = sat.loc[time0].values.reshape(domain_shape)
+        #     image1 = sat.loc[sat_time].values.reshape(domain_shape)
+        #     u_of, v_of, pos = optical_flow(image0, image1, time0, sat_time,
+        #                                    this_U, this_V)
+        #     pos = pos*4 # optical flow done on coarse grid
 
-            # add pertubation
-            if pert_sigma != 0:
-                temp_ensemble[wind_size:] = perturb_irradiance(
-                    temp_ensemble[wind_size:], domain_crop_shape,
-                    edge_weight, pert_mean, pert_sigma,
-                    rf_approx_var, rf_eig, rf_vectors)
+        #     # need to select only pos in crop domain need conversion to crop index
+        #     keep = np.logical_and(
+        #         np.logical_and(pos[:, 0] >= wind_x_range[0],
+        #                        pos[:, 0] <= wind_x_range[1]),
+        #         np.logical_and(pos[:, 1] >= wind_y_range[0],
+        #                        pos[:, 1] <= wind_y_range[1]))
+        #     pos = pos[keep]
+        #     u_of = u_of[keep]
+        #     v_of = v_of[keep]
+        #     pos[:, 0] -= wind_x_range[0]
+        #     pos[:, 1] -= wind_y_range[0]
+        #     pos = pos.T
+        #     pos = pos[::-1]
+        #     u_of_flat_pos = np.ravel_multi_index(pos, U_crop_shape)
+        #     v_of_flat_pos = np.ravel_multi_index(pos, V_crop_shape)
+        #     # retrieve OF vectors
 
-        ensemble_30.loc[sat_time_range[time_index] + pd.Timedelta('30min')] = (
-            temp_ensemble.ravel())
-        advected_30.loc[sat_time_range[time_index] + pd.Timedelta('30min')] = (
-            q.ravel())
-        if num_of_advec == 2:
-            ensemble = temp_ensemble.copy()
-            noise = temp_noise.copy()
+        # # assimilate new winds
+        # if wind_in_ensemble:
+        #     if (sat_time in U_crop.index) and (time_index != 0):
+        #         logging.debug('assim wrf')
+        #         remove_divergence_test = True
+        #         ensemble[:U_crop_size] = assimilate_wrf(
+        #             ensemble=ensemble[:U_crop_size],
+        #             observations=this_U.ravel(),
+        #             R_inverse=1/sig_wrf**2,
+        #             wind_inflation=inflation_wrf,
+        #             wind_shape=U_crop_shape,
+        #             localization_length_wind=localization_wrf,
+        #             assimilation_positions=assimilation_positions_U_wrf,
+        #             assimilation_positions_2d=assimilation_positions_2d_U_wrf,
+        #             full_positions_2d=full_positions_2d_U_wrf)
 
-        logging.info('45 min')
-        for n in range(3):
-            if wind_in_ensemble:
-                q, temp_noise, temp_ensemble = advect_5min_distributed_wind(
-                    q, temp_noise, temp_ensemble, dt, this_U, dx,
-                    this_V, dy, T_steps, wind_size, client)
-            else:
-                q, temp_noise, temp_ensemble = advect_5min_distributed(
-                    q, temp_noise, temp_ensemble, dt, this_U, dx,
-                    this_V, dy, T_steps, wind_size, client)
+        #         ensemble[U_crop_size: U_crop_size + V_crop_size] = assimilate_wrf(
+        #             ensemble=ensemble[U_crop_size: U_crop_size + V_crop_size],
+        #             observations=this_V.ravel(),
+        #             R_inverse=1/sig_wrf**2,
+        #             wind_inflation=inflation_wind,
+        #             wind_shape=V_crop_shape,
+        #             localization_length_wind=localization_wrf,
+        #             assimilation_positions=assimilation_positions_V_wrf,
+        #             assimilation_positions_2d=assimilation_positions_2d_V_wrf,
+        #             full_positions_2d=full_positions_2d_V_wrf)
 
-            # add pertubation
-            if pert_sigma != 0:
-                temp_ensemble[wind_size:] = perturb_irradiance(
-                    temp_ensemble[wind_size:], domain_crop_shape,
-                    edge_weight, pert_mean, pert_sigma,
-                    rf_approx_var, rf_eig, rf_vectors)
+        #     if of_test and (time_index != 0):
+        #         logging.debug('assim of')
+        #         remove_divergence_test = True
+        #         x_temp = np.arange(U_crop_shape[1])*dx/1000 # in km not m
+        #         y_temp = np.arange(U_crop_shape[0])*dx/1000
+        #         x_temp, y_temp = np.meshgrid(x_temp, y_temp)
+        #         ensemble[:U_crop_size] = reduced_enkf(
+        #             ensemble=ensemble[:U_crop_size],
+        #             observations=u_of, R_sig=sig_of,
+        #             flat_locations=u_of_flat_pos,
+        #             inflation=inflation_of, localization=localization_of,
+        #             x=x_temp.ravel(), y=y_temp.ravel())
 
-        ensemble_45.loc[sat_time_range[time_index] + pd.Timedelta('45min')] = (
-            temp_ensemble.ravel())
-        advected_45.loc[sat_time_range[time_index] + pd.Timedelta('45min')] = (
-            q.ravel())
-        if num_of_advec == 3:
-            ensemble = temp_ensemble.copy()
-            noise = temp_noise.copy()
-
-        logging.info('60 min')
-        for n in range(3):
-            if wind_in_ensemble:
-                q, temp_noise, temp_ensemble = advect_5min_distributed_wind(
-                    q, temp_noise, temp_ensemble, dt, this_U, dx,
-                    this_V, dy, T_steps, wind_size, client)
-            else:
-                q, temp_noise, temp_ensemble = advect_5min_distributed(
-                    q, temp_noise, temp_ensemble, dt, this_U, dx,
-                    this_V, dy, T_steps, wind_size, client)
-
-            # add pertubation
-            if pert_sigma != 0:
-                temp_ensemble[wind_size:] = perturb_irradiance(
-                    temp_ensemble[wind_size:], domain_crop_shape,
-                    edge_weight, pert_mean, pert_sigma,
-                    rf_approx_var, rf_eig, rf_vectors)
-
-
-        ensemble_60.loc[sat_time_range[time_index] + pd.Timedelta('60min')] = (
-            temp_ensemble.ravel())
-        advected_60.loc[sat_time_range[time_index] + pd.Timedelta('60min')] = (
-            q.ravel())
-        if num_of_advec == 4:
-            ensemble = temp_ensemble.copy()
-            noise = temp_noise.copy()
-
-        # delete
-        plt.close('all')
-        # delete
-
+        #         x_temp = np.arange(V_crop_shape[1])*dx/1000 
+        #         y_temp = np.arange(V_crop_shape[0])*dx/1000
+        #         x_temp, y_temp = np.meshgrid(x_temp, y_temp)
+        #         ensemble[U_crop_size:U_crop_size + V_crop_size] = reduced_enkf(
+        #             ensemble=ensemble[U_crop_size:U_crop_size + V_crop_size],
+        #             observations=v_of, R_sig=sig_of,
+        #             flat_locations=v_of_flat_pos,
+        #             inflation=inflation_of, localization=localization_of,
+        #             x=x_temp.ravel(), y=y_temp.ravel())
+        # if div_test and remove_divergence_test and wind_in_ensemble:
+        #     logging.debug('remove divergence')
+        #     remove_divergence_test = False
+        #     ensemble[:wind_size] = remove_divergence_ensemble(
+        #         FunctionSpace_wind, ensemble[:wind_size], U_crop_shape, V_crop_shape, 4) #hard wired smoothign
+    return
+    
 
 def test_parallax(sat, domain_shape, dx, dy, lats, lons, sensor_data,
                   sensor_loc, start_time,
