@@ -2437,13 +2437,17 @@ def forecast_system(ci_file_path, winds_file_path,
                     assim_test=False, perturbation_test=False,
                     wind_in_ensemble_test=False, of_test=False,
                     div_test=False, assim_sat2sat_test=False,
+                    assim_sat2wind_test=False, assim_wrf_test=False,
                     start_time=None, end_time=None, C_max=0.7,
-                    sig_sat2sat=None, loc_sat2sat=None, infl_sat2sat=None, assim_gs_sat2sat=None,
-                    sig_sat2wind=None, loc_sat2wind=None, infl_sat2wind=None, assim_gs_sat2wind=None,
+                    sig_sat2sat=None, loc_sat2sat=None,
+                    infl_sat2sat=None, assim_gs_sat2sat=None,
+                    sig_sat2wind=None, loc_sat2wind=None,
+                    infl_sat2wind=None, assim_gs_sat2wind=None,
                     sig_wrf=None, infl_wrf=None, loc_wrf=None, assim_gs_wrf=None,
                     sig_of=None, loc_of=None, infl_of=None,
                     ens_size=None, winds_sigma=None, ci_sigma=None,
-                    Lx=None, Ly=None, tol=None, pert_sigma=None, pert_mean=None, edge_weight=None):
+                    Lx=None, Ly=None, tol=None,
+                    pert_sigma=None, pert_mean=None, edge_weight=None):
     
     # read initial data from satellite store
     with pd.HDFStore(ci_file_path, mode='r') as store:
@@ -2475,6 +2479,36 @@ def forecast_system(ci_file_path, winds_file_path,
         sat_time_range = (pd.date_range(start_time, end_time, freq='15 min')
                           .tz_localize('MST'))
         sat_time_range = sat_time_range.intersection(sat_dates)
+
+    # Create Function Space to be used to remove divergence
+    if div_test:
+        mesh = fe.RectangleMesh(fe.Point(0, 0),
+                                fe.Point(V_crop_shape[1] - 1, U_crop_shape[0] - 1),
+                                V_crop_shape[1] - 1, U_crop_shape[0] - 1)
+        FunctionSpace_wind = fe.FunctionSpace(mesh, 'P', 1)
+
+    # Create assimilation positions
+    if assim_sat2sat_test:
+        assim_pos, assim_pos_2d, full_pos_2d = (
+            assimilation_position_generator(ci_crop_shape,
+                                            assim_gs_sat2sat))
+    if assim_sat2wind_test:
+        assim_pos_U, assim_pos_2d_U, full_pos_2d_U = (
+            assimilation_position_generator(U_crop_shape,
+                                            assim_gs_sat2wind))
+        assim_pos_V, assim_pos_2d_V, full_pos_2d_V = (
+            assimilation_position_generator(V_crop_shape,
+                                            assim_gs_sat2wind))
+    if assim_wrf_test:
+        assim_pos_U_wrf, assim_pos_2d_U_wrf, full_pos_2d_U_wrf = (
+            assimilation_position_generator(U_crop_shape,
+                                            assim_gs_wrf))
+        assim_pos_V_wrf, assim_pos_2d_V_wrf, full_pos_2d_V_wrf = (
+            assimilation_position_generator(V_crop_shape,
+                                            assim_gs_wrf))
+
+
+
     return
         
 
@@ -2497,27 +2531,7 @@ def forecast_system(ci_file_path, winds_file_path,
     int_index_wind = U_crop.index.get_loc(sat_time_range[0], method='pad')
     this_U = U_crop.iloc[int_index_wind].values.reshape(U_crop_shape)
     this_V = V_crop.iloc[int_index_wind].values.reshape(V_crop_shape)
-    if div_test:
-        mesh = fe.RectangleMesh(fe.Point(0, 0),
-                                fe.Point(V_crop_shape[1] - 1, U_crop_shape[0] - 1),
-                                V_crop_shape[1] - 1, U_crop_shape[0] - 1)
-        FunctionSpace_wind = fe.FunctionSpace(mesh, 'P', 1)
-        
-    assimilation_positions, assimilation_positions_2d, full_positions_2d = (
-        assimilation_position_generator(domain_crop_shape,
-                                        assimilation_grid_size))
-    assimilation_positions_U, assimilation_positions_2d_U, full_positions_2d_U = (
-        assimilation_position_generator(U_crop_shape,
-                                        assimilation_grid_size_wind))
-    assimilation_positions_V, assimilation_positions_2d_V, full_positions_2d_V = (
-        assimilation_position_generator(V_crop_shape,
-                                        assimilation_grid_size_wind))
-    assimilation_positions_U_wrf, assimilation_positions_2d_U_wrf, full_positions_2d_U_wrf = (
-        assimilation_position_generator(U_crop_shape,
-                                        assimilation_grid_size_wrf))
-    assimilation_positions_V_wrf, assimilation_positions_2d_V_wrf, full_positions_2d_V_wrf = (
-        assimilation_position_generator(V_crop_shape,
-                                        assimilation_grid_size_wrf))
+    
 
     q = sat_crop.loc[sat_time_range[0]].values.reshape(domain_crop_shape)
     # ensemble = ensemble_creator(
