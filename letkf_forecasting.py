@@ -2446,7 +2446,7 @@ def forecast_system(ci_file_path, winds_file_path,
                     Lx=None, Ly=None, tol=None, pert_sigma=None, pert_mean=None, edge_weight=None):
     
     # read initial data from satellite store
-    with pd.HDFStore(sat_file_path, mode='r') as store:
+    with pd.HDFStore(ci_file_path, mode='r') as store:
         sat_dates = store.select('ci', start=0, end=0).columns
         ci_crop_cols = np.array(store.get('crop_cols'))
         x = np.array(store.get('x'))
@@ -2457,6 +2457,16 @@ def forecast_system(ci_file_path, winds_file_path,
     ci_shape = np.array(ci_metadata['shape'])
     ci_crop_shape = np.array(ci_metadata['crop_shape'])
 
+    # read inital data from winds store
+    with pd.HDFStore(winds_file_path, mode='r') as store:
+        U_crop_cols = np.array(store.get('U_crop_cols'))
+        V_crop_cols = np.array(store.get('V_crop_cols'))
+        u_metadata = dict(store.get('U_metadata'))
+        v_metadata = dict(store.get('V_metadata'))
+    U_shape = u_metadata['shape']
+    U_crop_shape = u_metadata['crop_shape']
+    V_shape = u_metadata['shape']
+    V_crop_shape = v_metadata['crop_shape']
         
     # Use all possible satellite images in system unless told to limit to only
     if (start_time is None) & (end_time is None):
@@ -2465,7 +2475,7 @@ def forecast_system(ci_file_path, winds_file_path,
         sat_time_range = (pd.date_range(start_time, end_time, freq='15 min')
                           .tz_localize('MST'))
         sat_time_range = sat_time_range.intersection(sat_dates)
-    print(sat_time_range)
+    return
         
 
     U_crop_size = U_crop_shape[0]*U_crop_shape[1]
