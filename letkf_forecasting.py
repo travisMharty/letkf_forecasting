@@ -2433,6 +2433,11 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
     return to_return
     # return ensemble_movie, ens_shape
 
+def time2string(Timestamp, variable):
+    hour = Timestamp.hour
+    minute = Timestamp.minute
+    return f'MST{hour:02}{minute:02}_' + variable
+
 
 def forecast_system(param_dic, ci_file_path, winds_file_path,
                     assim_test=False, perturbation_test=False,
@@ -2460,6 +2465,7 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
     dy = ci_metadata['dy']
     ci_shape = np.array(ci_metadata['shape'])
     ci_crop_shape = np.array(ci_metadata['crop_shape'])
+    ci_crop_size = ci_crop_shape[0]*ci_crop_shape[1]
 
     # read inital data from winds store
     with pd.HDFStore(winds_file_path, mode='r') as store:
@@ -2583,9 +2589,13 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
                                  where=['index=V_crop_cols'])
             U = np.array(U).reshape(U_crop_shape)
             V = np.array(V).reshape(V_crop_shape)
-            ci_r = pd.DataFrame(data=q.ravel(), index=[sat_time])
-            with pd.HDFStore(winds_file_path_r) as store:
-                store.put(
+            df_q = pd.DataFrame(data=q.reshape(1, ci_crop_size),
+                                index=[sat_time])
+            with pd.HDFStore(file_path_r) as store:
+                store.put(time2string(sat_time, 'U'),
+                          pd.DataFrame(data=U.ravel(), columns=[sat_time]))
+                store.put(time2string(sat_time, 'V'),
+                          pd.DataFrame(data=V.ravel(), columns=[sat_time]))
             cx = abs(U).max()
             cy = abs(V).max()
             T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)/C_max))
@@ -2595,7 +2605,12 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
                 for n in range(3):
                     q = advect_5min(q, dt, U, dx, V, dy, T_steps)
 
-                return
+                df_q = df_q.append(pd.DataFrame(
+                    data=q.reshape(1, ci_crop_size),
+                    index=[sat_time + (m + 1)*pd.Timedelta('15min')]))
+            with pd.HDFStore(file_path_r) as store:
+                store.put(time2string(sat_time, 'ci'), df_q.T)
+            return
                 
         
         else:
