@@ -2434,7 +2434,7 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
     # return ensemble_movie, ens_shape
 
 
-def forecast_system(ci_file_path, winds_file_path,
+def forecast_system(param_dic, ci_file_path, winds_file_path,
                     assim_test=False, perturbation_test=False,
                     wind_in_ensemble_test=False, div_test=False,
                     assim_of_test=False, assim_sat2sat_test=False,
@@ -2455,16 +2455,15 @@ def forecast_system(ci_file_path, winds_file_path,
     with pd.HDFStore(ci_file_path, mode='r') as store:
         sat_dates = store.select('ci', start=0, end=0).columns
         ci_crop_cols = np.array(store.get('crop_cols'))
-        x = np.array(store.get('x'))
-        y = np.array(store.get('y'))
         ci_metadata = dict(store.get('metadata'))
-    x_crop = x[ci_crop_cols]
-    y_crop = y[ci_crop_cols]
+    dx = ci_metadata['dx']
+    dy = ci_metadata['dy']
     ci_shape = np.array(ci_metadata['shape'])
     ci_crop_shape = np.array(ci_metadata['crop_shape'])
 
     # read inital data from winds store
     with pd.HDFStore(winds_file_path, mode='r') as store:
+        wind_time_range = store.select('U', start=0, end=0).columns
         U_crop_cols = np.array(store.get('U_crop_cols'))
         V_crop_cols = np.array(store.get('V_crop_cols'))
         u_metadata = dict(store.get('U_metadata'))
@@ -2510,6 +2509,12 @@ def forecast_system(ci_file_path, winds_file_path,
         ci_file_path_r = os.path.join(file_path_r, 'ci_results.h5')
         winds_file_path_r = os.path.join(file_path_r, 'winds_results.h5')
 
+    # save param_dic
+    with pd.HDFStore(ci_file_path_r, mode='a') as store:
+        store.put('param_dic', pd.Series(param_dic))
+    with pd.HDFStore(winds_file_path_r, mode='a') as store:
+        store.put('param_dic', pd.Series(param_dic))
+
     # Create Function Space to be used to remove divergence
     if div_test:
         mesh = fe.RectangleMesh(fe.Point(0, 0),
@@ -2548,7 +2553,7 @@ def forecast_system(ci_file_path, winds_file_path,
         del U_crop_pos, V_crop_pos
 
 
-    return
+    
 
     # if wind_in_ensemble:
     #     ensemble = ensemble_creator_wind(
@@ -2563,24 +2568,31 @@ def forecast_system(ci_file_path, winds_file_path,
     for time_index in range(sat_time_range.size - 1):
         sat_time = sat_time_range[time_index]
         logging.info(str(sat_time))
-        q = sat_crop.loc[sat_time_range[0]].values.reshape(domain_crop_shape)
-        # ensemble = ensemble_creator(
-        #     q, CI_sigma=CI_sigma, wind_size=wind_size,
-        #     wind_sigma=wind_sigma, ens_size=ens_size)
-        int_index_wind = U_crop.index.get_loc(sat_time_range[0], method='pad')
-        this_U = U_crop.iloc[int_index_wind].values
-        this_V = V_crop.iloc[int_index_wind].values
-        cx = abs(this_U.values).max()
-        cy = abs(this_V.values).max()
+        with pd.HDFStore(ci_file_path, mode='r') as store:
+            q = store.select('ci', columns=[sat_time],
+                             where=['index=ci_crop_cols'])
+        q = np.array(q).reshape(ci_crop_shape)
+        int_index_wind = wind_time_range.get_loc(sat_time_range[0], method='pad')
+        wind_time = wind_time_range[int_index_wind]
+        with pd.HDFStore(winds_file_path, mode='r') as store:
+            U = store.select('U', columns=[wind_time],
+                             where=['index=U_crop_cols'])
+            V = store.select('V', columns=[wind_time],
+                             where=['index=V_crop_cols'])
+        U = np.array(U).reshape(U_crop_shape)
+        V = np.array(V).reshape(V_crop_shape)
+        cx = abs(U).max()
+        cy = abs(V).max()
         T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)/C_max))
         dt = (5*60)/T_steps
         num_of_advec = int((
             sat_time_range[time_index + 1] -
-            sat_time_range[time_index].value).seconds/(60*15))
+            sat_time_range[time_index]).seconds/(60*15))
 
         # temp_ensemble = ensemble.copy()
         # temp_noise = noise.copy()
-
+        return
+    
         logging.info(str(num_of_advec))
         logging.info('15 min')
         if not assim_test: # assums no perturbation
