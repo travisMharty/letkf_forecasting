@@ -2496,8 +2496,11 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
     file_path_r = f'{home}/results/{year:04}/{month:02}/{day:02}/run{run_num:03}'
     if not os.path.exists(file_path_r):
         os.makedirs(file_path_r)
-        ci_file_path_r = os.path.join(file_path_r, 'ci_results.h5')
-        winds_file_path_r = os.path.join(file_path_r, 'winds_results.h5')
+        if not assim_test:
+            ci_file_path_r = os.path.join(file_path_r, 'ci_results.h5')
+            winds_file_path_r = os.path.join(file_path_r, 'winds_results.h5')
+        else:
+            ens_file_path_r = os.path.join(file_path_r, 'ensemble.h5')
     else:
         file_path_r = os.path.split(file_path_r)[0]
         run_num = os.listdir(file_path_r)
@@ -2506,8 +2509,11 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
         run_num = int(run_num[-3:]) + 1
         file_path_r = os.path.join(file_path_r, f'run{run_num:03}')
         os.makedirs(file_path_r)
-        ci_file_path_r = os.path.join(file_path_r, 'ci_results.h5')
-        winds_file_path_r = os.path.join(file_path_r, 'winds_results.h5')
+        if not assim_test:
+            ci_file_path_r = os.path.join(file_path_r, 'ci_results.h5')
+            winds_file_path_r = os.path.join(file_path_r, 'winds_results.h5')
+        else:
+            ens_file_path_r = os.path.join(file_path_r, 'ensemble.h5')
 
     # save param_dic
     with pd.HDFStore(ci_file_path_r, mode='a') as store:
