@@ -2610,9 +2610,7 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
                     index=[sat_time + (m + 1)*pd.Timedelta('15min')]))
             with pd.HDFStore(file_path_r) as store:
                 store.put(time2string(sat_time, 'ci'), df_q.T)
-            return
                 
-        
         else:
             for horizon_num in range(num_of_horizons):
                 for n in range(3):
