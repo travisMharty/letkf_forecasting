@@ -2514,12 +2514,7 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
             winds_file_path_r = os.path.join(file_path_r, 'winds_results.h5')
         else:
             ens_file_path_r = os.path.join(file_path_r, 'ensemble.h5')
-
-    # save param_dic
-    with pd.HDFStore(ci_file_path_r, mode='a') as store:
-        store.put('param_dic', pd.Series(param_dic))
-    with pd.HDFStore(winds_file_path_r, mode='a') as store:
-        store.put('param_dic', pd.Series(param_dic))
+    
 
     # Create Function Space to be used to remove divergence
     if div_test:
@@ -2529,35 +2524,42 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
         FunctionSpace_wind = fe.FunctionSpace(mesh, 'P', 1)
 
     # Create things needed for assimilations
-    if assim_sat2sat_test:
-        assim_pos, assim_pos_2d, full_pos_2d = (
-            assimilation_position_generator(ci_crop_shape,
-                                            assim_gs_sat2sat))
-        noise_init = noise_fun(domain_crop_shape)
-        noise = noise_init.copy()
-    if assim_sat2wind_test:
-        assim_pos_U, assim_pos_2d_U, full_pos_2d_U = (
-            assimilation_position_generator(U_crop_shape,
-                                            assim_gs_sat2wind))
-        assim_pos_V, assim_pos_2d_V, full_pos_2d_V = (
-            assimilation_position_generator(V_crop_shape,
-                                            assim_gs_sat2wind))
-    if assim_wrf_test:
-        assim_pos_U_wrf, assim_pos_2d_U_wrf, full_pos_2d_U_wrf = (
-            assimilation_position_generator(U_crop_shape,
-                                            assim_gs_wrf))
-        assim_pos_V_wrf, assim_pos_2d_V_wrf, full_pos_2d_V_wrf = (
-            assimilation_position_generator(V_crop_shape,
-                                            assim_gs_wrf))        
-    if assim_of_test:
-        U_crop_pos = np.unravel_index(U_crop_cols, U_shape)
-        V_crop_pos = np.unravel_index(V_crop_cols, V_shape)
-        wind_x_range = (np.max([U_crop_pos[1].min(), V_crop_pos[1].min()]),
-                        np.min([U_crop_pos[1].max(), V_crop_pos[1].max()]))
-        wind_y_range = (np.max([U_crop_pos[0].min(), V_crop_pos[0].min()]),
-                        np.min([U_crop_pos[0].max(), V_crop_pos[0].max()]))
-        del U_crop_pos, V_crop_pos
-
+    if assim_test:
+        with pd.HDFStore(ens_file_path_r, mode='a') as store:
+            store.put('param_dic', pd.Series(param_dic))
+        if assim_sat2sat_test:
+            assim_pos, assim_pos_2d, full_pos_2d = (
+                assimilation_position_generator(ci_crop_shape,
+                                                assim_gs_sat2sat))
+            noise_init = noise_fun(domain_crop_shape)
+            noise = noise_init.copy()
+        if assim_sat2wind_test:
+            assim_pos_U, assim_pos_2d_U, full_pos_2d_U = (
+                assimilation_position_generator(U_crop_shape,
+                                                assim_gs_sat2wind))
+            assim_pos_V, assim_pos_2d_V, full_pos_2d_V = (
+                assimilation_position_generator(V_crop_shape,
+                                                assim_gs_sat2wind))
+        if assim_wrf_test:
+            assim_pos_U_wrf, assim_pos_2d_U_wrf, full_pos_2d_U_wrf = (
+                assimilation_position_generator(U_crop_shape,
+                                                assim_gs_wrf))
+            assim_pos_V_wrf, assim_pos_2d_V_wrf, full_pos_2d_V_wrf = (
+                assimilation_position_generator(V_crop_shape,
+                                                assim_gs_wrf))        
+        if assim_of_test:
+            U_crop_pos = np.unravel_index(U_crop_cols, U_shape)
+            V_crop_pos = np.unravel_index(V_crop_cols, V_shape)
+            wind_x_range = (np.max([U_crop_pos[1].min(), V_crop_pos[1].min()]),
+                            np.min([U_crop_pos[1].max(), V_crop_pos[1].max()]))
+            wind_y_range = (np.max([U_crop_pos[0].min(), V_crop_pos[0].min()]),
+                            np.min([U_crop_pos[0].max(), V_crop_pos[0].max()]))
+            del U_crop_pos, V_crop_pos
+    else:
+        with pd.HDFStore(ci_file_path_r, mode='a') as store:
+            store.put('param_dic', pd.Series(param_dic))
+        with pd.HDFStore(winds_file_path_r, mode='a') as store:
+            store.put('param_dic', pd.Series(param_dic))
 
     
 
@@ -2582,7 +2584,6 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
         wind_time = wind_time_range[int_index_wind]
         with pd.HDFStore(winds_file_path, mode='r') as store:
             U = store.select('U', columns=[wind_time],
-                             where=['index=U_crop_cols'])
             V = store.select('V', columns=[wind_time],
                              where=['index=V_crop_cols'])
         U = np.array(U).reshape(U_crop_shape)
