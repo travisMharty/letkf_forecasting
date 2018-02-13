@@ -2484,7 +2484,7 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
         sat_time_range = sat_time_range.intersection(sat_dates)
 
     # Advection calculations
-    num_of_horizons = (max_horizon/15).seconds/60
+    num_of_horizons = int((max_horizon/15).seconds/60)
 
     # Create path to save results
     date = sat_time_range[0].date()
@@ -2496,11 +2496,7 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
     file_path_r = f'{home}/results/{year:04}/{month:02}/{day:02}/run{run_num:03}'
     if not os.path.exists(file_path_r):
         os.makedirs(file_path_r)
-        if not assim_test:
-            ci_file_path_r = os.path.join(file_path_r, 'ci_results.h5')
-            winds_file_path_r = os.path.join(file_path_r, 'winds_results.h5')
-        else:
-            ens_file_path_r = os.path.join(file_path_r, 'ensemble.h5')
+        file_path_r = os.path.join(file_path_r, 'results.h5')
     else:
         file_path_r = os.path.split(file_path_r)[0]
         run_num = os.listdir(file_path_r)
@@ -2509,12 +2505,7 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
         run_num = int(run_num[-3:]) + 1
         file_path_r = os.path.join(file_path_r, f'run{run_num:03}')
         os.makedirs(file_path_r)
-        if not assim_test:
-            ci_file_path_r = os.path.join(file_path_r, 'ci_results.h5')
-            winds_file_path_r = os.path.join(file_path_r, 'winds_results.h5')
-        else:
-            ens_file_path_r = os.path.join(file_path_r, 'ensemble.h5')
-    
+        file_path_r = os.path.join(file_path_r, 'results.h5')
 
     # Create Function Space to be used to remove divergence
     if div_test:
@@ -2525,8 +2516,6 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
 
     # Create things needed for assimilations
     if assim_test:
-        with pd.HDFStore(ens_file_path_r, mode='a') as store:
-            store.put('param_dic', pd.Series(param_dic))
         if assim_sat2sat_test:
             assim_pos, assim_pos_2d, full_pos_2d = (
                 assimilation_position_generator(ci_crop_shape,
@@ -2555,13 +2544,10 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
             wind_y_range = (np.max([U_crop_pos[0].min(), V_crop_pos[0].min()]),
                             np.min([U_crop_pos[0].max(), V_crop_pos[0].max()]))
             del U_crop_pos, V_crop_pos
-    else:
-        with pd.HDFStore(ci_file_path_r, mode='a') as store:
-            store.put('param_dic', pd.Series(param_dic))
-        with pd.HDFStore(winds_file_path_r, mode='a') as store:
-            store.put('param_dic', pd.Series(param_dic))
 
-    
+    # save param_dic
+    with pd.HDFStore(file_path_r, mode='a') as store:
+        store.put('param_dic', pd.Series(param_dic))
 
     # if wind_in_ensemble:
     #     ensemble = ensemble_creator_wind(
@@ -2576,36 +2562,40 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
     for time_index in range(sat_time_range.size - 1):
         sat_time = sat_time_range[time_index]
         logging.info(str(sat_time))
-        with pd.HDFStore(ci_file_path, mode='r') as store:
-            q = store.select('ci', columns=[sat_time],
-                             where=['index=ci_crop_cols'])
-        q = np.array(q).reshape(ci_crop_shape)
         int_index_wind = wind_time_range.get_loc(sat_time_range[0], method='pad')
         wind_time = wind_time_range[int_index_wind]
-        with pd.HDFStore(winds_file_path, mode='r') as store:
-            U = store.select('U', columns=[wind_time],
-            V = store.select('V', columns=[wind_time],
-                             where=['index=V_crop_cols'])
-        U = np.array(U).reshape(U_crop_shape)
-        V = np.array(V).reshape(V_crop_shape)
-        cx = abs(U).max()
-        cy = abs(V).max()
-        T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)/C_max))
-        dt = (5*60)/T_steps
         num_of_advec = int((
             sat_time_range[time_index + 1] -
             sat_time_range[time_index]).seconds/(60*15))
 
         # temp_ensemble = ensemble.copy()
         # temp_noise = noise.copy()
-        return
     
-        logging.info(str(num_of_advec))
-        logging.info('15 min')
         if not assim_test: # assums no perturbation
+            with pd.HDFStore(ci_file_path, mode='r') as store:
+                q = store.select('ci', columns=[sat_time],
+                                 where=['index=ci_crop_cols'])
+            q = np.array(q).reshape(ci_crop_shape)
+            with pd.HDFStore(winds_file_path, mode='r') as store:
+                U = store.select('U', columns=[wind_time],
+                                 where=['index=U_crop_cols'])
+                V = store.select('V', columns=[wind_time],
+                                 where=['index=V_crop_cols'])
+            U = np.array(U).reshape(U_crop_shape)
+            V = np.array(V).reshape(V_crop_shape)
+            ci_r = pd.DataFrame(data=q.ravel(), index=[sat_time])
+            with pd.HDFStore(winds_file_path_r) as store:
+                store.put(
+            cx = abs(U).max()
+            cy = abs(V).max()
+            T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)/C_max))
+            dt = (5*60)/T_steps
             for m in range(num_of_horizons):
+                logging.info(str(pd.Timedelta('15min')*(m + 1)))
                 for n in range(3):
-                    q = advect_5min(q, dt, this_U, dx, this_V, dy, T_steps)
+                    q = advect_5min(q, dt, U, dx, V, dy, T_steps)
+
+                return
                 
         
         else:
