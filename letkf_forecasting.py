@@ -2542,6 +2542,10 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
             assim_pos_V_wrf, assim_pos_2d_V_wrf, full_pos_2d_V_wrf = (
                 assimilation_position_generator(V_crop_shape,
                                                 assim_gs_wrf))        
+        if perturbation_test:
+            rf_eig, rf_vectors = rf.eig_2d_covariance(
+                x=x_crop_range, y=y_crop_range,
+                Lx=Lx, Ly=Ly, tol=tol)
         if assim_of_test:
             U_crop_pos = np.unravel_index(U_crop_cols, U_shape)
             V_crop_pos = np.unravel_index(V_crop_cols, V_shape)
