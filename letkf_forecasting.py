@@ -17,6 +17,7 @@ import cv2
 
 sys.path.append('/home/travis/python_code/letkf_forecasting/')
 import prepare_sat_data as prep
+import random_functions as rf
 
 a = 6371000  # average radius of earth when modeled as a sphere From wikipedia
 
@@ -2460,12 +2461,16 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
     with pd.HDFStore(ci_file_path, mode='r') as store:
         sat_dates = store.select('ci', start=0, end=0).columns
         ci_crop_cols = np.array(store.get('crop_cols'))
+        x_crop = store.select('x', where=['index=ci_crop_cols'])
+        y_crop = store.select('y', where=['index=ci_crop_cols'])
         ci_metadata = dict(store.get('metadata'))
     dx = ci_metadata['dx']
     dy = ci_metadata['dy']
     ci_shape = np.array(ci_metadata['shape'])
     ci_crop_shape = np.array(ci_metadata['crop_shape'])
     ci_crop_size = ci_crop_shape[0]*ci_crop_shape[1]
+    x_crop_range = x_crop.reshape(ci_shape)[0, :]
+    y_crop_range = y_crop.reshape(ci_shape)[:, 0]
 
     # read inital data from winds store
     with pd.HDFStore(winds_file_path, mode='r') as store:
@@ -2480,7 +2485,6 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
     V_shape = u_metadata['shape']
     V_crop_shape = v_metadata['crop_shape']
     V_crop_size = V_crop_shape[0]*V_crop_shape[1]
-        
     # Use all possible satellite images in system unless told to limit
     if (start_time is None) & (end_time is None):
         sat_time_range = sat_dates
@@ -2499,7 +2503,8 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
     day = date.day
     home = os.path.expanduser('~')
     run_num = 0
-    file_path_r = f'{home}/results/{year:04}/{month:02}/{day:02}/run{run_num:03}'
+    file_path_r = (f'{home}/results/{year:04}'
+                   f'/{month:02}/{day:02}/run{run_num:03}')
     if not os.path.exists(file_path_r):
         os.makedirs(file_path_r)
         file_path_r = os.path.join(file_path_r, 'results.h5')
@@ -2526,7 +2531,7 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
             assim_pos, assim_pos_2d, full_pos_2d = (
                 assimilation_position_generator(ci_crop_shape,
                                                 assim_gs_sat2sat))
-            noise_init = noise_fun(domain_crop_shape)
+            noise_init = noise_fun(ci_crop_shape)
             noise = noise_init.copy()
         if assim_sat2wind_test:
             assim_pos_U, assim_pos_2d_U, full_pos_2d_U = (
@@ -2568,6 +2573,7 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
         ensemble = ensemble_creator_wind(
             q, U, V,
             CI_sigma=CI_sigma, wind_sigma=wind_sigma, ens_size=ens_size)
+        del q, U, V
         ens_shape = ensemble.shape
 
     # save param_dic
@@ -2620,28 +2626,61 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
                 store.put(time2string(sat_time, 'ci'), df_q.T)
                 
         else:
-            for horizon_num in range(num_of_horizons):
-                for n in range(3):
-                    # print('advection_number_15: ' + str(n))
-                    if wind_in_ensemble:
-                        q, temp_noise, temp_ensemble = advect_5min_distributed_wind(
-                            q, temp_noise, temp_ensemble, dt, this_U, dx,
-                            this_V, dy, T_steps, wind_size, client)
-                    else:
-                        #print(n)
-                        q, temp_noise, temp_ensemble = advect_5min_distributed(
-                            q, temp_noise, temp_ensemble, dt, this_U, dx,
-                            this_V, dy, T_steps, wind_size, client)
+            if time_index != 0:
+                if assim_wrf_test:
+                    logging.debug('Assim WRF')
+                    with pd.HDFStore(winds_file_path, mode='r') as store:
+                        U = np.array(
+                            store.select('U', columns=[wind_time],
+                                         where=['index=U_crop_cols']))
+                        V = np.array(
+                            store.select('V', columns=[wind_time],
+                                         where=['index=V_crop_cols']))
+                    remove_div_test = True
+                    ensemble[:U_crop_size] = assimilate_wrf(
+                        ensemble=ensemble[:U_crop_size],
+                        observations=U.ravel(),
+                        R_inverse=1/sig_wrf**2,
+                        wind_inflation=infl_wrf,
+                        wind_shape=U_crop_shape,
+                        localization_length_wind=localization_wrf,
+                        assimilation_positions=assimilation_positions_U_wrf,
+                        assimilation_positions_2d=assimilation_positions_2d_U_wrf,
+                        full_positions_2d=full_positions_2d_U_wrf)
 
-                    # add pertubation
-                    if perturbation_test:
+                    ensemble[U_crop_size: U_crop_size + V_crop_size] = assimilate_wrf(
+                        ensemble=ensemble[U_crop_size: U_crop_size + V_crop_size],
+                        observations=this_V.ravel(),
+                        R_inverse=1/sig_wrf**2,
+                        wind_inflation=infl_wind,
+                        wind_shape=V_crop_shape,
+                        localization_length_wind=localization_wrf,
+                        assimilation_positions=assimilation_positions_V_wrf,
+                        assimilation_positions_2d=assimilation_positions_2d_V_wrf,
+                        full_positions_2d=full_positions_2d_V_wrf)
+
+
+
+                if perturbation_test:
                         temp_ensemble[wind_size:] = perturb_irradiance(
                             temp_ensemble[wind_size:], domain_crop_shape,
                             edge_weight, pert_mean, pert_sigma,
                             rf_approx_var, rf_eig, rf_vectors)
                 if num_of_advec == horizon_num:
                     ensemble = temp_ensemble.copy()
-                    noise = temp_noise.copy()
+                    noise = temp_noise.copy()    
+            # for horizon_num in range(num_of_horizons):
+            #     for n in range(3):
+            #         # print('advection_number_15: ' + str(n))
+            #         if wind_in_ensemble:
+            #             q, temp_noise, temp_ensemble = advect_5min_distributed_wind(
+            #                 q, temp_noise, temp_ensemble, dt, this_U, dx,
+            #                 this_V, dy, T_steps, wind_size, client)
+            #         else:
+            #             #print(n)
+            #             q, temp_noise, temp_ensemble = advect_5min_distributed(
+            #                 q, temp_noise, temp_ensemble, dt, this_U, dx,
+            #                 this_V, dy, T_steps, wind_size, client)
 
         # if of_test and (time_index != 0):
         #     logging.debug('calc of')
@@ -2674,32 +2713,7 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
         #     v_of_flat_pos = np.ravel_multi_index(pos, V_crop_shape)
         #     # retrieve OF vectors
 
-        # # assimilate new winds
-        # if wind_in_ensemble:
-        #     if (sat_time in U_crop.index) and (time_index != 0):
-        #         logging.debug('assim wrf')
-        #         remove_divergence_test = True
-        #         ensemble[:U_crop_size] = assimilate_wrf(
-        #             ensemble=ensemble[:U_crop_size],
-        #             observations=this_U.ravel(),
-        #             R_inverse=1/sig_wrf**2,
-        #             wind_inflation=inflation_wrf,
-        #             wind_shape=U_crop_shape,
-        #             localization_length_wind=localization_wrf,
-        #             assimilation_positions=assimilation_positions_U_wrf,
-        #             assimilation_positions_2d=assimilation_positions_2d_U_wrf,
-        #             full_positions_2d=full_positions_2d_U_wrf)
-
-        #         ensemble[U_crop_size: U_crop_size + V_crop_size] = assimilate_wrf(
-        #             ensemble=ensemble[U_crop_size: U_crop_size + V_crop_size],
-        #             observations=this_V.ravel(),
-        #             R_inverse=1/sig_wrf**2,
-        #             wind_inflation=inflation_wind,
-        #             wind_shape=V_crop_shape,
-        #             localization_length_wind=localization_wrf,
-        #             assimilation_positions=assimilation_positions_V_wrf,
-        #             assimilation_positions_2d=assimilation_positions_2d_V_wrf,
-        #             full_positions_2d=full_positions_2d_V_wrf)
+        
 
         #     if of_test and (time_index != 0):
         #         logging.debug('assim of')
