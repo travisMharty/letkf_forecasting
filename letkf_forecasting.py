@@ -2441,7 +2441,7 @@ def time2string(Timestamp, variable):
 
 def forecast_system(param_dic, ci_file_path, winds_file_path,
                     assim_test=False, perturbation_test=False,
-                    wind_in_ensemble_test=False, div_test=False,
+                    div_test=False,
                     assim_of_test=False, assim_sat2sat_test=False,
                     assim_sat2wind_test=False, assim_wrf_test=False,
                     start_time=None, end_time=None, C_max=0.7,
@@ -2550,20 +2550,25 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
             wind_y_range = (np.max([U_crop_pos[0].min(), V_crop_pos[0].min()]),
                             np.min([U_crop_pos[0].max(), V_crop_pos[0].max()]))
             del U_crop_pos, V_crop_pos
+        with pd.HDFStore(ci_file_path, mode='r') as store:
+            q = store.select('ci', columns=[sat_time],
+                             where=['index=ci_crop_cols'])
+        q = np.array(q).reshape(ci_crop_shape)
+        with pd.HDFStore(winds_file_path, mode='r') as store:
+            U = store.select('U', columns=[wind_time],
+                             where=['index=U_crop_cols'])
+            V = store.select('V', columns=[wind_time],
+                             where=['index=V_crop_cols'])
+        U = np.array(U).reshape(U_crop_shape)
+        V = np.array(V).reshape(V_crop_shape)
+        ensemble = ensemble_creator_wind(
+            q, U, V,
+            CI_sigma=CI_sigma, wind_sigma=wind_sigma, ens_size=ens_size)
+        ens_shape = ensemble.shape
 
     # save param_dic
     with pd.HDFStore(file_path_r, mode='a') as store:
         store.put('param_dic', pd.Series(param_dic))
-
-    # if wind_in_ensemble:
-    #     ensemble = ensemble_creator_wind(
-    #         q, this_U, this_V,
-    #         CI_sigma=CI_sigma, wind_sigma=wind_sigma, ens_size=ens_size)
-    # else:
-    #     ensemble = ensemble_creator(
-    #         q, CI_sigma=CI_sigma, wind_size=wind_size, wind_sigma=wind_sigma,
-    #         ens_size=ens_size)
-    # ens_shape = ensemble.shape
 
     for time_index in range(sat_time_range.size - 1):
         sat_time = sat_time_range[time_index]
@@ -2576,7 +2581,6 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
 
         # temp_ensemble = ensemble.copy()
         # temp_noise = noise.copy()
-    
         if not assim_test: # assums no perturbation
             with pd.HDFStore(ci_file_path, mode='r') as store:
                 q = store.select('ci', columns=[sat_time],
