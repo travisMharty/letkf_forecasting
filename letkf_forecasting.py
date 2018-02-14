@@ -1556,7 +1556,7 @@ def advect_5min_ensemble(
 
         futures = client.map(time_deriv_3_loop,
                              CI_fields, us, vs)
-        temp = client.gather(futures[2:])
+        temp = client.gather(futures)
         temp = np.stack(temp, axis=1)
         ensemble[wind_size:] = temp
         return ensemble
@@ -2779,9 +2779,9 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
             df_ens = pd.DataFrame(
                 data=temp_ensemble.reshape(1, ens_size),
                 index=[sat_time])
-            cx = abs(temp_ensemble[:U_crop_size].values).max()
+            cx = abs(temp_ensemble[:U_crop_size]).max()
             cy = abs(temp_ensemble[U_crop_size:
-                                   U_crop_size + V_crop_size].values).max()
+                                   U_crop_size + V_crop_size]).max()
             T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)/C_max))
             dt = (5*60)/T_steps
             for m in range(num_of_horizons):
@@ -2789,7 +2789,8 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
                 for n in range(3):
                     temp_ensemble = advect_5min_ensemble(
                         ensemble, dt, dx, dy, T_steps,
-                        U_crop_shape, V_crop_shape, client)
+                        U_crop_shape, V_crop_shape,
+                        ci_crop_shape, client)
                     if perturbation_test:
                         temp_ensemble[wind_size:] = perturb_irradiance(
                             temp_ensemble[wind_size:], ci_crop_shape,
