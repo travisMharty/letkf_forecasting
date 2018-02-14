@@ -2628,7 +2628,7 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
         ens_size = ens_shape[0]*ens_shape[1]
 
     # save param_dic
-    with pd.HDFStore(file_path_r, mode='a') as store:
+    with pd.HDFStore(file_path_r, mode='a', complevel=4) as store:
         store.put('param_dic', pd.Series(param_dic))
 
     for time_index in range(sat_time_range.size - 1):
@@ -2653,11 +2653,13 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
             V = np.array(V).reshape(V_crop_shape)
             df_q = pd.DataFrame(data=q.reshape(1, ci_crop_size),
                                 index=[sat_time])
-            with pd.HDFStore(file_path_r) as store:
+            with pd.HDFStore(file_path_r, mode='a', complevel=4) as store:
                 store.put(time2string(sat_time, 'U'),
-                          pd.DataFrame(data=U.ravel(), columns=[sat_time]))
+                          pd.DataFrame(data=U.ravel(), columns=[sat_time]),
+                          format='table')
                 store.put(time2string(sat_time, 'V'),
-                          pd.DataFrame(data=V.ravel(), columns=[sat_time]))
+                          pd.DataFrame(data=V.ravel(), columns=[sat_time]),
+                          format='table')
             cx = abs(U).max()
             cy = abs(V).max()
             T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)/C_max))
@@ -2670,8 +2672,9 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
                 df_q = df_q.append(pd.DataFrame(
                     data=q.reshape(1, ci_crop_size),
                     index=[sat_time + (m + 1)*pd.Timedelta('15min')]))
-            with pd.HDFStore(file_path_r) as store:
-                store.put(time2string(sat_time, 'ci'), df_q.T)
+            with pd.HDFStore(file_path_r, mode='a', complevel=4) as store:
+                store.put(time2string(sat_time, 'ci'), df_q.T,
+                          format='table')
 
         else:
             if time_index != 0:
@@ -2732,10 +2735,10 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
 
                     # need to select only pos in crop domain; convert to crop
                     keep = np.logical_and(
-                        np.logical_and(pos[:, 0] >= wind_x_range[0],
-                                       pos[:, 0] <= wind_x_range[1]),
-                        np.logical_and(pos[:, 1] >= wind_y_range[0],
-                                       pos[:, 1] <= wind_y_range[1]))
+                        np.logical_and(pos[:, 0] > wind_x_range[0],
+                                       pos[:, 0] < wind_x_range[1]),
+                        np.logical_and(pos[:, 1] > wind_y_range[0],
+                                       pos[:, 1] < wind_y_range[1]))
                     pos = pos[keep]
                     u_of = u_of[keep]
                     v_of = v_of[keep]
@@ -2801,8 +2804,9 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
                     index=[sat_time + (m + 1)*pd.Timedelta('15min')]))
                 if num_of_advec == m:
                     ensemble = temp_ensemble.copy()
-            with pd.HDFStore(file_path_r) as store:
-                store.put(time2string(sat_time, 'ensemble'), df_ens.T)
+            with pd.HDFStore(file_path_r, mode='a', complevel=4) as store:
+                store.put(time2string(sat_time, 'ensemble'), df_ens.T,
+                          format='table')
 
     return
 
