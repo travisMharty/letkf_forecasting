@@ -840,10 +840,10 @@ def assimilate_full_wind(ensemble, observations, flat_sensor_indices,
     return ensemble
 
 
-def assimilate_sat_to_wind(ensemble, observations, flat_sensor_indices,
-                           R_inverse, R_inverse_wind, inflation, wind_inflation,
+def assimilate_sat_to_wind(ensemble, observations,
+                           R_inverse_wind, wind_inflation,
                            domain_shape=False, U_shape=False, V_shape=False,
-                           localization_length=False, localization_length_wind=False,
+                           localization_length_wind=False,
                            assimilation_positions=False,
                            assimilation_positions_2d=False,
                            full_positions_2d=False):
@@ -915,8 +915,8 @@ def assimilate_sat_to_wind(ensemble, observations, flat_sensor_indices,
     bad_count = 0
     for interp_position in assimilation_positions:
         # # for the irradiance portion of the ensemble
-        local_positions = nearest_positions(interp_position, domain_shape,
-                                            localization_length)
+        # local_positions = nearest_positions(interp_position, domain_shape,
+        #                                     localization_length)
         # local_ensemble = ensemble_csi[local_positions]
         # local_x_bar = x_bar_csi[local_positions]
         # local_obs = observations[local_positions] # assume H is I
@@ -2469,6 +2469,7 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
     return to_return
     # return ensemble_movie, ens_shape
 
+
 def time2string(Timestamp, variable):
     hour = Timestamp.hour
     minute = Timestamp.minute
@@ -2579,6 +2580,10 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
             noise_init = noise_fun(ci_crop_shape)
             noise = noise_init.copy()
         if assim_sat2wind_test:
+            assim_pos_sat2wind, assim_pos_2d_sat2wind, full_pos_2d_sat2wind = (
+                assimilation_position_generator(ci_crop_shape,
+                                                assim_gs_sat2wind))
+        if assim_sat2wind_test:
             assim_pos_U, assim_pos_2d_U, full_pos_2d_U = (
                 assimilation_position_generator(U_crop_shape,
                                                 assim_gs_sat2wind))
@@ -2678,6 +2683,24 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
 
         else:
             if time_index != 0:
+                if assim_sat2wind_test:
+                    logging.debug('Assim sat2wind')
+                    with pd.HDFStore(ci_file_path, mode='r') as store:
+                        q = store.select('ci', columns=[sat_time],
+                                         where=['index=ci_crop_cols'])
+                    ensemble = assimilate_sat_to_wind(
+                        ensemble=ensemble,
+                        observations=q.ravel(),
+                        R_inverse_wind=1/sig_sat2wind**2,
+                        wind_inflation=infl_sat2wind,
+                        domain_shape=ci_crop_shape,
+                        U_shape=U_crop_shape, V_shape=V_crop_shape,
+                        localization_length_wind=loc_sat2wind,
+                        assimilation_positions=assim_pos_sat2wind,
+                        assimilation_positions_2d=assim_pos_2d_sat2wind,
+                        full_positions_2d=full_pos_2d_sat2wind)
+                    remove_div_test = True
+                    
                 if assim_wrf_test and sat_time == wind_time:
                     logging.debug('Assim WRF')
                     with pd.HDFStore(winds_file_path, mode='r') as store:
@@ -2771,6 +2794,11 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
                         flat_locations=v_of_flat_pos,
                         inflation=infl_of, localization=loc_of,
                         x=x_temp.ravel(), y=y_temp.ravel())
+                if not assim_sat2sat_test:
+                    with pd.HDFStore(ci_file_path, mode='r') as store:
+                        q = store.select('ci', columns=[sat_time],
+                                         where=['index=ci_crop_cols'])
+                    ensemble[wind_size:] = q
 
             if remove_div_test and div_test:
                 logging.debug('remove divergence')
@@ -2806,7 +2834,7 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
                     ensemble = temp_ensemble.copy()
             with pd.HDFStore(file_path_r, mode='a', complevel=4) as store:
                 store.put(time2string(sat_time, 'ensemble'), df_ens.T,
-                          format='table')
+                          format='fixed')
 
     return
 
