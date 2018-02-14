@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 import matplotlib.colors as colors
 
 
@@ -35,7 +34,7 @@ def ensemble_stamps(
         ax[0, j].axis('off')
     try:
         j
-    except:
+    except Exception:
         j=-1
     im = ax[0, j + 1].pcolormesh(
         ensemble.mean(axis=1).reshape(domain_shape),
@@ -88,6 +87,7 @@ def ensemble_stamps(
     # rec.set_clip_on(False)
     plt.show()
     return fig, ax
+
 
 def subplots(data, x, y, subplot_titles, axes_label, sup_title=None,
              cb_label=None, cmap='Blues', vmax=None, adjust=1):

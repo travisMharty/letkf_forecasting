@@ -1,12 +1,8 @@
 import os
-import sys
 import numpy as np
 import pandas as pd
-import xarray as xr
 import scipy.interpolate as interpolate
-from scipy.ndimage.filters import uniform_filter
-sys.path.append('/home/travis/python_code/letkf_forecasting/')
-import prepare_sat_data as prep
+import letkf_forecasting.prepare_sat_data as prep
 
 
 def interp_sat(cloudy_times, clear_times, dx, save_path):

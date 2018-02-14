@@ -1,28 +1,24 @@
-import sys
 import os
 import logging
 import numpy as np
 import pandas as pd
 import scipy as sp
-import xarray as xr
 from scipy import ndimage
 import matplotlib.pyplot as plt
 import scipy.interpolate as interpolate
-import pvlib as pv
 import numexpr as ne
 from distributed import LocalCluster, Client
 from skimage import filters as ski_filters
 import fenics as fe
 import cv2
-from distributed import LocalCluster, Client
+# from numba import jit
 
-sys.path.append('/home/travis/python_code/letkf_forecasting/')
-import prepare_sat_data as prep
-import random_functions as rf
+
+import letkf_forecasting.random_functions as rf
+
 
 a = 6371000  # average radius of earth when modeled as a sphere From wikipedia
 
-# from numba import jit
 
 def time_deriv_3(q, dt, u, dx, v, dy):
     k = space_deriv_4(q, u, dx, v, dy)
@@ -209,10 +205,10 @@ def space_deriv_4(q, u, dx, v, dy):
 #         for i in range(v_n[:, 0].size):
 #             if v_n[i, j] < 0:
 #                 v_n[i, j] = 0
-    
+
 #     # v_s = v[0:2, :].clip(max=0)
 #     v_s = v[0:2, :]
-#     # v_s[v_s > 0] = 0 
+#     # v_s[v_s > 0] = 0
 #     for j in range(v_s[0,:].size):
 #         for i in range(v_s[:, 0].size):
 #             if v_s[i, j] > 0:
@@ -510,7 +506,7 @@ def optimal_interpolation(background, b_sig,
     return background + K.dot(observations - background[flat_locations])
 
 
-def reduced_enkf(ensemble, 
+def reduced_enkf(ensemble,
                  observations, R_sig,
                  flat_locations, inflation,
                  localization=None, x=None, y=None):
@@ -755,7 +751,7 @@ def assimilate_full_wind(ensemble, observations, flat_sensor_indices,
         local_x_bar = x_bar_csi[local_positions]
         local_obs = observations[local_positions] # assume H is I
         C = (local_ensemble.T)*R_inverse  # assume R_inverse is diag+const
-        
+
         eig_value, eig_vector = np.linalg.eigh(
             (ens_size-1)*np.eye(ens_size)/inflation + C.dot(local_ensemble))
         P_tilde = eig_vector.copy()
@@ -768,7 +764,7 @@ def assimilate_full_wind(ensemble, observations, flat_sensor_indices,
         w_a_bar = P_tilde.dot(C.dot(local_obs - local_x_bar))
         W_a += w_a_bar[:, None]
         W_interp[kal_count] = np.ravel(W_a) # separate w_bar??
-        
+
         # should eventually change to assimilate on coarser wind grid
         local_positions = nearest_positions(interp_position, domain_shape,
                                             localization_length_wind)
@@ -803,7 +799,7 @@ def assimilate_full_wind(ensemble, observations, flat_sensor_indices,
     # W_fun = interpolate.LinearNDInterpolator(assimilation_positions_2d[::4],
     #                                          W_interp_wind[::4])
     # W_interp_wind = W_fun(full_positions_2d)
-        
+
     W_fine_mesh = W_interp.reshape(domain_shape[0]*domain_shape[1],
                                    ens_size, ens_size)
     #change this to its own variable
@@ -921,7 +917,7 @@ def assimilate_sat_to_wind(ensemble, observations,
         # local_x_bar = x_bar_csi[local_positions]
         # local_obs = observations[local_positions] # assume H is I
         # C = (local_ensemble.T)*R_inverse  # assume R_inverse is diag+const
-        
+
         # eig_value, eig_vector = np.linalg.eigh(
         #     (ens_size-1)*np.eye(ens_size)/inflation + C.dot(local_ensemble))
         # P_tilde = eig_vector.copy()
@@ -934,7 +930,7 @@ def assimilate_sat_to_wind(ensemble, observations,
         # w_a_bar = P_tilde.dot(C.dot(local_obs - local_x_bar))
         # W_a += w_a_bar[:, None]
         # W_interp[kal_count] = np.ravel(W_a) # separate w_bar??
-        
+
         # should eventually change to assimilate on coarser wind grid
         local_positions = nearest_positions(interp_position, domain_shape,
                                             localization_length_wind)
@@ -969,7 +965,7 @@ def assimilate_sat_to_wind(ensemble, observations,
     # W_fun = interpolate.LinearNDInterpolator(assimilation_positions_2d[::4],
     #                                          W_interp_wind[::4])
     # W_interp_wind = W_fun(full_positions_2d)
-        
+
     # W_fine_mesh = W_interp.reshape(domain_shape[0]*domain_shape[1],
     #                                ens_size, ens_size)
     #change this to its own variable
@@ -1003,7 +999,7 @@ def assimilate_sat_to_wind(ensemble, observations,
 
     # leave csi unchanged
     ensemble_csi += x_bar_csi[:, None]
-    
+
     ensemble = np.concatenate([ensemble_U, ensemble_V, ensemble_csi], axis=0)
 
     return ensemble
@@ -1096,7 +1092,7 @@ def assimilate_wrf(ensemble, observations,
         W_fun = interpolate.LinearNDInterpolator(assimilation_positions_2d,
                                                  W_interp)
         W_interp = W_fun(full_positions_2d)
-        
+
     W_fine_mesh = W_interp.reshape(wind_shape[0]*wind_shape[1],
                                    ens_size, ens_size)
     ensemble = x_bar[:, None] + np.einsum(
@@ -1479,7 +1475,7 @@ def advect_5min_distributed(
                              CI_fields, u_perts, v_perts)
         q = futures[0].result()
         q = q.reshape(domain_shape)
- 
+
 
 
 def advect_5min_distributed_wind(
@@ -1946,7 +1942,7 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
                                 fe.Point(V_crop_shape[1] - 1, U_crop_shape[0] - 1),
                                 V_crop_shape[1] - 1, U_crop_shape[0] - 1)
         FunctionSpace_wind = fe.FunctionSpace(mesh, 'P', 1)
-        
+
     assimilation_positions, assimilation_positions_2d, full_positions_2d = (
         assimilation_position_generator(domain_crop_shape,
                                         assimilation_grid_size))
@@ -1980,13 +1976,13 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
             q, CI_sigma=CI_sigma, wind_size=wind_size, wind_sigma=wind_sigma,
             ens_size=ens_size)
     ens_shape = ensemble.shape
-    
+
 
     # # delete
     # ensemble_movie = pd.DataFrame(data=ensemble.ravel()[None, :],
     #                            index=[sat_time_range[0]])
     # # delete
-    
+
     ensemble_15 = pd.DataFrame(data=ensemble.ravel()[None, :]*np.nan,
                                index=[sat_time_range[0]])
     ensemble_30 = ensemble_15.copy()
@@ -2037,7 +2033,7 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
             u_of_flat_pos = np.ravel_multi_index(pos, U_crop_shape)
             v_of_flat_pos = np.ravel_multi_index(pos, V_crop_shape)
             # retrieve OF vectors
-                                       
+
         int_index_wind = U_crop.index.get_loc(sat_time, method='pad')
         this_U = U_crop.iloc[int_index_wind].values.reshape(U_crop_shape)
         this_V = V_crop.iloc[int_index_wind].values.reshape(V_crop_shape)
@@ -2096,7 +2092,7 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
                     inflation=inflation_of, localization=localization_of,
                     x=x_temp.ravel(), y=y_temp.ravel())
 
-                x_temp = np.arange(V_crop_shape[1])*dx/1000 
+                x_temp = np.arange(V_crop_shape[1])*dx/1000
                 y_temp = np.arange(V_crop_shape[0])*dx/1000
                 x_temp, y_temp = np.meshgrid(x_temp, y_temp)
                 ensemble[U_crop_size:U_crop_size + V_crop_size] = reduced_enkf(
@@ -2123,7 +2119,7 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
                 # plt.title('assim of V')
                 # plt.colorbar(im)
                 # # delete
-                
+
                 # ensemble[:U_crop_size] = assimilate(
                 #     ensemble=ensemble[:U_crop_size],
                 #     observations=u_of,
@@ -2189,7 +2185,7 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
         # plt.colorbar(im)
         # plt.show()
         # # delete
-        
+
         logging.info(str(num_of_advec))
         logging.info('15 min')
         for n in range(3):
@@ -2234,7 +2230,7 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
         # plt.axes().set_aspect('equal')
         # plt.colorbar(im)
         # # delete
-            
+
         ensemble_15.loc[sat_time_range[time_index] + pd.Timedelta('15min')] = (
             temp_ensemble.ravel())
         advected_15.loc[sat_time_range[time_index] + pd.Timedelta('15min')] = (
@@ -2364,20 +2360,20 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
         # plt.axes().set_aspect('equal')
         # plt.colorbar(im)
         # plt.title('noise')
-    
+
         # plt.figure()
         # im = plt.pcolormesh(ensemble[wind_size:].mean(axis=1).reshape(domain_crop_shape))
         # plt.axes().set_aspect('equal')
         # plt.colorbar(im)
         # plt.title('before replace noise')
         # # delete
-        
+
         noise = noise.ravel()
         ensemble[wind_size:] = (q.ravel()[:, None]*noise[:, None] +
                                 ensemble[wind_size:, :]*(1 - noise[:, None]))
 
         noise = noise_init.copy()
-        
+
         # # delete
         # plt.figure()
         # im = plt.pcolormesh(ensemble[wind_size:].mean(axis=1).reshape(domain_crop_shape))
@@ -2385,7 +2381,7 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
         # plt.colorbar(im)
         # plt.title('before assim')
         # # delete
-        
+
         if wind_in_ensemble:#and time_index != 2:
             # assimilate wind and irradiance simultaneously
             if assim_sat_test:
@@ -2494,7 +2490,7 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
                     ens_num=None, winds_sigma=None, ci_sigma=None,
                     Lx=None, Ly=None, tol=None,
                     pert_sigma=None, pert_mean=None, edge_weight=None):
-    
+
     # read initial data from satellite store
     with pd.HDFStore(ci_file_path, mode='r') as store:
         sat_dates = store.select('ci', start=0, end=0).columns
@@ -2524,7 +2520,7 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
     V_crop_shape = v_metadata['crop_shape']
     V_crop_size = V_crop_shape[0]*V_crop_shape[1]
     wind_size = U_crop_size + V_crop_size
-    
+
     # Use all possible satellite images in system unless told to limit
     if (start_time is None) & (end_time is None):
         sat_time_range = sat_dates
@@ -2596,7 +2592,7 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
                                                 assim_gs_wrf))
             assim_pos_V_wrf, assim_pos_2d_V_wrf, full_pos_2d_V_wrf = (
                 assimilation_position_generator(V_crop_shape,
-                                                assim_gs_wrf))        
+                                                assim_gs_wrf))
         if perturbation_test:
             rf_eig, rf_vectors = rf.eig_2d_covariance(
                 x=x_crop_range, y=y_crop_range,
@@ -2700,7 +2696,7 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
                         assimilation_positions_2d=assim_pos_2d_sat2wind,
                         full_positions_2d=full_pos_2d_sat2wind)
                     remove_div_test = True
-                    
+
                 if assim_wrf_test and sat_time == wind_time:
                     logging.debug('Assim WRF')
                     with pd.HDFStore(winds_file_path, mode='r') as store:

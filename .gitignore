@@ -31,3 +31,4 @@ plot*.ipynb
 delete*
 Untitled*
 optical_flow*
+*.egg-info

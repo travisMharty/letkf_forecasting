@@ -5,8 +5,6 @@ import pvlib as pv
 from glob import glob
 from scipy import interpolate
 
-import matplotlib.pyplot as plt
-
 
 def get_all_files(start_hour=11, end_hour=3):
     """
@@ -21,17 +19,17 @@ def get_all_files(start_hour=11, end_hour=3):
     for hour in hour_range:
         temp = glob(
             ('/a2/uaren/goes_images/april/goes15.2014.*.{hour:02d}*.BAND_01.nc'
-                          .format(hour=hour)))
+             ).format(hour=hour))
         files = files + temp
         temp = glob(
             ('/a2/uaren/goes_images/may/goes15.2014.*.{hour:02d}*.BAND_01.nc'
-                          .format(hour=hour)))
+             ).format(hour=hour))
         files = files + temp
         temp = glob(
             ('/a2/uaren/goes_images/june/goes15.2014.*.{hour:02d}*.BAND_01.nc'
-                          .format(hour=hour)))
+             ).format(hour=hour))
         files = files + temp
-    files.sort(key = lambda x: x.split('.2014.')[1])
+    files.sort(key=lambda x: x.split('.2014.')[1])
     return files
 
 
@@ -66,6 +64,7 @@ def sphere_to_lcc(lats, lons, R=6370, truelat0=31.7, truelat1=31.7,
     y = R * (rho0 - rho * np.cos(n * (lambdas - lambda0)))
 
     return x, y
+
 
 def lcc_to_sphere(x, y, R=6370, truelat0=31.7, truelat1=31.7,
                   ref_lat=31.68858, stand_lon=-113.7):
@@ -118,14 +117,15 @@ def fine_crop(lat, lon, sat, x_slice, y_slice):
 
 
 def midday(data, loc, max_zenith):
-    if type(data) == type(pd.DataFrame()):
+    if isinstance(data, pd.DataFrame):
         times = data.index
         zenith = loc.get_solarposition(times).loc[:, 'apparent_zenith']
         night = np.where(zenith >= max_zenith)[0]
         data.ix[night] = np.NAN
         data = data.dropna()
         return data
-    if type(data) == type(xr.Dataset()):
+
+    if isinstance(data, xr.Dataset):
         times = (pd.to_datetime(data.time.values)
                  .tz_localize('UTC').tz_convert('MST'))
         zenith = loc.get_solarposition(times).loc[:, 'apparent_zenith']
@@ -198,6 +198,7 @@ def get_clearsky(times, elevation, lats, lons):
 
     return clearsky
 
+
 def main(dist_from_center, dx, x_slice, y_slice,
          tus_lat=32.2217, tus_lon=-110.9265):
     tus_x, tus_y = np.array(sphere_to_lcc(tus_lat, tus_lon))
@@ -230,7 +231,7 @@ def main(dist_from_center, dx, x_slice, y_slice,
         sat = xr.open_dataset(file)
         data = fine_crop(lat, lon, sat, x_slice, y_slice)[None, :, :]
         temp = xr.Dataset(
-            {'data': (['time','south_north','west_east'], data)},
+            {'data': (['time', 'south_north', 'west_east'], data)},
             coords={'west_east': west_east,
                     'south_north': south_north,
                     'lon': (['south_north', 'west_east'], lon),
@@ -240,8 +241,9 @@ def main(dist_from_center, dx, x_slice, y_slice,
                     'time': sat.time.values.astype('int')})
         sat_dataset = xr.concat([sat_dataset, temp], dim='time')
         count += 1
-        if count % 500==0:
-            sat_dataset.to_netcdf(path='/a2/uaren/goes_images/crop/sat_images.nc')
+        if count % 500 == 0:
+            sat_dataset.to_netcdf(
+                path='/a2/uaren/goes_images/crop/sat_images.nc')
             print(count)
             print(pd.Timestamp(int(sat.time.values.astype('int')))
                   .tz_localize('UTC').tz_convert('MST'))

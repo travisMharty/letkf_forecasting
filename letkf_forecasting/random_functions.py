@@ -1,11 +1,12 @@
 import numpy as np
 
+
 def get_cov(n, L, dx):
     C = np.zeros([n, n])
     for ii in np.arange(n):
         for jj in np.arange(ii, n):
             dist = abs(ii - jj)
-            #dist = np.min([abs(ii - jj), np.mod(-abs(ii - jj), n)])
+            # dist = np.min([abs(ii - jj), np.mod(-abs(ii - jj), n)])
             C[ii, jj] = np.exp(-(dist*dx)**2/(2*L**2))
     return (C + C.T) - np.diag(np.diag(C))
 
@@ -22,7 +23,7 @@ def get_random_function_1d(x, L):
     go = 1
     counter = 1
     tol = 0.05
-    while go==1:
+    while go == 1:
         if (e[:counter]**2).sum() > (1 - tol)*(e**2).sum():
             go = 0
         else:
@@ -51,6 +52,7 @@ def get_approx_eig(C, tol):
     eig_num = approx(e, tol)
     return e[:eig_num], v[:, :eig_num]
 
+
 def get_random_function_2d(x, y, Lx, Ly, tol):
     dx = x[1] - x[0]
     dy = y[1] - y[0]
@@ -63,7 +65,7 @@ def get_random_function_2d(x, y, Lx, Ly, tol):
     e = np.kron(ey, ex)
     v = np.kron(vy, vx)
 
-    ## even more reduction
+    # even more reduction
     sorted_indices = np.argsort(e)
     e = e[sorted_indices]
     v = v[:, sorted_indices]
@@ -86,7 +88,7 @@ def eig_2d_covariance(x, y, Lx, Ly, tol):
     e = np.kron(ey, ex)
     v = np.kron(vy, vx)
 
-    ## even more reduction
+    # even more reduction
     sorted_indices = np.argsort(e)
     sorted_indices = sorted_indices[::-1]
     e = e[sorted_indices]
