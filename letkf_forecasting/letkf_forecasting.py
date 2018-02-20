@@ -2185,15 +2185,12 @@ def forecast_system(param_dic, data_file_path,
             q = store.variables['ci'][sat_times == sat_time,
                                       sn_min_crop:sn_max_crop + 1,
                                       we_min_crop:we_max_crop + 1]
-            U = store.varaibles['U'][wind_tiems == wind_time,
+            U = store.varaibles['U'][wind_times == wind_time,
                                      sn_min_crop:sn_max_crop + 1,
-                                     we_mon]
-            U = store.select('U', columns=[wind_time],
-                             where=['index=U_crop_cols'])
-            V = store.select('V', columns=[wind_time],
-                             where=['index=V_crop_cols'])
-        U = np.array(U).reshape(U_crop_shape)
-        V = np.array(V).reshape(V_crop_shape)
+                                     we_stag_min_crop:we_stag_min_crop + 1]
+            V = store.varaibles['V'][wind_times == wind_time,
+                                     sn_stag_min_crop:sn_stag_max_crop + 1,
+                                     we_min_crop:we_min_crop + 1]
         ensemble = ensemble_creator_wind(
             q, U, V,
             CI_sigma=ci_sigma, wind_sigma=winds_sigma, ens_size=ens_num)
@@ -2215,17 +2212,16 @@ def forecast_system(param_dic, data_file_path,
             sat_times[time_index + 1] -
             sat_times[time_index]).seconds/(60*15))
         if not assim_test:  # assums no perturbation
-            with pd.HDFStore(ci_file_path, mode='r') as store:
-                q = store.select('ci', columns=[sat_time],
-                                 where=['index=ci_crop_cols'])
-            q = np.array(q).reshape(ci_crop_shape)
-            with pd.HDFStore(winds_file_path, mode='r') as store:
-                U = store.select('U', columns=[wind_time],
-                                 where=['index=U_crop_cols'])
-                V = store.select('V', columns=[wind_time],
-                                 where=['index=V_crop_cols'])
-            U = np.array(U).reshape(U_crop_shape)
-            V = np.array(V).reshape(V_crop_shape)
+            with Dataset(data_file_path, mode='r') as store:
+                q = store.variables['ci'][sat_times == sat_time,
+                                          sn_min_crop:sn_max_crop + 1,
+                                          we_min_crop:we_max_crop + 1]
+                U = store.varaibles['U'][wind_times == wind_time,
+                                         sn_min_crop:sn_max_crop + 1,
+                                         we_stag_min_crop:we_stag_min_crop + 1]
+                V = store.varaibles['V'][wind_times == wind_time,
+                                         sn_stag_min_crop:sn_stag_max_crop + 1,
+                                         we_min_crop:we_min_crop + 1]
             df_q = pd.DataFrame(data=q.reshape(1, ci_crop_size),
                                 index=[sat_time])
             with pd.HDFStore(file_path_r, mode='a', complevel=4) as store:
