@@ -2079,8 +2079,8 @@ def forecast_system(param_dic, data_file_path,
         sn_stag_max_crop = store.variables['V'].sn_max_crop
         U_shape = store.variables['U'].shape[1:3]
         V_shape = store.variables['V'].shape[1:3]
-    dx = we[1] - we[0]
-    dy = sn[1] - sn[0]
+    dx = (we[1] - we[0])*1000
+    dy = (sn[1] - sn[0])*1000  # dx, dy in m not km
     max_horizon = pd.Timedelta(max_horizon)
     ci_crop_shape = np.array([sn_max_crop - sn_min_crop + 1,
                               we_max_crop - we_min_crop + 1],
@@ -2094,16 +2094,22 @@ def forecast_system(param_dic, data_file_path,
     V_crop_shape = np.array([sn_stag_max_crop - sn_stag_min_crop + 1,
                              we_max_crop - we_min_crop + 1],
                             dtype='int')
-    print(U_crop_shape[0] - 1)
-    print(V_crop_shape[1] - 1)
     U_crop_size = U_crop_shape[0]*U_crop_shape[1]
     V_crop_size = V_crop_shape[0]*V_crop_shape[1]
     wind_size = U_crop_size + V_crop_size
 
     # Use all possible satellite images in system unless told to limit
-    if not (start_time is None) & (end_time is None):
+    if (start_time != 0) & (end_time != 0):
         sat_times_temp = (pd.date_range(start_time, end_time, freq='15 min')
                           .tz_localize('MST'))
+        sat_times = sat_times.intersection(sat_times_temp)
+    elif start_time != 0:
+        sat_times_temp = (pd.date_range(start_time, sat_times[-1],
+                                        freq='15 min').tz_localize('MST'))
+        sat_times = sat_times.intersection(sat_times_temp)
+    else:
+        sat_times_temp = (pd.date_range(sat_times[0], end_time,
+                                        freq='15 min').tz_localize('MST'))
         sat_times = sat_times.intersection(sat_times_temp)
 
     # Advection calculations
@@ -2117,19 +2123,20 @@ def forecast_system(param_dic, data_file_path,
     home = os.path.expanduser('~')
     run_num = 0
     file_path_r = (f'{home}/results/{year:04}'
-                   f'/{month:02}/{day:02}/run{run_num:03}')
+                   f'/{month:02}/{day:02}')
     if not os.path.exists(file_path_r):
         os.makedirs(file_path_r)
-        file_path_r = os.path.join(file_path_r, 'results.h5')
+        file_path_r = os.path.join(file_path_r,
+                                   f'results{run_num:03}.nc')
+    elif len(os.listdif(file_path_r)) == 0:
+        file_path_r = os.path.join(file_path_r,
+                                   f'results{run_num:03}.nc')
     else:
-        file_path_r = os.path.split(file_path_r)[0]
         run_num = os.listdir(file_path_r)
         run_num.sort()
         run_num = run_num[-1]
         run_num = int(run_num[-3:]) + 1
-        file_path_r = os.path.join(file_path_r, f'run{run_num:03}')
-        os.makedirs(file_path_r)
-        file_path_r = os.path.join(file_path_r, 'results.h5')
+        file_path_r = os.path.join(file_path_r, f'results{run_num:03}.nc')
 
     # Creat stuff used to remove divergence
     remove_div_test = div_test
@@ -2210,9 +2217,9 @@ def forecast_system(param_dic, data_file_path,
         ens_size = ens_shape[0]*ens_shape[1]
 
     # save param_dic
-    with pd.HDFStore(file_path_r, mode='a', complevel=4) as store:
-        store.put('param_dic', pd.Series(param_dic))
-
+    with Dataset(file_path_r, mode='w') as store:
+        for k, v in param_dic.items():
+            setattr(store, k, v)
     for time_index in range(sat_times.size - 1):
         sat_time = sat_times[time_index]
         logging.info(str(sat_time))
