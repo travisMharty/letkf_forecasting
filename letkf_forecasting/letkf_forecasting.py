@@ -2170,12 +2170,10 @@ def forecast_system(param_dic, data_file_path,
             rf_approx_var = (
                 rf_vectors * rf_eig[None, :] * rf_vectors).sum(-1).mean()
         if assim_of_test:
-            U_crop_pos = np.unravel_index(U_crop_cols, U_shape)
-            V_crop_pos = np.unravel_index(V_crop_cols, V_shape)
-            wind_x_range = (np.max([U_crop_pos[1].min(), V_crop_pos[1].min()]),
-                            np.min([U_crop_pos[1].max(), V_crop_pos[1].max()]))
-            wind_y_range = (np.max([U_crop_pos[0].min(), V_crop_pos[0].min()]),
-                            np.min([U_crop_pos[0].max(), V_crop_pos[0].max()]))
+            wind_x_range = (np.max([we_min_crop, we_stag_min_crop]),
+                            np.min([we_max_crop, we_stag_max_crop]))
+            wind_y_range = (np.max([sn_min_crop, sn_stag_min_crop]),
+                            np.min([sn_max_crop, sn_stag_max_crop]))
             del U_crop_pos, V_crop_pos
         sat_time = sat_times[0]
         int_index_wind = wind_times.get_loc(sat_times[0],
@@ -2218,10 +2216,10 @@ def forecast_system(param_dic, data_file_path,
                                           we_min_crop:we_max_crop + 1]
                 U = store.varaibles['U'][wind_times == wind_time,
                                          sn_min_crop:sn_max_crop + 1,
-                                         we_stag_min_crop:we_stag_min_crop + 1]
+                                         we_stag_min_crop:we_stag_max_crop + 1]
                 V = store.varaibles['V'][wind_times == wind_time,
                                          sn_stag_min_crop:sn_stag_max_crop + 1,
-                                         we_min_crop:we_min_crop + 1]
+                                         we_min_crop:we_max_crop + 1]
             df_q = pd.DataFrame(data=q.reshape(1, ci_crop_size),
                                 index=[sat_time])
             with pd.HDFStore(file_path_r, mode='a', complevel=4) as store:
@@ -2251,9 +2249,10 @@ def forecast_system(param_dic, data_file_path,
             if time_index != 0:
                 if assim_sat2wind_test:
                     logging.debug('Assim sat2wind')
-                    with pd.HDFStore(ci_file_path, mode='r') as store:
-                        q = store.select('ci', columns=[sat_time],
-                                         where=['index=ci_crop_cols'])
+                    with Dataset(data_file_path, mode='r') as store:
+                        q = store.variables['ci'][sat_times == sat_time,
+                                                  sn_min_crop:sn_max_crop + 1,
+                                                  we_min_crop:we_max_crop + 1]
                     ensemble = assimilate_sat_to_wind(
                         ensemble=ensemble,
                         observations=q.ravel(),
@@ -2266,16 +2265,19 @@ def forecast_system(param_dic, data_file_path,
                         assimilation_positions_2d=assim_pos_2d_sat2wind,
                         full_positions_2d=full_pos_2d_sat2wind)
                     remove_div_test = True
+                    del q
 
                 if assim_wrf_test and sat_time == wind_time:
                     logging.debug('Assim WRF')
-                    with pd.HDFStore(winds_file_path, mode='r') as store:
-                        U = np.array(
-                            store.select('U', columns=[wind_time],
-                                         where=['index=U_crop_cols']))
-                        V = np.array(
-                            store.select('V', columns=[wind_time],
-                                         where=['index=V_crop_cols']))
+                    with Dataset(data_file_path, mode='r') as store:
+                        U = store.varaibles['U'][wind_times == wind_time,
+                                                 sn_min_crop:sn_max_crop + 1,
+                                                 we_stag_min_crop:
+                                                 we_stag_max_crop + 1]
+                        V = store.varaibles['V'][wind_times == wind_time,
+                                                 sn_stag_min_crop:
+                                                 sn_stag_max_crop + 1,
+                                                 we_min_crop:we_max_crop + 1]
                     remove_div_test = True
                     ensemble[:U_crop_size] = assimilate_wrf(
                         ensemble=ensemble[:U_crop_size],
@@ -2300,22 +2302,20 @@ def forecast_system(param_dic, data_file_path,
                         assimilation_positions=assim_pos_V_wrf,
                         assimilation_positions_2d=assim_pos_2d_V_wrf,
                         full_positions_2d=full_pos_2d_V_wrf)
+                    del U, V
                 if assim_of_test:
                     logging.debug('calc of')
                     # retreive OF vectors
                     time0 = sat_times[time_index - 1]
-                    with pd.HDFStore(ci_file_path, mode='r') \
-                             as ci_store, \
-                             pd.HDFStore(winds_file_path, mode='r') \
-                             as winds_store:
-                        this_U = winds_store.select(
-                            'U', columns=[wind_time]).values.reshape(U_shape)
-                        this_V = winds_store.select(
-                            'V', columns=[wind_time]).values.reshape(V_shape)
-                        image0 = ci_store.select(
-                            'ci', columns=[time0]).values.reshape(ci_shape)
-                        image1 = ci_store.select(
-                            'ci', columns=[sat_time]).values.reshape(ci_shape)
+                    with Dataset as store:
+                        this_U = store.variables['U'][wind_times == wind_time,
+                                                      :, :]
+                        this_V = store.variables['V'][wind_times == wind_time,
+                                                      :, :]
+                        image0 = store.variables['ci'][sat_times == time0,
+                                                       :, :]
+                        image1 = store.variables['ci'][sat_times == sat_time,
+                                                       :, :]
                     u_of, v_of, pos = optical_flow(image0, image1,
                                                    time0, sat_time,
                                                    this_U, this_V)
@@ -2361,10 +2361,11 @@ def forecast_system(param_dic, data_file_path,
                         inflation=infl_of, localization=loc_of,
                         x=x_temp.ravel(), y=y_temp.ravel())
                 if not assim_sat2sat_test:
-                    with pd.HDFStore(ci_file_path, mode='r') as store:
-                        q = store.select('ci', columns=[sat_time],
-                                         where=['index=ci_crop_cols'])
-                    ensemble[wind_size:] = q
+                    with Dataset(data_file_path, mode='r') as store:
+                        q = store.variables['ci'][sat_times == sat_time,
+                                                  sn_min_crop:sn_max_crop + 1,
+                                                  we_min_crop:we_max_crop + 1]
+                    ensemble[wind_size:] = q.ravel()
 
             if remove_div_test and div_test:
                 logging.debug('remove divergence')
