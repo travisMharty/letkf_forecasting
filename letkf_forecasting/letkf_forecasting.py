@@ -1,6 +1,8 @@
 import os
 import logging
 import numpy as np
+from netCDF4 import Dataset, date2num, num2date
+from distributed import LocalCluster, Client  # delete
 import pandas as pd
 import scipy as sp
 from scipy import ndimage
@@ -33,66 +35,66 @@ def space_deriv_4(q, u, dx, v, dy):
     F_y = np.zeros_like(v)
 
     # with numexpr
-    u22 = u[:, 2:-2]
-    q21 = q[:, 2:-1]
-    q12 = q[:, 1:-2]
-    q3 = q[:, 3:]
-    qn3 = q[:, :-3]
+    u22 = u[:, 2:-2]  # noqa
+    q21 = q[:, 2:-1]  # noqa
+    q12 = q[:, 1:-2]  # noqa
+    q3 = q[:, 3:]     # noqa
+    qn3 = q[:, :-3]   # noqa
     F_x[:, 2:-2] = ne.evaluate('u22 / 12 * (7 * (q21 + q12) - (q3 + qn3))')
 
-    v22 = v[2:-2, :]
-    q21 = q[2:-1, :]
-    q12 = q[1:-2, :]
-    q3 = q[3:, :]
-    qn3 = q[:-3, :]
+    v22 = v[2:-2, :]            # noqa
+    q21 = q[2:-1, :]            # noqa
+    q12 = q[1:-2, :]            # noqan
+    q3 = q[3:, :]               # noqa
+    qn3 = q[:-3, :]             # noqa
     F_y[2:-2, :] = ne.evaluate('v22 / 12 * (7 * (q21 + q12) - (q3 + qn3))')
 
     qo22 = qout[:, 2:-2]
-    fx32 = F_x[:, 3:-2]
-    fx23 = F_x[:, 2:-3]
+    fx32 = F_x[:, 3:-2]         # noqa
+    fx23 = F_x[:, 2:-3]         # noqa
     qout[:, 2:-2] = ne.evaluate('qo22 - (fx32 - fx23) / dx')
 
-    qo22 = qout[2:-2, :]
-    fy32 = F_y[3:-2, :]
-    fy23 = F_y[2:-3, :]
+    qo22 = qout[2:-2, :]        # noqa
+    fy32 = F_y[3:-2, :]         # noqa
+    fy23 = F_y[2:-3, :]         # noqa
     qout[2:-2, :] = ne.evaluate('qo22 - (fy32 - fy23) / dy')
 
     # boundary calculation
-    u_w = u[:, 0:2].clip(max=0)
-    u_e = u[:, -2:].clip(min=0)
+    u_w = u[:, 0:2].clip(max=0)  # noqa
+    u_e = u[:, -2:].clip(min=0)  # noqa
 
     qo02 = qout[:, 0:2]
     q13 = q[:, 1:3]
     q02 = q[:, 0:2]
-    u13 = u[:, 1:3]
-    u02 = u[:, 0:2]
+    u13 = u[:, 1:3]             # noqa
+    u02 = u[:, 0:2]             # noqa
     qout[:, 0:2] = ne.evaluate(
         'qo02 - ((u_w/dx)*(q13 - q02) + (q02/dx)*(u13 - u02))')
 
     qo2 = qout[:, -2:]
     q2 = q[:, -2:]
     q31 = q[:, -3:-1]
-    u2 = u[:, -2:]
-    u31 = u[:, -3:-1]
+    u2 = u[:, -2:]              # noqa
+    u31 = u[:, -3:-1]           # noqa
     qout[:, -2:] = ne.evaluate(
         'qo2 - ((u_e/dx)*(q2 - q31) + (q2/dx)*(u2 - u31))')
 
-    v_n = v[-2:, :].clip(min=0)
-    v_s = v[0:2, :].clip(max=0)
+    v_n = v[-2:, :].clip(min=0)  # noqa
+    v_s = v[0:2, :].clip(max=0)  # noqa
 
-    qo02 = qout[0:2, :]
-    q13 = q[1:3, :]
-    q02 = q[0:2, :]
-    v13 = v[1:3, :]
-    v02 = v[0:2, :]
+    qo02 = qout[0:2, :]         # noqa
+    q13 = q[1:3, :]             # noqa
+    q02 = q[0:2, :]             # noqa
+    v13 = v[1:3, :]             # noqa
+    v02 = v[0:2, :]             # noqa
     qout[0:2, :] = ne.evaluate(
         'qo02 - ((v_s/dx)*(q13 - q02) + (q02/dx)*(v13 - v02))')
 
-    qo2 = qout[-2:, :]
-    q2 = q[-2:, :]
-    q31 = q[-3:-1, :]
-    v2 = v[-2:, :]
-    v31 = v[-3:-1, :]
+    qo2 = qout[-2:, :]          # noqa
+    q2 = q[-2:, :]              # noqa
+    q31 = q[-3:-1, :]           # noqa
+    v2 = v[-2:, :]              # noqa
+    v31 = v[-3:-1, :]           # noqa
     qout[-2:, :] = ne.evaluate(
         'qo2 - ((v_n/dx)*(q2 - q31) + (q2/dx)*(v2 - v31))')
     return qout
@@ -2035,7 +2037,7 @@ def time2string(Timestamp, variable):
     return f'MST{hour:02}{minute:02}_' + variable
 
 
-def forecast_system(param_dic, ci_file_path, winds_file_path,
+def forecast_system(param_dic, data_file_path,
                     assim_test=False, perturbation_test=False,
                     div_test=False,
                     assim_of_test=False, assim_sat2sat_test=False,
@@ -2055,48 +2057,52 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
                     pert_sigma=None, pert_mean=None, edge_weight=None):
 
     # read initial data from satellite store
-    with pd.HDFStore(ci_file_path, mode='r') as store:
-        sat_dates = store.select('ci', start=0, end=0).columns
-        ci_crop_cols = np.array(store.get('crop_cols'))
-        x_crop = store.get('x').values[ci_crop_cols]
-        y_crop = store.get('y').values[ci_crop_cols]
-        ci_metadata = dict(store.get('metadata'))
-    dx = ci_metadata['dx']
-    dy = ci_metadata['dy']
-    ci_shape = np.array(ci_metadata['shape'])
-    ci_crop_shape = np.array(ci_metadata['crop_shape'])
+    with Dataset(data_file_path, mode='r') as store:
+        sat_times = store.variables['time']
+        sat_times = num2date(sat_times[:], sat_times.units)
+        sat_times = pd.DatetimeIndex(
+            sat_times).tz_localize('UTC').tz_convert('MST')
+        we = store.variables['west_east'][:]
+        sn = store.variables['south_north'][:]
+        ci_shape = store.variables['ci'].shape[1:3]
+        we_min_crop = store.variables['ci'].we_min_crop
+        we_max_crop = store.variables['ci'].we_max_crop
+        sn_min_crop = store.variables['ci'].sn_min_crop
+        sn_max_crop = store.variables['ci'].sn_max_crop
+        wind_times = store.variables['time_wind']
+        wind_times = num2date(wind_times[:], )
+        we_stag_min_crop = store.variables['U'].we_min_crop
+        we_stag_max_crop = store.variables['U'].we_max_crop
+        sn_stag_min_crop = store.variables['V'].sn_min_crop
+        sn_stag_max_crop = store.variables['V'].sn_max_crop
+        U_shape = store.varialbes['U'].shape[1:3]
+        V_shape = store.variables['V'].shape[1:3]
+    dx = we[1] - we[0]
+    dy = sn[1] - sn[0]
+    ci_crop_shape = np.array([sn_max_crop - sn_min_crop + 1,
+                              we_max_crop - we_min_crop + 1])
     ci_crop_size = ci_crop_shape[0]*ci_crop_shape[1]
-    x_crop_range = x_crop.reshape(ci_crop_shape)[0, :]
-    y_crop_range = y_crop.reshape(ci_crop_shape)[:, 0]
-
-    # read inital data from winds store
-    with pd.HDFStore(winds_file_path, mode='r') as store:
-        wind_time_range = store.select('U', start=0, end=0).columns
-        U_crop_cols = np.array(store.get('U_crop_cols'))
-        V_crop_cols = np.array(store.get('V_crop_cols'))
-        u_metadata = dict(store.get('U_metadata'))
-        v_metadata = dict(store.get('V_metadata'))
-    U_shape = u_metadata['shape']
-    U_crop_shape = u_metadata['crop_shape']
+    x_crop_range = we[we_min_crop: we_max_crop + 1]
+    y_crop_range = sn[sn_min_crop: sn_min_crop + 1]
+    U_crop_shape = np.array([sn_max_crop - sn_min_crop + 1,
+                             we_stag_max_crop - we_stag_min_crop + 1])
+    V_crop_shape = np.array([sn_stag_max_crop - sn_stag_min_crop + 1,
+                             we_max_crop - we_min_crop + 1])
     U_crop_size = U_crop_shape[0]*U_crop_shape[1]
-    V_shape = u_metadata['shape']
-    V_crop_shape = v_metadata['crop_shape']
     V_crop_size = V_crop_shape[0]*V_crop_shape[1]
     wind_size = U_crop_size + V_crop_size
 
     # Use all possible satellite images in system unless told to limit
-    if (start_time is None) & (end_time is None):
-        sat_time_range = sat_dates
-    else:
-        sat_time_range = (pd.date_range(start_time, end_time, freq='15 min')
+    if not (start_time is None) & (end_time is None):
+        sat_times_temp = (pd.date_range(start_time, end_time, freq='15 min')
                           .tz_localize('MST'))
-        sat_time_range = sat_time_range.intersection(sat_dates)
+        sat_times = sat_times.intersection(sat_times_temp)
 
     # Advection calculations
     num_of_horizons = int((max_horizon/15).seconds/60)
 
     # Create path to save results
-    date = sat_time_range[0].date()
+    date = sat_times[0].date()
     year = date.year
     month = date.month
     day = date.day
@@ -2128,6 +2134,11 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
 
     # Create things needed for assimilations
     if assim_test:
+        # start cluster
+        cluster = LocalCluster(n_workers=n_workers,
+                               scheduler_port=scheduler_port,  # hardwired
+                               diagnostics_port=diagnostics_port)  # hardwired
+        client = Client(cluster)
         if assim_sat2sat_test:
             assim_pos, assim_pos_2d, full_pos_2d = (
                 assimilation_position_generator(ci_crop_shape,
@@ -2166,15 +2177,17 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
             wind_y_range = (np.max([U_crop_pos[0].min(), V_crop_pos[0].min()]),
                             np.min([U_crop_pos[0].max(), V_crop_pos[0].max()]))
             del U_crop_pos, V_crop_pos
-        sat_time = sat_time_range[0]
-        int_index_wind = wind_time_range.get_loc(sat_time_range[0],
-                                                 method='pad')
-        wind_time = wind_time_range[int_index_wind]
-        with pd.HDFStore(ci_file_path, mode='r') as store:
-            q = store.select('ci', columns=[sat_time],
-                             where=['index=ci_crop_cols'])
-        q = np.array(q).reshape(ci_crop_shape)
-        with pd.HDFStore(winds_file_path, mode='r') as store:
+        sat_time = sat_times[0]
+        int_index_wind = wind_times.get_loc(sat_times[0],
+                                            method='pad')
+        wind_time = wind_times[int_index_wind]
+        with Dataset(data_file_path, mode='r') as store:
+            q = store.variables['ci'][sat_times == sat_time,
+                                      sn_min_crop:sn_max_crop + 1,
+                                      we_min_crop:we_max_crop + 1]
+            U = store.varaibles['U'][wind_tiems == wind_time,
+                                     sn_min_crop:sn_max_crop + 1,
+                                     we_mon]
             U = store.select('U', columns=[wind_time],
                              where=['index=U_crop_cols'])
             V = store.select('V', columns=[wind_time],
@@ -2192,15 +2205,15 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
     with pd.HDFStore(file_path_r, mode='a', complevel=4) as store:
         store.put('param_dic', pd.Series(param_dic))
 
-    for time_index in range(sat_time_range.size - 1):
-        sat_time = sat_time_range[time_index]
+    for time_index in range(sat_times.size - 1):
+        sat_time = sat_times[time_index]
         logging.info(str(sat_time))
-        int_index_wind = wind_time_range.get_loc(sat_time_range[0],
+        int_index_wind = wind_times.get_loc(sat_times[0],
                                                  method='pad')
-        wind_time = wind_time_range[int_index_wind]
+        wind_time = wind_times[int_index_wind]
         num_of_advec = int((
-            sat_time_range[time_index + 1] -
-            sat_time_range[time_index]).seconds/(60*15))
+            sat_times[time_index + 1] -
+            sat_times[time_index]).seconds/(60*15))
         if not assim_test:  # assums no perturbation
             with pd.HDFStore(ci_file_path, mode='r') as store:
                 q = store.select('ci', columns=[sat_time],
@@ -2294,7 +2307,7 @@ def forecast_system(param_dic, ci_file_path, winds_file_path,
                 if assim_of_test:
                     logging.debug('calc of')
                     # retreive OF vectors
-                    time0 = sat_time_range[time_index - 1]
+                    time0 = sat_times[time_index - 1]
                     with pd.HDFStore(ci_file_path, mode='r') \
                              as ci_store, \
                              pd.HDFStore(winds_file_path, mode='r') \
