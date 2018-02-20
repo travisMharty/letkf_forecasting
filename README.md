@@ -1,8 +1,5 @@
 # letkf_forecasting
 
-Add some information and tell me how and what files are needed to run the
-system.
-
 
 ## Packaging
 

@@ -15,7 +15,7 @@ def rh_calc(temps, pressure, qvapor):
               - 5.028 * np.log10(temps/T1)+
               + 1.50475*10**-4 * (1 - 10**(-8.2969 * (temps/T1 - 1)))+
               + 0.42873*10**-3 * (10**(4.76955 * (1 - T1/temps)) - 1)+
-              + 0.78614)
+             + 0.78614)
     # Bolton Equation
     # ew = ne.evaluate(
     #     '6.112*exp(17.62*(temps-273.15)/(243.21 + temps - 273.15))')
