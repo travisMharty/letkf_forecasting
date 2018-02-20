@@ -2070,24 +2070,32 @@ def forecast_system(param_dic, data_file_path,
         sn_min_crop = store.variables['ci'].sn_min_crop
         sn_max_crop = store.variables['ci'].sn_max_crop
         wind_times = store.variables['time_wind']
-        wind_times = num2date(wind_times[:], )
+        wind_times = num2date(wind_times[:], wind_times.units)
+        wind_times = pd.DatetimeIndex(
+            wind_times).tz_localize('UTC').tz_convert('MST')
         we_stag_min_crop = store.variables['U'].we_min_crop
         we_stag_max_crop = store.variables['U'].we_max_crop
         sn_stag_min_crop = store.variables['V'].sn_min_crop
         sn_stag_max_crop = store.variables['V'].sn_max_crop
-        U_shape = store.varialbes['U'].shape[1:3]
+        U_shape = store.variables['U'].shape[1:3]
         V_shape = store.variables['V'].shape[1:3]
     dx = we[1] - we[0]
     dy = sn[1] - sn[0]
+    max_horizon = pd.Timedelta(max_horizon)
     ci_crop_shape = np.array([sn_max_crop - sn_min_crop + 1,
-                              we_max_crop - we_min_crop + 1])
+                              we_max_crop - we_min_crop + 1],
+                             dtype='int')
     ci_crop_size = ci_crop_shape[0]*ci_crop_shape[1]
     x_crop_range = we[we_min_crop: we_max_crop + 1]
     y_crop_range = sn[sn_min_crop: sn_min_crop + 1]
     U_crop_shape = np.array([sn_max_crop - sn_min_crop + 1,
-                             we_stag_max_crop - we_stag_min_crop + 1])
+                             we_stag_max_crop - we_stag_min_crop + 1],
+                            dtype='int')
     V_crop_shape = np.array([sn_stag_max_crop - sn_stag_min_crop + 1,
-                             we_max_crop - we_min_crop + 1])
+                             we_max_crop - we_min_crop + 1],
+                            dtype='int')
+    print(U_crop_shape[0] - 1)
+    print(V_crop_shape[1] - 1)
     U_crop_size = U_crop_shape[0]*U_crop_shape[1]
     V_crop_size = V_crop_shape[0]*V_crop_shape[1]
     wind_size = U_crop_size + V_crop_size
@@ -2127,9 +2135,10 @@ def forecast_system(param_dic, data_file_path,
     remove_div_test = div_test
     if div_test:
         mesh = fe.RectangleMesh(fe.Point(0, 0),
-                                fe.Point(V_crop_shape[1] - 1,
-                                         U_crop_shape[0] - 1),
-                                V_crop_shape[1] - 1, U_crop_shape[0] - 1)
+                                fe.Point(int(V_crop_shape[1] - 1),
+                                         int(U_crop_shape[0] - 1)),
+                                int(V_crop_shape[1] - 1),
+                                int(U_crop_shape[0] - 1))
         FunctionSpace_wind = fe.FunctionSpace(mesh, 'P', 1)
 
     # Create things needed for assimilations
@@ -2189,6 +2198,10 @@ def forecast_system(param_dic, data_file_path,
             V = store.varaibles['V'][wind_times == wind_time,
                                      sn_stag_min_crop:sn_stag_max_crop + 1,
                                      we_min_crop:we_min_crop + 1]
+            #  boolean indexing does not drop dimension
+            q = q[0]
+            U = U[0]
+            V = V[0]
         ensemble = ensemble_creator_wind(
             q, U, V,
             CI_sigma=ci_sigma, wind_sigma=winds_sigma, ens_size=ens_num)
@@ -2204,7 +2217,7 @@ def forecast_system(param_dic, data_file_path,
         sat_time = sat_times[time_index]
         logging.info(str(sat_time))
         int_index_wind = wind_times.get_loc(sat_times[0],
-                                                 method='pad')
+                                            method='pad')
         wind_time = wind_times[int_index_wind]
         num_of_advec = int((
             sat_times[time_index + 1] -
@@ -2214,12 +2227,16 @@ def forecast_system(param_dic, data_file_path,
                 q = store.variables['ci'][sat_times == sat_time,
                                           sn_min_crop:sn_max_crop + 1,
                                           we_min_crop:we_max_crop + 1]
-                U = store.varaibles['U'][wind_times == wind_time,
+                U = store.variables['U'][wind_times == wind_time,
                                          sn_min_crop:sn_max_crop + 1,
                                          we_stag_min_crop:we_stag_max_crop + 1]
-                V = store.varaibles['V'][wind_times == wind_time,
+                V = store.variables['V'][wind_times == wind_time,
                                          sn_stag_min_crop:sn_stag_max_crop + 1,
                                          we_min_crop:we_max_crop + 1]
+                #  boolean indexing does not drop dimension
+                q = q[0]
+                U = U[0]
+                V = V[0]
             df_q = pd.DataFrame(data=q.reshape(1, ci_crop_size),
                                 index=[sat_time])
             with pd.HDFStore(file_path_r, mode='a', complevel=4) as store:
@@ -2253,6 +2270,8 @@ def forecast_system(param_dic, data_file_path,
                         q = store.variables['ci'][sat_times == sat_time,
                                                   sn_min_crop:sn_max_crop + 1,
                                                   we_min_crop:we_max_crop + 1]
+                        #  boolean indexing does not drop dimension
+                        q = q[0]
                     ensemble = assimilate_sat_to_wind(
                         ensemble=ensemble,
                         observations=q.ravel(),
@@ -2270,14 +2289,18 @@ def forecast_system(param_dic, data_file_path,
                 if assim_wrf_test and sat_time == wind_time:
                     logging.debug('Assim WRF')
                     with Dataset(data_file_path, mode='r') as store:
-                        U = store.varaibles['U'][wind_times == wind_time,
+                        U = store.variables['U'][wind_times == wind_time,
                                                  sn_min_crop:sn_max_crop + 1,
                                                  we_stag_min_crop:
                                                  we_stag_max_crop + 1]
-                        V = store.varaibles['V'][wind_times == wind_time,
+                        V = store.variables['V'][wind_times == wind_time,
                                                  sn_stag_min_crop:
                                                  sn_stag_max_crop + 1,
                                                  we_min_crop:we_max_crop + 1]
+                        #  boolean indexing does not drop dimension
+                        q = q[0]
+                        U = U[0]
+                        V = V[0]
                     remove_div_test = True
                     ensemble[:U_crop_size] = assimilate_wrf(
                         ensemble=ensemble[:U_crop_size],
@@ -2316,6 +2339,11 @@ def forecast_system(param_dic, data_file_path,
                                                        :, :]
                         image1 = store.variables['ci'][sat_times == sat_time,
                                                        :, :]
+                        # boolean indexing does not drop dimension
+                        this_U = this_U[0]
+                        this_V = this_V[0]
+                        image0 = image0[0]
+                        image1 = image1[0]
                     u_of, v_of, pos = optical_flow(image0, image1,
                                                    time0, sat_time,
                                                    this_U, this_V)
@@ -2324,6 +2352,7 @@ def forecast_system(param_dic, data_file_path,
 
                     # need to select only pos in crop domain; convert to crop
                     keep = np.logical_and(
+
                         np.logical_and(pos[:, 0] > wind_x_range[0],
                                        pos[:, 0] < wind_x_range[1]),
                         np.logical_and(pos[:, 1] > wind_y_range[0],
@@ -2365,6 +2394,8 @@ def forecast_system(param_dic, data_file_path,
                         q = store.variables['ci'][sat_times == sat_time,
                                                   sn_min_crop:sn_max_crop + 1,
                                                   we_min_crop:we_max_crop + 1]
+                        # boolean indexing does not drop dimension
+                        q = q[0]
                     ensemble[wind_size:] = q.ravel()
 
             if remove_div_test and div_test:
