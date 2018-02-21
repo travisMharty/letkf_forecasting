@@ -2048,13 +2048,12 @@ def forecast_system(param_dic, data_file_path,
                     ens_num=None, winds_sigma=None, ci_sigma=None,
                     Lx=None, Ly=None, tol=None,
                     pert_sigma=None, pert_mean=None, edge_weight=None):
-
     # read initial data from satellite store
     with Dataset(data_file_path, mode='r') as store:
         sat_times = store.variables['time']
         sat_times = num2date(sat_times[:], sat_times.units)
-        # sat_times = pd.DatetimeIndex(
-        #     sat_times).tz_localize('UTC').tz_convert('MST')
+        sat_times = pd.DatetimeIndex(
+            sat_times).tz_localize('UTC')
         we = store.variables['west_east'][:]
         sn = store.variables['south_north'][:]
         we_min_crop = store.variables['ci'].we_min_crop
@@ -2063,8 +2062,8 @@ def forecast_system(param_dic, data_file_path,
         sn_max_crop = store.variables['ci'].sn_max_crop
         wind_times_all = store.variables['time_wind']
         wind_times_all = num2date(wind_times_all[:], wind_times_all.units)
-        # wind_times_all = pd.DatetimeIndex(
-        #     wind_times_all).tz_localize('UTC').tz_convert('MST')
+        wind_times_all = pd.DatetimeIndex(
+            wind_times_all).tz_localize('UTC')
         we_stag_min_crop = store.variables['U'].we_min_crop
         we_stag_max_crop = store.variables['U'].we_max_crop
         sn_stag_min_crop = store.variables['V'].sn_min_crop
@@ -2079,7 +2078,6 @@ def forecast_system(param_dic, data_file_path,
     ci_crop_shape = np.array([sn_max_crop - sn_min_crop + 1,
                               we_max_crop - we_min_crop + 1],
                              dtype='int')
-    ci_crop_size = ci_crop_shape[0]*ci_crop_shape[1]
     U_crop_shape = np.array([sn_max_crop - sn_min_crop + 1,
                              we_stag_max_crop - we_stag_min_crop + 1],
                             dtype='int')
@@ -2093,14 +2091,20 @@ def forecast_system(param_dic, data_file_path,
     # Use all possible satellite images in system unless told to limit
     sat_times_all = sat_times.copy()
     if (start_time != 0) & (end_time != 0):
-        sat_times_temp = (pd.date_range(start_time, end_time, freq='15 min')
-                          .tz_localize('MST'))
+        if start_time.tz == 'MST':
+            start_time = start_time.tz_convert('UTC')
+            end_time = end_time.tz_convert('UTC')
+        sat_times_temp = pd.date_range(start_time, end_time, freq='15 min')
         sat_times = sat_times.intersection(sat_times_temp)
     elif start_time != 0:
+        if start_time.tz == 'MST':
+            start_time = start_time.tz_convert('UTC')
         sat_times_temp = (pd.date_range(start_time, sat_times[-1],
                                         freq='15 min').tz_localize('MST'))
         sat_times = sat_times.intersection(sat_times_temp)
     elif end_time != 0:
+        if end_time.tz == 'MST':
+            end_time = end_time.tz_convert('UTC')
         sat_times_temp = (pd.date_range(sat_times[0], end_time,
                                         freq='15 min').tz_localize('MST'))
         sat_times = sat_times.intersection(sat_times_temp)
