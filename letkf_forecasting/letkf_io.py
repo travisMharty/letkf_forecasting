@@ -5,16 +5,17 @@ from netCDF4 import Dataset, date2num, num2date
 
 
 def time2string(Timestamp):
-    if Timestamp.
+    year = Timestamp.year
+    month = Timestamp.month
+    day = Timestamp.day
     hour = Timestamp.hour
     minute = Timestamp.minute
-    return f'MST{hour:02}{minute:02}'
+    return f'{year:04}{month:02}{day:02}_{hour:02}{minute:02}Z'
 
 
-def set_up_netcdf(file_path_r, param_dic, we_crop, sn_crop,
-                      we_stag_crop, sn_stag_crop,
-                      sat_times, num_of_horizons,
-                      ens_num):
+def save_netcdf(file_path_r, data, param_dic, we_crop, sn_crop,
+                we_stag_crop, sn_stag_crop,
+                sat_times, ens_num):
     with Dataset(file_path_r, mode='w') as store:
         for k, v in param_dic.items():
             setattr(store, k, v)
@@ -23,7 +24,6 @@ def set_up_netcdf(file_path_r, param_dic, we_crop, sn_crop,
         store.createDimension('we_stag', size=we_stag_crop.size)
         store.createDimension('sn_stag', size=sn_stag_crop.size)
         store.createDimension('time', size=sat_times.size)
-        store.createDimension('forecast_horizon', size=num_of_horizons + 1)
         we_nc = store.createVariable('west_east', 'f8', ('west_east',),
                                      zlib=True)
         sn_nc = store.createVariable('south_north', 'f8', ('south_north',),
