@@ -2039,7 +2039,7 @@ def time2string(Timestamp):
 
 def common_netcdf(file_path_r, param_dic, we_crop, sn_crop,
                   we_stag_crop, sn_stag_crop,
-                  sat_times, wind_times, num_of_horizons):
+                  sat_times, num_of_horizons):
     with Dataset(file_path_r, mode='w') as store:
         for k, v in param_dic.items():
             setattr(store, k, v)
@@ -2048,7 +2048,6 @@ def common_netcdf(file_path_r, param_dic, we_crop, sn_crop,
         store.createDimension('we_stag', size=we_stag_crop.size)
         store.createDimension('sn_stag', size=sn_stag_crop.size)
         store.createDimension('time', size=sat_times.size)
-        store.createDimension('time_wind', size=wind_times.size)
         store.createDimension('forecast_horizon', size=num_of_horizons + 1)
         we_nc = store.createVariable('west_east', 'f8', ('west_east',),
                                      zlib=True)
@@ -2059,7 +2058,6 @@ def common_netcdf(file_path_r, param_dic, we_crop, sn_crop,
         sn_stag_nc = store.createVariable('sn_stag', 'f8', ('sn_stag',),
                                           zlib=True)
         time_nc = store.createVariable('time', 'f8', ('time',))
-        time_wind_nc = store.createVariable('time_wind', 'f8', ('time_wind',))
         forecast_horizon_nc = store.createVariable('forecast_horizon', 'i8',
                                                    ('forecast_horizon',))
         we_nc[:] = we_crop
@@ -2071,37 +2069,37 @@ def common_netcdf(file_path_r, param_dic, we_crop, sn_crop,
                         .to_pydatetime())
         sat_times_nc = date2num(sat_times_nc)
         time_nc[:] = sat_times_nc
-        wind_times_nc = (wind_times
-                         .tz_convert('UTC').tz_convert(None)
-                         .to_pydatetime())
-        wind_times_nc = date2num(wind_times_nc)
-        time_wind_nc[:] = wind_times_nc
         forecast_horizon_nc[:] = np.arange(num_of_horizons + 1)*15
         time_nc.units = 'seconds since 1970-1-1'
-        time_wind_nc.units = 'seconds since 1970-1-1'
         forecast_horizon_nc.units = 'minutes since {time}'
 
 
 def set_up_netcdf(file_path_r, param_dic, we_crop, sn_crop,
                   we_stag_crop, sn_stag_crop,
-                  sat_times, wind_times, num_of_horizons):
+                  sat_times, num_of_horizons):
+    common_netcdf(file_path_r, param_dic, we_crop, sn_crop,
+                  we_stag_crop, sn_stag_crop,
+                  sat_times, num_of_horizons)
     with Dataset(file_path_r, mode='a') as store:
         store.createVariable('ci', 'f8',
                              ('time', 'forecast_horizon',
                               'south_north', 'west_east',),
                              zlib=True)
         store.createVariable('U', 'f8',
-                             ('time_wind', 'south_north', 'we_stag',),
+                             ('time', 'south_north', 'we_stag',),
                              zlib=True)
         store.createVariable('V', 'f8',
-                             ('time_wind', 'sn_stag', 'west_east',),
+                             ('time', 'sn_stag', 'west_east',),
                              zlib=True)
 
 
 def set_up_netcdf_ens(file_path_r, param_dic, we_crop, sn_crop,
                       we_stag_crop, sn_stag_crop,
-                      sat_times, wind_times,
+                      sat_times, num_of_horizons,
                       ens_num):
+    common_netcdf(file_path_r, param_dic, we_crop, sn_crop,
+                  we_stag_crop, sn_stag_crop,
+                  sat_times, num_of_horizons)
     with Dataset(file_path_r, mode='a') as store:
         store.createDimension('ensemble_number', size=ens_num)
         ensemble_number_nc = store.createVariable('ensemble_number',
@@ -2112,11 +2110,11 @@ def set_up_netcdf_ens(file_path_r, param_dic, we_crop, sn_crop,
                               'south_north', 'west_east',),
                              zlib=True)
         store.createVariable('U', 'f8',
-                             ('time_wind', 'ensemble_number',
+                             ('time', 'ensemble_number',
                               'south_north', 'we_stag',),
                              zlib=True)
         store.createVariable('V', 'f8',
-                             ('time_wind', 'ensemble_number',
+                             ('time', 'ensemble_number',
                               'sn_stag', 'west_east',),
                              zlib=True)
 
@@ -2187,6 +2185,7 @@ def forecast_system(param_dic, data_file_path,
     wind_size = U_crop_size + V_crop_size
 
     # Use all possible satellite images in system unless told to limit
+    sat_times_all = sat_times.copy()
     if (start_time != 0) & (end_time != 0):
         sat_times_temp = (pd.date_range(start_time, end_time, freq='15 min')
                           .tz_localize('MST'))
@@ -2199,12 +2198,13 @@ def forecast_system(param_dic, data_file_path,
         sat_times_temp = (pd.date_range(sat_times[0], end_time,
                                         freq='15 min').tz_localize('MST'))
         sat_times = sat_times.intersection(sat_times_temp)
-
+    wind_times_all = wind_times.copy()
+    wind_times = wind_times.intersection(sat_times)
     # Advection calculations
     num_of_horizons = int((max_horizon/15).seconds/60)
 
     # Create path to save results
-    date = sat_times[0].date()
+    date = sat_times_all[0].date()
     year = date.year
     month = date.month
     day = date.day
@@ -2277,17 +2277,17 @@ def forecast_system(param_dic, data_file_path,
                             np.min([sn_max_crop, sn_stag_max_crop]))
             del U_crop_pos, V_crop_pos
         sat_time = sat_times[0]
-        int_index_wind = wind_times.get_loc(sat_times[0],
+        int_index_wind = wind_times_all.get_loc(sat_times[0],
                                             method='pad')
-        wind_time = wind_times[int_index_wind]
+        wind_time = wind_times_all[int_index_wind]
         with Dataset(data_file_path, mode='r') as store:
-            q = store.variables['ci'][sat_times == sat_time,
+            q = store.variables['ci'][sat_times_all == sat_time,
                                       sn_min_crop:sn_max_crop + 1,
                                       we_min_crop:we_max_crop + 1]
-            U = store.varaibles['U'][wind_times == wind_time,
+            U = store.varaibles['U'][wind_times_all == wind_time,
                                      sn_min_crop:sn_max_crop + 1,
                                      we_stag_min_crop:we_stag_min_crop + 1]
-            V = store.varaibles['V'][wind_times == wind_time,
+            V = store.varaibles['V'][wind_times_all == wind_time,
                                      sn_stag_min_crop:sn_stag_max_crop + 1,
                                      we_min_crop:we_min_crop + 1]
             #  boolean indexing does not drop dimension
@@ -2305,12 +2305,12 @@ def forecast_system(param_dic, data_file_path,
     if assim_test:
         set_up_netcdf(file_path_r, param_dic, we_crop, sn_crop,
                       we_stag_crop, sn_stag_crop,
-                      sat_times, wind_times, num_of_horizons)
+                      sat_times, num_of_horizons)
     else:
         set_up_netcdf_ens(file_path_r, param_dic, we_crop, sn_crop,
                           we_stag_crop, sn_stag_crop,
-                          sat_times, wind_times,
-                          ens_num, num_of_horizons)
+                          sat_times, num_of_horizons,
+                          ens_num)
     for time_index in range(sat_times.size - 1):
         sat_time = sat_times[time_index]
         logging.info(str(sat_time))
@@ -2322,13 +2322,13 @@ def forecast_system(param_dic, data_file_path,
             sat_times[time_index]).seconds/(60*15))
         if not assim_test:  # assums no perturbation
             with Dataset(data_file_path, mode='r') as store:
-                q = store.variables['ci'][sat_times == sat_time,
+                q = store.variables['ci'][sat_times_all == sat_time,
                                           sn_min_crop:sn_max_crop + 1,
                                           we_min_crop:we_max_crop + 1]
-                U = store.variables['U'][wind_times == wind_time,
+                U = store.variables['U'][wind_times_all == wind_time,
                                          sn_min_crop:sn_max_crop + 1,
                                          we_stag_min_crop:we_stag_max_crop + 1]
-                V = store.variables['V'][wind_times == wind_time,
+                V = store.variables['V'][wind_times_all == wind_time,
                                          sn_stag_min_crop:sn_stag_max_crop + 1,
                                          we_min_crop:we_max_crop + 1]
                 #  boolean indexing does not drop dimension
@@ -2361,7 +2361,7 @@ def forecast_system(param_dic, data_file_path,
                 if assim_sat2wind_test:
                     logging.debug('Assim sat2wind')
                     with Dataset(data_file_path, mode='r') as store:
-                        q = store.variables['ci'][sat_times == sat_time,
+                        q = store.variables['ci'][sat_times_all == sat_time,
                                                   sn_min_crop:sn_max_crop + 1,
                                                   we_min_crop:we_max_crop + 1]
                         #  boolean indexing does not drop dimension
@@ -2383,11 +2383,11 @@ def forecast_system(param_dic, data_file_path,
                 if assim_wrf_test and sat_time == wind_time:
                     logging.debug('Assim WRF')
                     with Dataset(data_file_path, mode='r') as store:
-                        U = store.variables['U'][wind_times == wind_time,
+                        U = store.variables['U'][wind_times_all == wind_time,
                                                  sn_min_crop:sn_max_crop + 1,
                                                  we_stag_min_crop:
                                                  we_stag_max_crop + 1]
-                        V = store.variables['V'][wind_times == wind_time,
+                        V = store.variables['V'][wind_times_all == wind_time,
                                                  sn_stag_min_crop:
                                                  sn_stag_max_crop + 1,
                                                  we_min_crop:we_max_crop + 1]
@@ -2425,13 +2425,13 @@ def forecast_system(param_dic, data_file_path,
                     # retreive OF vectors
                     time0 = sat_times[time_index - 1]
                     with Dataset as store:
-                        this_U = store.variables['U'][wind_times == wind_time,
-                                                      :, :]
-                        this_V = store.variables['V'][wind_times == wind_time,
-                                                      :, :]
-                        image0 = store.variables['ci'][sat_times == time0,
+                        this_U = store.variables['U'][
+                            wind_times_all == wind_time, :, :]
+                        this_V = store.variables['V'][
+                            wind_times_all == wind_time, :, :]
+                        image0 = store.variables['ci'][sat_times_all == time0,
                                                        :, :]
-                        image1 = store.variables['ci'][sat_times == sat_time,
+                        image1 = store.variables['ci'][sat_times_all == sat_time,
                                                        :, :]
                         # boolean indexing does not drop dimension
                         this_U = this_U[0]
@@ -2485,7 +2485,7 @@ def forecast_system(param_dic, data_file_path,
                         x=x_temp.ravel(), y=y_temp.ravel())
                 if not assim_sat2sat_test:
                     with Dataset(data_file_path, mode='r') as store:
-                        q = store.variables['ci'][sat_times == sat_time,
+                        q = store.variables['ci'][sat_times_all == sat_time,
                                                   sn_min_crop:sn_max_crop + 1,
                                                   we_min_crop:we_max_crop + 1]
                         # boolean indexing does not drop dimension
