@@ -2,7 +2,7 @@ import os
 import logging
 import numpy as np
 from netCDF4 import Dataset, date2num, num2date
-from distributed import LocalCluster, Client  # delete
+from distributed import Client  # delete
 import pandas as pd
 import scipy as sp
 from scipy import ndimage
@@ -2031,10 +2031,94 @@ def main_only_sat(sat, x, y, domain_shape, domain_crop_cols, domain_crop_shape,
     # return ensemble_movie, ens_shape
 
 
-def time2string(Timestamp, variable):
+def time2string(Timestamp):
     hour = Timestamp.hour
     minute = Timestamp.minute
-    return f'MST{hour:02}{minute:02}_' + variable
+    return f'MST{hour:02}{minute:02}'
+
+
+def common_netcdf(file_path_r, param_dic, we_crop, sn_crop,
+                  we_stag_crop, sn_stag_crop,
+                  sat_times, wind_times, num_of_horizons):
+    with Dataset(file_path_r, mode='w') as store:
+        for k, v in param_dic.items():
+            setattr(store, k, v)
+        store.createDimension('west_east', size=we_crop.size)
+        store.createDimension('south_north', size=sn_crop.size)
+        store.createDimension('we_stag', size=we_stag_crop.size)
+        store.createDimension('sn_stag', size=sn_stag_crop.size)
+        store.createDimension('time', size=sat_times.size)
+        store.createDimension('time_wind', size=wind_times.size)
+        store.createDimension('forecast_horizon', size=num_of_horizons + 1)
+        we_nc = store.createVariable('west_east', 'f8', ('west_east',),
+                                     zlib=True)
+        sn_nc = store.createVariable('south_north', 'f8', ('south_north',),
+                                     zlib=True)
+        we_stag_nc = store.createVariable('we_stag', 'f8', ('we_stag',),
+                                          zlib=True)
+        sn_stag_nc = store.createVariable('sn_stag', 'f8', ('sn_stag',),
+                                          zlib=True)
+        time_nc = store.createVariable('time', 'f8', ('time',))
+        time_wind_nc = store.createVariable('time_wind', 'f8', ('time_wind',))
+        forecast_horizon_nc = store.createVariable('forecast_horizon', 'i8',
+                                                   ('forecast_horizon',))
+        we_nc[:] = we_crop
+        sn_nc[:] = sn_crop
+        we_stag_nc[:] = we_stag_crop
+        sn_stag_nc[:] = sn_stag_crop
+        sat_times_nc = (sat_times
+                        .tz_convert('UTC').tz_convert(None)
+                        .to_pydatetime())
+        sat_times_nc = date2num(sat_times_nc)
+        time_nc[:] = sat_times_nc
+        wind_times_nc = (wind_times
+                         .tz_convert('UTC').tz_convert(None)
+                         .to_pydatetime())
+        wind_times_nc = date2num(wind_times_nc)
+        time_wind_nc[:] = wind_times_nc
+        forecast_horizon_nc[:] = np.arange(num_of_horizons + 1)*15
+        time_nc.units = 'seconds since 1970-1-1'
+        time_wind_nc.units = 'seconds since 1970-1-1'
+        forecast_horizon_nc.units = 'minutes since {time}'
+
+
+def set_up_netcdf(file_path_r, param_dic, we_crop, sn_crop,
+                  we_stag_crop, sn_stag_crop,
+                  sat_times, wind_times, num_of_horizons):
+    with Dataset(file_path_r, mode='a') as store:
+        store.createVariable('ci', 'f8',
+                             ('time', 'forecast_horizon',
+                              'south_north', 'west_east',),
+                             zlib=True)
+        store.createVariable('U', 'f8',
+                             ('time_wind', 'south_north', 'we_stag',),
+                             zlib=True)
+        store.createVariable('V', 'f8',
+                             ('time_wind', 'sn_stag', 'west_east',),
+                             zlib=True)
+
+
+def set_up_netcdf_ens(file_path_r, param_dic, we_crop, sn_crop,
+                      we_stag_crop, sn_stag_crop,
+                      sat_times, wind_times,
+                      ens_num):
+    with Dataset(file_path_r, mode='a') as store:
+        store.createDimension('ensemble_number', size=ens_num)
+        ensemble_number_nc = store.createVariable('ensemble_number',
+                                                  'i8', ('ensemble_number'))
+        ensemble_number_nc[:] = np.arange(ens_num)
+        store.createVariable('ci', 'f8',
+                             ('time', 'forecast_horizon', 'ensemble_number',
+                              'south_north', 'west_east',),
+                             zlib=True)
+        store.createVariable('U', 'f8',
+                             ('time_wind', 'ensemble_number',
+                              'south_north', 'we_stag',),
+                             zlib=True)
+        store.createVariable('V', 'f8',
+                             ('time_wind', 'ensemble_number',
+                              'sn_stag', 'west_east',),
+                             zlib=True)
 
 
 def forecast_system(param_dic, data_file_path,
@@ -2044,7 +2128,7 @@ def forecast_system(param_dic, data_file_path,
                     assim_sat2wind_test=False, assim_wrf_test=False,
                     start_time=None, end_time=None, C_max=0.7,
                     max_horizon=pd.Timedelta('15min'),
-                    n_workers=None, scheduler_port=0, diagnostics_port=0,
+                    client_address='127.0.0.1:8786',
                     sig_sat2sat=None, loc_sat2sat=None,
                     infl_sat2sat=None, assim_gs_sat2sat=None,
                     sig_sat2wind=None, loc_sat2wind=None,
@@ -2079,6 +2163,10 @@ def forecast_system(param_dic, data_file_path,
         sn_stag_max_crop = store.variables['V'].sn_max_crop
         U_shape = store.variables['U'].shape[1:3]
         V_shape = store.variables['V'].shape[1:3]
+    we_crop = we[we_min_crop:we_max_crop + 1]
+    sn_crop = sn[sn_min_crop:sn_max_crop + 1]
+    we_stag_crop = we[we_stag_min_crop:we_stag_max_crop + 1]
+    sn_stag_crop = sn[sn_stag_min_crop:we_stag_max_crop + 1]
     dx = (we[1] - we[0])*1000
     dy = (sn[1] - sn[0])*1000  # dx, dy in m not km
     max_horizon = pd.Timedelta(max_horizon)
@@ -2151,10 +2239,7 @@ def forecast_system(param_dic, data_file_path,
     # Create things needed for assimilations
     if assim_test:
         # start cluster
-        cluster = LocalCluster(n_workers=n_workers,
-                               scheduler_port=scheduler_port,  # hardwired
-                               diagnostics_port=diagnostics_port)  # hardwired
-        client = Client(cluster)
+        client = Client(client_address)
         if assim_sat2sat_test:
             assim_pos, assim_pos_2d, full_pos_2d = (
                 assimilation_position_generator(ci_crop_shape,
@@ -2216,10 +2301,16 @@ def forecast_system(param_dic, data_file_path,
         ens_shape = ensemble.shape
         ens_size = ens_shape[0]*ens_shape[1]
 
-    # save param_dic
-    with Dataset(file_path_r, mode='w') as store:
-        for k, v in param_dic.items():
-            setattr(store, k, v)
+    # save param_dic and setup netCDF file
+    if assim_test:
+        set_up_netcdf(file_path_r, param_dic, we_crop, sn_crop,
+                      we_stag_crop, sn_stag_crop,
+                      sat_times, wind_times, num_of_horizons)
+    else:
+        set_up_netcdf_ens(file_path_r, param_dic, we_crop, sn_crop,
+                          we_stag_crop, sn_stag_crop,
+                          sat_times, wind_times,
+                          ens_num, num_of_horizons)
     for time_index in range(sat_times.size - 1):
         sat_time = sat_times[time_index]
         logging.info(str(sat_time))
@@ -2244,8 +2335,10 @@ def forecast_system(param_dic, data_file_path,
                 q = q[0]
                 U = U[0]
                 V = V[0]
-            df_q = pd.DataFrame(data=q.reshape(1, ci_crop_size),
-                                index=[sat_time])
+            with Dataset(file_path_r, mode='a') as store:
+                group = store.createGroup(time2string(sat_time))
+                U_nc = group.variables['U']
+                U_nc[wind_times]
             with pd.HDFStore(file_path_r, mode='a', complevel=4) as store:
                 store.put(time2string(sat_time, 'U'),
                           pd.DataFrame(data=U.ravel(), columns=[sat_time]),
