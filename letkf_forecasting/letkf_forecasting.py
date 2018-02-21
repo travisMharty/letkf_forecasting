@@ -1422,6 +1422,8 @@ def forecast_system(param_dic, data_file_path,
         ens_num = 1
     for time_index in range(sat_times.size - 1):
         sat_time = sat_times[time_index]
+        save_times = pd.date_range(sat_time, periods=num_of_horizons,
+                                   freq='15min')
         logging.info(str(sat_time))
         int_index_wind = wind_times_all.get_loc(sat_times[0],
                                                 method='pad')
@@ -1444,16 +1446,7 @@ def forecast_system(param_dic, data_file_path,
                 q = q[0]
                 U = U[0]
                 V = V[0]
-            letkf_io.init_netcdf(file_path_r, param_dic, we_crop, sn_crop,
-                                 we_stag_crop, sn_stag_crop,
-                                 sat_times, ens_num)
-            with Dataset(file_path_r, mode='a') as store:
-                U_nc = store.variables['U']
-                U_nc[sat_times == sat_time, :, :] = U[None, :, :]
-                V_nc = store.variables['V']
-                V_nc[sat_times == sat_time, :, :] = V[None, :, :]
-                ci_nc = store.variables['ci']
-                ci_nc[sat_times == sat_time, 0, :, :] = q[None, :, :]
+            q_array = q.copy()[None, :, :]
             cx = abs(U).max()
             cy = abs(V).max()
             T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)/C_max))
@@ -1462,10 +1455,12 @@ def forecast_system(param_dic, data_file_path,
                 logging.info(str(pd.Timedelta('15min')*(m + 1)))
                 for n in range(3):
                     q = advect_5min(q, dt, U, dx, V, dy, T_steps)
-                with Dataset(file_path_r, mode='a') as store:
-                    ci_nc = store.variables['ci']
-                    ci_nc[sat_times == sat_time, m + 1, :, :] = q[None,
-                                                              :, :]
+                q_array = np.concatenate([q_array, q], axis=0)
+            letkf_io.save_netcdf(file_path_r, U[None, :, :], V[None, :, :],
+                                 q_array[:, None, :, :],
+                                 param_dic, we_crop, sn_crop,
+                                 we_stag_crop, sn_stag_crop,
+                                 save_times, ens_num)
         else:
             if time_index != 0:
                 if assim_sat2wind_test:
