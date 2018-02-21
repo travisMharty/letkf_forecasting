@@ -6,7 +6,6 @@ from distributed import Client  # delete
 import pandas as pd
 import scipy as sp
 from scipy import ndimage
-import matplotlib.pyplot as plt
 import scipy.interpolate as interpolate
 import numexpr as ne
 from skimage import filters as ski_filters
@@ -879,7 +878,7 @@ def assimilate_wind(ensemble, observations, flat_sensor_indices, R_inverse,
     return ensemble[:wind_size]
 
 
-def ensemble_creator_wind(sat_image, u, v, CI_sigma, wind_sigma, ens_size):
+def ensemble_creator(sat_image, u, v, CI_sigma, wind_sigma, ens_size):
     """need to change later"""
     random_nums = np.random.normal(
         loc=0,
@@ -1414,7 +1413,7 @@ def forecast_system(param_dic, data_file_path,
             q = q[0]
             U = U[0]
             V = V[0]
-        ensemble = ensemble_creator_wind(
+        ensemble = ensemble_creator(
             q, U, V,
             CI_sigma=ci_sigma, wind_sigma=winds_sigma, ens_size=ens_num)
         del q, U, V
