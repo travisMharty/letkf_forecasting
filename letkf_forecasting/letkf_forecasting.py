@@ -2336,16 +2336,10 @@ def forecast_system(param_dic, data_file_path,
                 U = U[0]
                 V = V[0]
             with Dataset(file_path_r, mode='a') as store:
-                group = store.createGroup(time2string(sat_time))
-                U_nc = group.variables['U']
-                U_nc[wind_times]
-            with pd.HDFStore(file_path_r, mode='a', complevel=4) as store:
-                store.put(time2string(sat_time, 'U'),
-                          pd.DataFrame(data=U.ravel(), columns=[sat_time]),
-                          format='table')
-                store.put(time2string(sat_time, 'V'),
-                          pd.DataFrame(data=V.ravel(), columns=[sat_time]),
-                          format='table')
+                U_nc = store.variables['U']
+                U_nc[sat_times == sat_time, :, :] = U
+                V_nc = store.variables['V']
+                V_nc[sat_times == sat_time, :, :] = V
             cx = abs(U).max()
             cy = abs(V).max()
             T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)/C_max))
