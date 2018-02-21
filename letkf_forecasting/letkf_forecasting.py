@@ -2278,7 +2278,7 @@ def forecast_system(param_dic, data_file_path,
             del U_crop_pos, V_crop_pos
         sat_time = sat_times[0]
         int_index_wind = wind_times_all.get_loc(sat_times[0],
-                                            method='pad')
+                                                method='pad')
         wind_time = wind_times_all[int_index_wind]
         with Dataset(data_file_path, mode='r') as store:
             q = store.variables['ci'][sat_times_all == sat_time,
@@ -2340,6 +2340,8 @@ def forecast_system(param_dic, data_file_path,
                 U_nc[sat_times == sat_time, :, :] = U
                 V_nc = store.variables['V']
                 V_nc[sat_times == sat_time, :, :] = V
+                ci_nc = store.variables['ci']
+                ci_nc[sat_times == sat_time, 0, :, :] = q
             cx = abs(U).max()
             cy = abs(V).max()
             T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)/C_max))
@@ -2348,14 +2350,9 @@ def forecast_system(param_dic, data_file_path,
                 logging.info(str(pd.Timedelta('15min')*(m + 1)))
                 for n in range(3):
                     q = advect_5min(q, dt, U, dx, V, dy, T_steps)
-
-                df_q = df_q.append(pd.DataFrame(
-                    data=q.reshape(1, ci_crop_size),
-                    index=[sat_time + (m + 1)*pd.Timedelta('15min')]))
-            with pd.HDFStore(file_path_r, mode='a', complevel=4) as store:
-                store.put(time2string(sat_time, 'ci'), df_q.T,
-                          format='table')
-
+                with Dataset(data_file_path, mode='a') as store:
+                    ci_nc = store.varialbes['ci']
+                    ci_nc[sat_times == sat_time, m*15, :, :] = q
         else:
             if time_index != 0:
                 if assim_sat2wind_test:
