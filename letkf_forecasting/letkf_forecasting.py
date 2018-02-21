@@ -2067,10 +2067,11 @@ def common_netcdf(file_path_r, param_dic, we_crop, sn_crop,
         sat_times_nc = (sat_times
                         .tz_convert('UTC').tz_convert(None)
                         .to_pydatetime())
-        sat_times_nc = date2num(sat_times_nc)
+        time_units = 'seconds since 1970-1-1'
+        sat_times_nc = date2num(sat_times_nc, time_units)
         time_nc[:] = sat_times_nc
         forecast_horizon_nc[:] = np.arange(num_of_horizons + 1)*15
-        time_nc.units = 'seconds since 1970-1-1'
+        time_nc.units = time_units
         forecast_horizon_nc.units = 'minutes since {time}'
 
 
@@ -2151,10 +2152,10 @@ def forecast_system(param_dic, data_file_path,
         we_max_crop = store.variables['ci'].we_max_crop
         sn_min_crop = store.variables['ci'].sn_min_crop
         sn_max_crop = store.variables['ci'].sn_max_crop
-        wind_times = store.variables['time_wind']
-        wind_times = num2date(wind_times[:], wind_times.units)
-        wind_times = pd.DatetimeIndex(
-            wind_times).tz_localize('UTC').tz_convert('MST')
+        wind_times_all = store.variables['time_wind']
+        wind_times_all = num2date(wind_times_all[:], wind_times_all.units)
+        wind_times_all = pd.DatetimeIndex(
+            wind_times_all).tz_localize('UTC').tz_convert('MST')
         we_stag_min_crop = store.variables['U'].we_min_crop
         we_stag_max_crop = store.variables['U'].we_max_crop
         sn_stag_min_crop = store.variables['V'].sn_min_crop
@@ -2164,7 +2165,7 @@ def forecast_system(param_dic, data_file_path,
     we_crop = we[we_min_crop:we_max_crop + 1]
     sn_crop = sn[sn_min_crop:sn_max_crop + 1]
     we_stag_crop = we[we_stag_min_crop:we_stag_max_crop + 1]
-    sn_stag_crop = sn[sn_stag_min_crop:we_stag_max_crop + 1]
+    sn_stag_crop = sn[sn_stag_min_crop:sn_stag_max_crop + 1]
     dx = (we[1] - we[0])*1000
     dy = (sn[1] - sn[0])*1000  # dx, dy in m not km
     max_horizon = pd.Timedelta(max_horizon)
@@ -2194,12 +2195,11 @@ def forecast_system(param_dic, data_file_path,
         sat_times_temp = (pd.date_range(start_time, sat_times[-1],
                                         freq='15 min').tz_localize('MST'))
         sat_times = sat_times.intersection(sat_times_temp)
-    else:
+    elif end_time != 0:
         sat_times_temp = (pd.date_range(sat_times[0], end_time,
                                         freq='15 min').tz_localize('MST'))
         sat_times = sat_times.intersection(sat_times_temp)
-    wind_times_all = wind_times.copy()
-    wind_times = wind_times.intersection(sat_times)
+
     # Advection calculations
     num_of_horizons = int((max_horizon/15).seconds/60)
 
@@ -2216,14 +2216,14 @@ def forecast_system(param_dic, data_file_path,
         os.makedirs(file_path_r)
         file_path_r = os.path.join(file_path_r,
                                    f'results{run_num:03}.nc')
-    elif len(os.listdif(file_path_r)) == 0:
+    elif len(os.listdir(file_path_r)) == 0:
         file_path_r = os.path.join(file_path_r,
                                    f'results{run_num:03}.nc')
     else:
         run_num = os.listdir(file_path_r)
         run_num.sort()
         run_num = run_num[-1]
-        run_num = int(run_num[-3:]) + 1
+        run_num = int(run_num[-6:-3]) + 1
         file_path_r = os.path.join(file_path_r, f'results{run_num:03}.nc')
 
     # Creat stuff used to remove divergence
@@ -2303,20 +2303,20 @@ def forecast_system(param_dic, data_file_path,
 
     # save param_dic and setup netCDF file
     if assim_test:
-        set_up_netcdf(file_path_r, param_dic, we_crop, sn_crop,
-                      we_stag_crop, sn_stag_crop,
-                      sat_times, num_of_horizons)
-    else:
         set_up_netcdf_ens(file_path_r, param_dic, we_crop, sn_crop,
                           we_stag_crop, sn_stag_crop,
                           sat_times, num_of_horizons,
                           ens_num)
+    else:
+        set_up_netcdf(file_path_r, param_dic, we_crop, sn_crop,
+                      we_stag_crop, sn_stag_crop,
+                      sat_times, num_of_horizons)
     for time_index in range(sat_times.size - 1):
         sat_time = sat_times[time_index]
         logging.info(str(sat_time))
-        int_index_wind = wind_times.get_loc(sat_times[0],
-                                            method='pad')
-        wind_time = wind_times[int_index_wind]
+        int_index_wind = wind_times_all.get_loc(sat_times[0],
+                                                method='pad')
+        wind_time = wind_times_all[int_index_wind]
         num_of_advec = int((
             sat_times[time_index + 1] -
             sat_times[time_index]).seconds/(60*15))
@@ -2337,11 +2337,11 @@ def forecast_system(param_dic, data_file_path,
                 V = V[0]
             with Dataset(file_path_r, mode='a') as store:
                 U_nc = store.variables['U']
-                U_nc[sat_times == sat_time, :, :] = U
+                U_nc[sat_times == sat_time, :, :] = U[None, :, :]
                 V_nc = store.variables['V']
-                V_nc[sat_times == sat_time, :, :] = V
+                V_nc[sat_times == sat_time, :, :] = V[None, :, :]
                 ci_nc = store.variables['ci']
-                ci_nc[sat_times == sat_time, 0, :, :] = q
+                ci_nc[sat_times == sat_time, 0, :, :] = q[None, :, :]
             cx = abs(U).max()
             cy = abs(V).max()
             T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)/C_max))
@@ -2350,9 +2350,10 @@ def forecast_system(param_dic, data_file_path,
                 logging.info(str(pd.Timedelta('15min')*(m + 1)))
                 for n in range(3):
                     q = advect_5min(q, dt, U, dx, V, dy, T_steps)
-                with Dataset(data_file_path, mode='a') as store:
-                    ci_nc = store.varialbes['ci']
-                    ci_nc[sat_times == sat_time, m*15, :, :] = q
+                with Dataset(file_path_r, mode='a') as store:
+                    ci_nc = store.variables['ci']
+                    ci_nc[sat_times == sat_time, m, :, :] = q[None,
+                                                                 :, :]
         else:
             if time_index != 0:
                 if assim_sat2wind_test:
