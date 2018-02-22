@@ -14,7 +14,7 @@ import cv2
 # from numba import jit
 
 import letkf_forecasting.random_functions as rf
-import letkf_forecastign.letkf_io as letkf_io
+import letkf_forecasting.letkf_io as letkf_io
 
 # average radius of earth when modeled as a sphere From Wikipedia
 a = 6371000
@@ -1240,7 +1240,7 @@ def remove_divergence_ensemble(
     return wind_ensemble
 
 
-def forecast_system(param_dic, data_file_path,
+def forecast_system(param_dic, data_file_path, run_name,
                     assim_test=False, perturbation_test=False,
                     div_test=False,
                     assim_of_test=False, assim_sat2sat_test=False,
@@ -1323,27 +1323,7 @@ def forecast_system(param_dic, data_file_path,
     num_of_horizons = int((max_horizon/15).seconds/60)
 
     # Create path to save results
-    date = sat_times_all[0].date()
-    year = date.year
-    month = date.month
-    day = date.day
-    home = os.path.expanduser('~')
-    run_num = 0
-    file_path_r = (f'{home}/results/{year:04}'
-                   f'/{month:02}/{day:02}')
-    if not os.path.exists(file_path_r):
-        os.makedirs(file_path_r)
-        file_path_r = os.path.join(file_path_r,
-                                   f'results{run_num:03}.nc')
-    elif len(os.listdir(file_path_r)) == 0:
-        file_path_r = os.path.join(file_path_r,
-                                   f'results{run_num:03}.nc')
-    else:
-        run_num = os.listdir(file_path_r)
-        run_num.sort()
-        run_num = run_num[-1]
-        run_num = int(run_num[-6:-3]) + 1
-        file_path_r = os.path.join(file_path_r, f'results{run_num:03}.nc')
+    file_path_r = letkf_io.create_path(sat_times_all[0], run_name)
 
     # Creat stuff used to remove divergence
     remove_div_test = div_test
@@ -1422,8 +1402,9 @@ def forecast_system(param_dic, data_file_path,
         ens_num = 1
     for time_index in range(sat_times.size - 1):
         sat_time = sat_times[time_index]
-        save_times = pd.date_range(sat_time, periods=num_of_horizons,
+        save_times = pd.date_range(sat_time, periods=(num_of_horizons + 1),
                                    freq='15min')
+        save_times = save_times.tz_convert(None)
         logging.info(str(sat_time))
         int_index_wind = wind_times_all.get_loc(sat_times[0],
                                                 method='pad')
@@ -1455,7 +1436,7 @@ def forecast_system(param_dic, data_file_path,
                 logging.info(str(pd.Timedelta('15min')*(m + 1)))
                 for n in range(3):
                     q = advect_5min(q, dt, U, dx, V, dy, T_steps)
-                q_array = np.concatenate([q_array, q], axis=0)
+                q_array = np.concatenate([q_array, q[None, :, :]], axis=0)
             letkf_io.save_netcdf(file_path_r, U[None, :, :], V[None, :, :],
                                  q_array[:, None, :, :],
                                  param_dic, we_crop, sn_crop,

@@ -1,22 +1,47 @@
 import os
 import numpy as np
 import pandas as pd
+import glob
 from netCDF4 import Dataset, date2num, num2date
 
 
-def time2string(Timestamp):
+def create_path(time, run_name):
+    date = time.date()
+    year = date.year
+    month = date.month
+    day = date.day
+    home = os.path.expanduser('~')
+    run_num = 0
+    file_path_r = (f'{home}/results/{year:04}'
+                   f'/{month:02}/{day:02}/' +
+                   run_name + '000')
+    if not os.path.exists(file_path_r):
+        os.makedirs(file_path_r)
+    else:
+        file_path_r = os.path.split(file_path_r)[0]
+        run_num = glob.glob(os.path.join(file_path_r, run_name + '*'))
+        run_num.sort()
+        run_num = run_num[-1]
+        run_num = int(run_num[-3:]) + 1
+        file_path_r = os.path.join(file_path_r, run_name + f'_{run_num:03}')
+        os.makedirs(file_path_r)
+    return file_path_r
+
+
+def time2name(Timestamp):
     year = Timestamp.year
     month = Timestamp.month
     day = Timestamp.day
     hour = Timestamp.hour
     minute = Timestamp.minute
-    return f'{year:04}{month:02}{day:02}_{hour:02}{minute:02}Z'
+    return f'{year:04}{month:02}{day:02}_{hour:02}{minute:02}Z.nc'
 
 
 def save_netcdf(file_path_r, U, V, ci, param_dic, we_crop, sn_crop,
                 we_stag_crop, sn_stag_crop,
                 sat_times, ens_num):
-    with Dataset(file_path_r, mode='w') as store:
+    file_path = os.path.join(file_path_r, time2name(sat_times[0]))
+    with Dataset(file_path, mode='w') as store:
         for k, v in param_dic.items():
             setattr(store, k, v)
         store.createDimension('west_east', size=we_crop.size)
