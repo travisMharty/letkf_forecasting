@@ -1394,8 +1394,8 @@ def forecast_system(param_dic, data_file_path, run_name,
             U = U[0]
             V = V[0]
         ensemble = ensemble_creator(
-            q, U, V,
-            CI_sigma=ci_sigma, wind_sigma=winds_sigma, ens_size=ens_num)
+            q, U, V, CI_sigma=ci_sigma, wind_sigma=winds_sigma,
+            ens_size=ens_num)
         del q, U, V
         ens_shape = ensemble.shape
     else:
@@ -1437,11 +1437,14 @@ def forecast_system(param_dic, data_file_path, run_name,
                 for n in range(3):
                     q = advect_5min(q, dt, U, dx, V, dy, T_steps)
                 q_array = np.concatenate([q_array, q[None, :, :]], axis=0)
-            letkf_io.save_netcdf(file_path_r, U[None, :, :], V[None, :, :],
-                                 q_array[:, None, :, :],
-                                 param_dic, we_crop, sn_crop,
-                                 we_stag_crop, sn_stag_crop,
-                                 save_times, ens_num)
+            letkf_io.save_netcdf(
+                file_path_r,
+                np.repeat(U[None, None, :, :], num_of_horizons + 1, axis=0),
+                np.repeat(V[None, None, :, :], num_of_horizons + 1, axis=0),
+                q_array[:, None, :, :],
+                param_dic, we_crop, sn_crop,
+                we_stag_crop, sn_stag_crop,
+                save_times, ens_num)
         else:
             if time_index != 0:
                 if assim_sat2wind_test:
@@ -1583,26 +1586,7 @@ def forecast_system(param_dic, data_file_path, run_name,
                     FunctionSpace_wind, ensemble[:wind_size],
                     U_crop_shape, V_crop_shape, 4)
             temp_ensemble = ensemble.copy()
-            with Dataset(file_path_r, mode='a') as store:
-                time_bool = sat_times == sat_time
-                U_nc = store.variables['U']
-                U_nc[time_bool, :, :, :] = np.moveaxis(
-                    temp_ensemble[:U_crop_size].reshape(
-                        U_crop_shape[0],
-                        U_crop_shape[1],
-                        ens_num)[None, :, :, :], -1, 1)
-                V_nc = store.variables['V']
-                V_nc[time_bool, :, :, :] = np.moveaxis(
-                    temp_ensemble[U_crop_size: wind_size].reshape(
-                        V_crop_shape[0],
-                        V_crop_shape[1],
-                        ens_num)[None, :, :, :], -1, 1)
-                ci_nc = store.variables['ci']
-                ci_nc[time_bool, 0, :, :, :] = np.moveaxis(
-                    temp_ensemble[wind_size:].reshape(
-                        ci_crop_shape[0],
-                        ci_crop_shape[1],
-                        ens_num)[None, :, :, :], -1, 1)
+            ensemble_array = temp_ensemble.copy()[None, :, :]
             cx = abs(temp_ensemble[:U_crop_size]).max()
             cy = abs(temp_ensemble[U_crop_size:
                                    U_crop_size + V_crop_size]).max()
@@ -1620,17 +1604,34 @@ def forecast_system(param_dic, data_file_path, run_name,
                             temp_ensemble[wind_size:], ci_crop_shape,
                             edge_weight, pert_mean, pert_sigma,
                             rf_approx_var, rf_eig, rf_vectors)
-                with Dataset(file_path_r, mode='a') as store:
-                    time_bool = sat_times == sat_time
-                    ci_nc = store.variables['ci']
-                    ci_nc[time_bool, m, :, :, :] = np.moveaxis(
-                        ensemble[wind_size:].reshape(
-                            ci_crop_shape[0],
-                            ci_crop_shape[1],
-                            ens_num)[None, :, :, :], -1, 1)
+                ensemble_array = np.concatenate(
+                    [ensemble_array, temp_ensemble[None, :, :]],
+                    axis=0)
                 if num_of_advec == m:
                     ensemble = temp_ensemble.copy()
+            U, V, ci = extract_components(
+                ensemble_array, ens_num, num_of_horizons + 1,
+                U_crop_shape, V_crop_shape, ci_crop_shape)
+            letkf_io.save_netcdf(
+                file_path_r, U, V, ci, param_dic,
+                we_crop, sn_crop, we_stag_crop, sn_stag_crop,
+                save_times, ens_num)
     return
+
+
+def extract_components(ensemble_array, ens_num, time_num,
+                       U_shape, V_shape, ci_shape):
+    U_size = U_shape[0]*U_shape[1]
+    V_size = V_shape[0]*V_shape[1]
+    wind_size = U_size + V_size
+    ensemble_array = np.transpose(ensemble_array, (0, 2, 1))
+    U = ensemble_array[:, :, :U_size].reshape(
+        time_num, ens_num, U_shape[0], U_shape[1])
+    V = ensemble_array[:, :, U_size:wind_size].reshape(
+        time_num, ens_num, V_shape[0], V_shape[1])
+    ci = ensemble_array[:, :, wind_size:].reshape(
+        time_num, ens_num, ci_shape[0], ci_shape[1])
+    return U, V, ci
 
 
 def test_parallax(sat, domain_shape, dx, dy, lats, lons, sensor_data,

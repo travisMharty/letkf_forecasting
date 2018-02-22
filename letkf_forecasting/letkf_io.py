@@ -19,7 +19,7 @@ def create_path(time, run_name):
         os.makedirs(file_path_r)
     else:
         file_path_r = os.path.split(file_path_r)[0]
-        run_num = glob.glob(os.path.join(file_path_r, run_name + '*'))
+        run_num = glob.glob(os.path.join(file_path_r, run_name + '_???'))
         run_num.sort()
         run_num = run_num[-1]
         run_num = int(run_num[-3:]) + 1
@@ -78,13 +78,13 @@ def save_netcdf(file_path_r, U, V, ci, param_dic, we_crop, sn_crop,
                                       'south_north', 'west_east',),
                                      zlib=True)
         U_nc = store.createVariable('U', 'f8',
-                                    ('ensemble_number',
+                                    ('time', 'ensemble_number',
                                      'south_north', 'west_east_stag',),
                                     zlib=True)
         V_nc = store.createVariable('V', 'f8',
-                                    ('ensemble_number',
+                                    ('time', 'ensemble_number',
                                      'south_north_stag', 'west_east',),
                                     zlib=True)
-        U_nc[:, :, :] = U
-        V_nc[:, :, :] = V
+        U_nc[:, :, :, :] = U
+        V_nc[:, :, :, :] = V
         ci_nc[:, :, :, :] = ci
