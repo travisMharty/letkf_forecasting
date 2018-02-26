@@ -14,7 +14,7 @@ def create_path(time, run_name):
     run_num = 0
     file_path_r = (f'{home}/results/{year:04}'
                    f'/{month:02}/{day:02}/' +
-                   run_name + '000')
+                   run_name + '_000')
     if not os.path.exists(file_path_r):
         os.makedirs(file_path_r)
     else:

@@ -1374,7 +1374,6 @@ def forecast_system(param_dic, data_file_path, run_name,
                             np.min([we_max_crop, we_stag_max_crop]))
             wind_y_range = (np.max([sn_min_crop, sn_stag_min_crop]),
                             np.min([sn_max_crop, sn_stag_max_crop]))
-            del U_crop_pos, V_crop_pos
         sat_time = sat_times[0]
         int_index_wind = wind_times_all.get_loc(sat_times[0],
                                                 method='pad')
@@ -1513,7 +1512,7 @@ def forecast_system(param_dic, data_file_path, run_name,
                     logging.debug('calc of')
                     # retreive OF vectors
                     time0 = sat_times[time_index - 1]
-                    with Dataset as store:
+                    with Dataset(data_file_path, mode='r') as store:
                         this_U = store.variables['U'][
                             wind_times_all == wind_time, :, :]
                         this_V = store.variables['V'][
