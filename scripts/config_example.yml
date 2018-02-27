@@ -9,13 +9,13 @@ param_dic:
   run_name: 'test'
 
   # Switches
-  assim_test: 0
-  perturbation_test: 0
-  div_test: 0
-  assim_of_test: 0
-  assim_sat2sat_test: 0
-  assim_sat2wind_test: 0
-  assim_wrf_test: 0
+  assim_flag: 0
+  perturbation_flag: 0
+  div_flag: 0
+  assim_of_flag: 0
+  assim_sat2sat_flag: 0
+  assim_sat2wind_flag: 0
+  assim_wrf_flag: 0
 
   # advection_params
   start_time: 0
