@@ -5,11 +5,7 @@ import glob
 from netCDF4 import Dataset, date2num, num2date
 
 
-def create_path(time, run_name):
-    date = time.date()
-    year = date.year
-    month = date.month
-    day = date.day
+def create_path(year, month, day, run_name):
     home = os.path.expanduser('~')
     run_num = 0
     file_path_r = (f'{home}/results/{year:04}'

@@ -1240,24 +1240,23 @@ def remove_divergence_ensemble(
     return wind_ensemble
 
 
-def forecast_system(param_dic, data_file_path, run_name,
-                    assim_flag=False, perturbation_flag=False,
-                    div_flag=False,
-                    assim_of_flag=False, assim_sat2sat_flag=False,
-                    assim_sat2wind_flag=False, assim_wrf_flag=False,
-                    start_time=None, end_time=None, C_max=0.7,
-                    max_horizon='15min',
-                    client_address='127.0.0.1:8786',
-                    sig_sat2sat=None, loc_sat2sat=None,
-                    infl_sat2sat=None, assim_gs_sat2sat=None,
-                    sig_sat2wind=None, loc_sat2wind=None,
-                    infl_sat2wind=None, assim_gs_sat2wind=None,
-                    sig_wrf=None, infl_wrf=None, loc_wrf=None,
-                    assim_gs_wrf=None,
-                    sig_of=None, loc_of=None, infl_of=None,
-                    ens_num=None, winds_sigma=None, ci_sigma=None,
-                    Lx=None, Ly=None, tol=None,
-                    pert_sigma=None, pert_mean=None, edge_weight=None):
+def forecast_system(data_file_path, results_file_path,
+                    date, io, flags, advect_params, ens_params, pert_params,
+                    sat2sat, sat2wind, wrf, opt_flow):
+    param_dic = date.copy()
+    param_dic.update(io)
+    param_dic.update(advect_params)
+    param_dic.update(ens_params)
+    param_dic.update(pert_params)
+    for dic in [flags, sat2sat, sat2wind, wrf, opt_flow]:
+        temp = dic.copy()
+        name = temp['name'] + '_'
+        del temp['name']
+        for k in temp.keys():
+            temp[name + k] = temp.pop(k)
+        param_dic.update(temp)
+    start_time = advect_params['start_time']
+    end_time = advect_params['end_time']
     # read initial data from satellite store
     with Dataset(data_file_path, mode='r') as store:
         sat_times = store.variables['time']
@@ -1284,7 +1283,7 @@ def forecast_system(param_dic, data_file_path, run_name,
     sn_stag_crop = sn[sn_stag_min_crop:sn_stag_max_crop + 1]
     dx = (we[1] - we[0])*1000
     dy = (sn[1] - sn[0])*1000  # dx, dy in m not km
-    max_horizon = pd.Timedelta(max_horizon)
+    max_horizon = pd.Timedelta(advect_params['max_horizon'])
     ci_crop_shape = np.array([sn_max_crop - sn_min_crop + 1,
                               we_max_crop - we_min_crop + 1],
                              dtype='int')
@@ -1322,12 +1321,9 @@ def forecast_system(param_dic, data_file_path, run_name,
     # Advection calculations
     num_of_horizons = int((max_horizon/15).seconds/60)
 
-    # Create path to save results
-    file_path_r = letkf_io.create_path(sat_times_all[0], run_name)
-
     # Creat stuff used to remove divergence
-    remove_div_flag = div_flag
-    if div_flag:
+    remove_div_flag = flags['div']
+    if flags['div']:
         mesh = fe.RectangleMesh(fe.Point(0, 0),
                                 fe.Point(int(V_crop_shape[1] - 1),
                                          int(U_crop_shape[0] - 1)),
@@ -1336,40 +1332,42 @@ def forecast_system(param_dic, data_file_path, run_name,
         FunctionSpace_wind = fe.FunctionSpace(mesh, 'P', 1)
 
     # Create things needed for assimilations
-    if assim_flag:
+    if flags['assim']:
         # start cluster
-        client = Client(client_address)
-        if assim_sat2sat_flag:
+        client = Client(advect_params['client_address'])
+        if flags['assim_sat2sat']:
             assim_pos, assim_pos_2d, full_pos_2d = (
                 assimilation_position_generator(ci_crop_shape,
-                                                assim_gs_sat2sat))
+                                                sat2sat['grid_size']))
             noise_init = noise_fun(ci_crop_shape)
             noise = noise_init.copy()
-        if assim_sat2wind_flag:
+        if flags['assim_sat2wind']:
             assim_pos_sat2wind, assim_pos_2d_sat2wind, full_pos_2d_sat2wind = (
                 assimilation_position_generator(ci_crop_shape,
-                                                assim_gs_sat2wind))
-        if assim_sat2wind_flag:
+                                                sat2wind['grid_size']))
+        # Check if these are needed
+        if flags['assim_sat2wind']:
             assim_pos_U, assim_pos_2d_U, full_pos_2d_U = (
                 assimilation_position_generator(U_crop_shape,
-                                                assim_gs_sat2wind))
+                                                sat2wind['grid_size']))
             assim_pos_V, assim_pos_2d_V, full_pos_2d_V = (
                 assimilation_position_generator(V_crop_shape,
-                                                assim_gs_sat2wind))
-        if assim_wrf_flag:
+                                                sat2wind['grid_size']))
+        if flags['assim_wrf']:
             assim_pos_U_wrf, assim_pos_2d_U_wrf, full_pos_2d_U_wrf = (
                 assimilation_position_generator(U_crop_shape,
-                                                assim_gs_wrf))
+                                                wrf['grid_size']))
             assim_pos_V_wrf, assim_pos_2d_V_wrf, full_pos_2d_V_wrf = (
                 assimilation_position_generator(V_crop_shape,
-                                                assim_gs_wrf))
-        if perturbation_flag:
+                                                wrf['grid_size']))
+        if flags['perturbation']:
             rf_eig, rf_vectors = rf.eig_2d_covariance(
                 x=we_crop, y=sn_crop,
-                Lx=Lx, Ly=Ly, tol=tol)
+                Lx=pert_params['Lx'],
+                Ly=pert_params['Ly'], tol=pert_params['tol'])
             rf_approx_var = (
                 rf_vectors * rf_eig[None, :] * rf_vectors).sum(-1).mean()
-        if assim_of_flag:
+        if flags['assim_of']:
             wind_x_range = (np.max([we_min_crop, we_stag_min_crop]),
                             np.min([we_max_crop, we_stag_max_crop]))
             wind_y_range = (np.max([sn_min_crop, sn_stag_min_crop]),
@@ -1393,12 +1391,13 @@ def forecast_system(param_dic, data_file_path, run_name,
             U = U[0]
             V = V[0]
         ensemble = ensemble_creator(
-            q, U, V, CI_sigma=ci_sigma, wind_sigma=winds_sigma,
-            ens_size=ens_num)
+            q, U, V, CI_sigma=ens_params['ci_sigma'],
+            wind_sigma=ens_params['winds_sigma'],
+            ens_size=ens_params['ens_num'])
         del q, U, V
         ens_shape = ensemble.shape
     else:
-        ens_num = 1
+        ens_params['ens_num'] = 1
     for time_index in range(sat_times.size - 1):
         sat_time = sat_times[time_index]
         save_times = pd.date_range(sat_time, periods=(num_of_horizons + 1),
@@ -1411,7 +1410,7 @@ def forecast_system(param_dic, data_file_path, run_name,
         num_of_advec = int((
             sat_times[time_index + 1] -
             sat_times[time_index]).seconds/(60*15))
-        if not assim_flag:  # assums no perturbation
+        if not flags['assim']:  # assums no perturbation
             with Dataset(data_file_path, mode='r') as store:
                 q = store.variables['ci'][sat_times_all == sat_time,
                                           sn_min_crop:sn_max_crop + 1,
@@ -1429,7 +1428,7 @@ def forecast_system(param_dic, data_file_path, run_name,
             q_array = q.copy()[None, :, :]
             cx = abs(U).max()
             cy = abs(V).max()
-            T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)/C_max))
+            T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)/advect_params['C_max']))
             dt = (5*60)/T_steps
             for m in range(num_of_horizons):
                 logging.info(str(pd.Timedelta('15min')*(m + 1)))
@@ -1437,16 +1436,16 @@ def forecast_system(param_dic, data_file_path, run_name,
                     q = advect_5min(q, dt, U, dx, V, dy, T_steps)
                 q_array = np.concatenate([q_array, q[None, :, :]], axis=0)
             letkf_io.save_netcdf(
-                file_path_r,
+                results_file_path,
                 np.repeat(U[None, None, :, :], num_of_horizons + 1, axis=0),
                 np.repeat(V[None, None, :, :], num_of_horizons + 1, axis=0),
                 q_array[:, None, :, :],
                 param_dic, we_crop, sn_crop,
                 we_stag_crop, sn_stag_crop,
-                save_times, ens_num)
+                save_times, ens_params['ens_num'])
         else:
             if time_index != 0:
-                if assim_sat2wind_flag:
+                if flags['assim_sat2wind']:
                     logging.debug('Assim sat2wind')
                     with Dataset(data_file_path, mode='r') as store:
                         q = store.variables['ci'][sat_times_all == sat_time,
@@ -1457,18 +1456,18 @@ def forecast_system(param_dic, data_file_path, run_name,
                     ensemble = assimilate_sat_to_wind(
                         ensemble=ensemble,
                         observations=q.ravel(),
-                        R_inverse_wind=1/sig_sat2wind**2,
-                        wind_inflation=infl_sat2wind,
+                        R_inverse_wind=1/sat2wind['sig']**2,
+                        wind_inflation=sat2wind['infl'],
                         domain_shape=ci_crop_shape,
                         U_shape=U_crop_shape, V_shape=V_crop_shape,
-                        localization_length_wind=loc_sat2wind,
+                        localization_length_wind=sat2wind['loc'],
                         assimilation_positions=assim_pos_sat2wind,
                         assimilation_positions_2d=assim_pos_2d_sat2wind,
                         full_positions_2d=full_pos_2d_sat2wind)
                     remove_div_flag = True
                     del q
 
-                if assim_wrf_flag and sat_time == wind_time:
+                if flags['assim_wrf'] and sat_time == wind_time:
                     logging.debug('Assim WRF')
                     with Dataset(data_file_path, mode='r') as store:
                         U = store.variables['U'][wind_times_all == wind_time,
@@ -1487,10 +1486,10 @@ def forecast_system(param_dic, data_file_path, run_name,
                     ensemble[:U_crop_size] = assimilate_wrf(
                         ensemble=ensemble[:U_crop_size],
                         observations=U.ravel(),
-                        R_inverse=1/sig_wrf**2,
-                        wind_inflation=infl_wrf,
+                        R_inverse=1/wrf['sig']**2,
+                        wind_inflation=wrf['infl'],
                         wind_shape=U_crop_shape,
-                        localization_length_wind=loc_wrf,
+                        localization_length_wind=wrf['loc'],
                         assimilation_positions=assim_pos_U_wrf,
                         assimilation_positions_2d=assim_pos_2d_U_wrf,
                         full_positions_2d=full_pos_2d_U_wrf)
@@ -1500,15 +1499,15 @@ def forecast_system(param_dic, data_file_path, run_name,
                         ensemble=ensemble[U_crop_size:
                                           U_crop_size + V_crop_size],
                         observations=V.ravel(),
-                        R_inverse=1/sig_wrf**2,
-                        wind_inflation=infl_wrf,
+                        R_inverse=1/wrf['sig']**2,
+                        wind_inflation=wrf['infl'],
                         wind_shape=V_crop_shape,
-                        localization_length_wind=loc_wrf,
+                        localization_length_wind=wrf['loc'],
                         assimilation_positions=assim_pos_V_wrf,
                         assimilation_positions_2d=assim_pos_2d_V_wrf,
                         full_positions_2d=full_pos_2d_V_wrf)
                     del U, V
-                if assim_of_flag:
+                if flags['assim_of']:
                     logging.debug('calc of')
                     # retreive OF vectors
                     time0 = sat_times[time_index - 1]
@@ -1554,9 +1553,10 @@ def forecast_system(param_dic, data_file_path, run_name,
                     x_temp, y_temp = np.meshgrid(x_temp, y_temp)
                     ensemble[:U_crop_size] = reduced_enkf(
                         ensemble=ensemble[:U_crop_size],
-                        observations=u_of, R_sig=sig_of,
+                        observations=u_of, R_sig=opt_flow['sig'],
                         flat_locations=u_of_flat_pos,
-                        inflation=infl_of, localization=loc_of,
+                        inflation=opt_flow['infl'],
+                        localization=opt_flow['loc'],
                         x=x_temp.ravel(), y=y_temp.ravel())
                     x_temp = np.arange(V_crop_shape[1])*dx/1000
                     y_temp = np.arange(V_crop_shape[0])*dx/1000
@@ -1565,11 +1565,12 @@ def forecast_system(param_dic, data_file_path, run_name,
                              U_crop_size + V_crop_size] = reduced_enkf(
                         ensemble=ensemble[U_crop_size:U_crop_size +
                                           V_crop_size],
-                        observations=v_of, R_sig=sig_of,
+                        observations=v_of, R_sig=opt_flow['sig'],
                         flat_locations=v_of_flat_pos,
-                        inflation=infl_of, localization=loc_of,
+                        inflation=opt_flow['infl'],
+                        localization=opt_flow['loc'],
                         x=x_temp.ravel(), y=y_temp.ravel())
-                if not assim_sat2sat_flag:
+                if not flags['assim_sat2sat']:
                     with Dataset(data_file_path, mode='r') as store:
                         q = store.variables['ci'][sat_times_all == sat_time,
                                                   sn_min_crop:sn_max_crop + 1,
@@ -1578,7 +1579,7 @@ def forecast_system(param_dic, data_file_path, run_name,
                         q = q[0]
                     ensemble[wind_size:] = q.ravel()[:, None]
 
-            if remove_div_flag and div_flag:
+            if remove_div_flag and flags['div']:
                 logging.debug('remove divergence')
                 remove_div_flag = False
                 ensemble[:wind_size] = remove_divergence_ensemble(
@@ -1589,7 +1590,8 @@ def forecast_system(param_dic, data_file_path, run_name,
             cx = abs(temp_ensemble[:U_crop_size]).max()
             cy = abs(temp_ensemble[U_crop_size:
                                    U_crop_size + V_crop_size]).max()
-            T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)/C_max))
+            T_steps = int(np.ceil((5*60)*(cx/dx+cy/dy)
+                                  / advect_params['C_max']))
             dt = (5*60)/T_steps
             for m in range(num_of_horizons):
                 logging.info(str(pd.Timedelta('15min')*(m + 1)))
@@ -1598,10 +1600,12 @@ def forecast_system(param_dic, data_file_path, run_name,
                         ensemble, dt, dx, dy, T_steps,
                         U_crop_shape, V_crop_shape,
                         ci_crop_shape, client)
-                    if perturbation_flag:
+                    if flags['perturbation']:
                         temp_ensemble[wind_size:] = perturb_irradiance(
                             temp_ensemble[wind_size:], ci_crop_shape,
-                            edge_weight, pert_mean, pert_sigma,
+                            pert_params['edge_weight'],
+                            pert_params['pert_mean'],
+                            pert_params['pert_sigma'],
                             rf_approx_var, rf_eig, rf_vectors)
                 ensemble_array = np.concatenate(
                     [ensemble_array, temp_ensemble[None, :, :]],
@@ -1609,12 +1613,12 @@ def forecast_system(param_dic, data_file_path, run_name,
                 if num_of_advec == m:
                     ensemble = temp_ensemble.copy()
             U, V, ci = extract_components(
-                ensemble_array, ens_num, num_of_horizons + 1,
+                ensemble_array, ens_params['ens_num'], num_of_horizons + 1,
                 U_crop_shape, V_crop_shape, ci_crop_shape)
             letkf_io.save_netcdf(
-                file_path_r, U, V, ci, param_dic,
+                results_file_path, U, V, ci, param_dic,
                 we_crop, sn_crop, we_stag_crop, sn_stag_crop,
-                save_times, ens_num)
+                save_times, ens_params['ens_num'])
     return
 
 
