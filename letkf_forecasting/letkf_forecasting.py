@@ -1241,8 +1241,8 @@ def remove_divergence_ensemble(
 
 
 def forecast_system(param_dic, data_file_path, run_name,
-                    assim_test=False, perturbation_test=False,
-                    div_test=False,
+                    assim_flag=False, perturbation_flag=False,
+                    div_flag=False,
                     assim_of_flag=False, assim_sat2sat_flag=False,
                     assim_sat2wind_flag=False, assim_wrf_flag=False,
                     start_time=None, end_time=None, C_max=0.7,
