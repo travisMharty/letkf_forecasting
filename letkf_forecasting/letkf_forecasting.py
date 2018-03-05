@@ -1425,6 +1425,10 @@ def forecast_system(data_file_path, results_file_path,
                 q = q[0]
                 U = U[0]
                 V = V[0]
+            if flags['div']:
+                logging.debug('remove divergence')
+                U, V = remove_divergence(
+                    FunctionSpace_wind, U, V, 4)  # hardwired smoothing
             q_array = q.copy()[None, :, :]
             cx = abs(U).max()
             cy = abs(V).max()
@@ -1584,7 +1588,7 @@ def forecast_system(data_file_path, results_file_path,
                 remove_div_flag = False
                 ensemble[:wind_size] = remove_divergence_ensemble(
                     FunctionSpace_wind, ensemble[:wind_size],
-                    U_crop_shape, V_crop_shape, 4)
+                    U_crop_shape, V_crop_shape, 4)  # hardwired smoothing
             temp_ensemble = ensemble.copy()
             ensemble_array = temp_ensemble.copy()[None, :, :]
             cx = abs(temp_ensemble[:U_crop_size]).max()
