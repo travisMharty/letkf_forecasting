@@ -5,12 +5,12 @@ date:
 
 io:
   data_file_path: '{home}/data/{year:04}/{month:02}/{day:02}/data.nc'
-  run_name: 'test'
+  run_name: 'wrf_no_div'
 
 flags:
   assim: 0
   perturbation: 0
-  div: 0
+  div: 1
   assim_of: 0
   assim_sat2sat: 0
   assim_sat2wind: 0
