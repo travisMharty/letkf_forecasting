@@ -1,0 +1,64 @@
+date:
+  year: None
+  month: None
+  day: None
+
+io:
+  data_file_path: '{home}/data/{year:04}/{month:02}/{day:02}/data.nc'
+  run_name: 'wrf_mean'
+
+flags:
+  assim: 0
+  perturbation: 0
+  div: 1
+  assim_of: 0
+  assim_sat2sat: 0
+  assim_sat2wind: 0
+  assim_wrf: 0
+  wrf_mean: 1
+  name: 'flag'
+
+advect_params:
+  start_time: 0
+  end_time: 0
+  C_max: 0.7
+  max_horizon: '1hour'
+  client_address: '127.0.0.1:8786'
+
+ens_params:
+  ens_num: 1
+  winds_sigma: (None, None)
+  ci_sigma: None
+
+pert_params:
+  Lx: 5
+  Ly: 5
+  tol: 0.005
+  pert_sigma: 0.15/3
+  pert_mean: 0
+  edge_weight: 1
+
+# assimilation_params
+sat2sat:
+  sig: None
+  loc: None
+  infl: None
+  grid_size: None
+  name: 'sat2sat'
+sat2wind:
+  sig: None
+  loc: None
+  infl: None
+  grid_size: None
+  name: 'sat2wind'
+wrf:
+  sig: None
+  infl: None
+  loc: None
+  grid_size: None
+  name: 'wrf'
+opt_flow:
+  sig: None
+  loc: None  # in km not grid spaces
+  infl: None
+  name: 'of'

@@ -12,11 +12,24 @@ def main():
         description='Run forecast_system using provided configuration file.')
     parser.add_argument('file_path', type=str,
                         help='The full path to the configuration file.')
+    parser.add_argument('-y', '--year', type=int,
+                        help='The year you wish to run.')
+    parser.add_argument('-m', '--month', type=int,
+                        help='The month you wish to run.')
+    parser.add_argument('-d', '--day', type=int,
+                        help='The day you wish to run.')
     args = parser.parse_args()
 
     with open(args.file_path, 'r') as ymlfile:
         cfg = yaml.load(ymlfile)
     date = cfg['date']
+
+    if args.year is not None:
+        date['year'] = args.year
+    if args.month is not None:
+        date['month'] = args.month
+    if args.day is not None:
+        date['day'] = args.day
     # Create path to save results
     results_file_path = letkf_io.create_path(date['year'],
                                              date['month'],
