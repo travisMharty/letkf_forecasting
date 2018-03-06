@@ -1267,14 +1267,12 @@ def forecast_system(data_file_path, results_file_path,
     param_dic.update(advect_params)
     param_dic.update(ens_params)
     param_dic.update(pert_params)
-    print(param_dic)
     for dic in [flags, sat2sat, sat2wind, wrf, opt_flow]:
         temp = dic.copy()
         name = temp['name'] + '_'
         del temp['name']
         keys = list(temp.keys())
         for k in keys:
-            print(name + k)
             temp[name + k] = temp.pop(k)
         param_dic.update(temp)
     start_time = advect_params['start_time']
