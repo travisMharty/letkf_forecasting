@@ -65,6 +65,7 @@ def save_netcdf(file_path_r, U, V, ci, param_dic, we_crop, sn_crop,
         sat_times_nc = date2num(sat_times_nc, time_units)
         time_nc[:] = sat_times_nc
         time_nc.units = time_units
+        time_nc.init = sat_times_nc[0]
         store.createDimension('ensemble_number', size=ens_num)
         ensemble_number_nc = store.createVariable('ensemble_number',
                                                   'i8', ('ensemble_number'))
