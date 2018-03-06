@@ -1212,6 +1212,25 @@ def remove_divergence(V, u, v, sigma):
     return u_corrected, v_corrected
 
 
+def remove_divergence_single(
+        FunctionSpace, u, v, sigma):
+    # this is not done on Arakawa Grid which sucks...
+    # the interpolations are quick and dirty.
+    temp_u = u
+    temp_u = .5*(temp_u[:, :-1] + temp_u[:, 1:])
+    temp_v = v
+    temp_v = .5*(temp_v[:-1, :] + temp_v[1:, :])
+    temp_u, temp_v = remove_divergence(FunctionSpace,
+                                       temp_u, temp_v, sigma)
+    temp1 = np.pad(temp_u, ((0, 0), (0, 1)), mode='edge')
+    temp2 = np.pad(temp_u, ((0, 0), (1, 0)), mode='edge')
+    temp_u = .5*(temp1 + temp2)
+    temp1 = np.pad(temp_v, ((0, 1), (0, 0)), mode='edge')
+    temp2 = np.pad(temp_v, ((1, 0), (0, 0)), mode='edge')
+    temp_v = .5*(temp1 + temp2)
+    return temp_u, temp_v
+
+
 def remove_divergence_ensemble(
         FunctionSpace, wind_ensemble, U_crop_shape, V_crop_shape, sigma):
     # this is not done on Arakawa Grid which sucks...
@@ -1248,11 +1267,14 @@ def forecast_system(data_file_path, results_file_path,
     param_dic.update(advect_params)
     param_dic.update(ens_params)
     param_dic.update(pert_params)
+    print(param_dic)
     for dic in [flags, sat2sat, sat2wind, wrf, opt_flow]:
         temp = dic.copy()
         name = temp['name'] + '_'
         del temp['name']
-        for k in temp.keys():
+        keys = list(temp.keys())
+        for k in keys:
+            print(name + k)
             temp[name + k] = temp.pop(k)
         param_dic.update(temp)
     start_time = advect_params['start_time']
@@ -1427,7 +1449,7 @@ def forecast_system(data_file_path, results_file_path,
                 V = V[0]
             if flags['div']:
                 logging.debug('remove divergence')
-                U, V = remove_divergence(
+                U, V = remove_divergence_single(
                     FunctionSpace_wind, U, V, 4)  # hardwired smoothing
             q_array = q.copy()[None, :, :]
             cx = abs(U).max()
