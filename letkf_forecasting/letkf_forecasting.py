@@ -969,8 +969,10 @@ def advect_5min_ensemble(
                                         U, dx,
                                         V, dy)
             return CI_field.ravel()
+
         CI_fields = ensemble[wind_size:].copy()
         CI_fields = CI_fields.T
+        CI_fields = 1 - CI_fields
         us = ensemble[:U_size].T.reshape(ens_size, U_shape[0], U_shape[1])
         vs = ensemble[U_size: V_size + U_size].T.reshape(
             ens_size, V_shape[0], V_shape[1])
@@ -982,6 +984,7 @@ def advect_5min_ensemble(
                              CI_fields, us, vs)
         temp = client.gather(futures)
         temp = np.stack(temp, axis=1)
+        temp = 1 - temp
         ensemble[wind_size:] = temp
         return ensemble
 
@@ -1460,7 +1463,9 @@ def forecast_system(data_file_path, results_file_path,
             for m in range(num_of_horizons):
                 logging.info(str(pd.Timedelta('15min')*(m + 1)))
                 for n in range(3):
+                    q = 1 - q
                     q = advect_5min(q, dt, U, dx, V, dy, T_steps)
+                    q = 1 - q
                 q_array = np.concatenate([q_array, q[None, :, :]], axis=0)
             letkf_io.save_netcdf(
                 results_file_path,
