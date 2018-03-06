@@ -1445,7 +1445,10 @@ def forecast_system(data_file_path, results_file_path,
                 q = q[0]
                 U = U[0]
                 V = V[0]
-            if flags['div']:
+            if flags['wrf_mean']:
+                U = np.ones_like(U)*U.mean()
+                V = np.ones_like(V)*V.mean()
+            elif flags['div']:
                 logging.debug('remove divergence')
                 U, V = remove_divergence_single(
                     FunctionSpace_wind, U, V, 4)  # hardwired smoothing
