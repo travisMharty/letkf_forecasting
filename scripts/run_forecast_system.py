@@ -23,7 +23,6 @@ def main():
     with open(args.file_path, 'r') as ymlfile:
         cfg = yaml.load(ymlfile)
     date = cfg['date']
-
     if args.year is not None:
         date['year'] = args.year
     if args.month is not None:
