@@ -1,9 +1,13 @@
 # letkf_forecasting
 
-The script run_forecast_system.py requires to be called with an argument which
+The script run_forecast_system.py must be called with an argument which
 is the path to a yaml configuration file such as config_example.py. The
 conifig file must importantly point to the location of 2d wind fields and
-satellite images for the day to be forecasted. These data must be preprepared
+satellite images for the day to be forecasted. Optionally,
+run_forecast_system.py can also include the year, month, and day so that the
+dates in the configuration file will be ignored and the provided date will be
+used instead. There is also a bash file badly named run_bash.sh which can be
+called to run several different days in unison.
 
 
 The module letkf_forecasting.py is the core module. It will likely need to be
