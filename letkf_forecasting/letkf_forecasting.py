@@ -986,6 +986,7 @@ def advect_5min_ensemble(
         temp = np.stack(temp, axis=1)
         temp = 1 - temp
         ensemble[wind_size:] = temp
+        client.restart()
         return ensemble
 
 
