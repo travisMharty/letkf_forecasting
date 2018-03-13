@@ -45,17 +45,17 @@ def save_netcdf(file_path_r, U, V, ci, param_dic, we_crop, sn_crop,
         store.createDimension('west_east_stag', size=we_stag_crop.size)
         store.createDimension('south_north_stag', size=sn_stag_crop.size)
         store.createDimension('time', size=sat_times.size)
-        we_nc = store.createVariable('west_east', 'f8', ('west_east',),
+        we_nc = store.createVariable('west_east', 'f4', ('west_east',),
                                      zlib=True)
-        sn_nc = store.createVariable('south_north', 'f8', ('south_north',),
+        sn_nc = store.createVariable('south_north', 'f4', ('south_north',),
                                      zlib=True)
-        we_stag_nc = store.createVariable('west_east_stag', 'f8',
+        we_stag_nc = store.createVariable('west_east_stag', 'f4',
                                           ('west_east_stag',),
                                           zlib=True)
-        sn_stag_nc = store.createVariable('south_north_stag', 'f8',
+        sn_stag_nc = store.createVariable('south_north_stag', 'f4',
                                           ('south_north_stag',),
                                           zlib=True)
-        time_nc = store.createVariable('time', 'f8', ('time',))
+        time_nc = store.createVariable('time', 'u4', ('time',))
         we_nc[:] = we_crop
         sn_nc[:] = sn_crop
         we_stag_nc[:] = we_stag_crop
@@ -68,17 +68,17 @@ def save_netcdf(file_path_r, U, V, ci, param_dic, we_crop, sn_crop,
         time_nc.init = sat_times_nc[0]
         store.createDimension('ensemble_number', size=ens_num)
         ensemble_number_nc = store.createVariable('ensemble_number',
-                                                  'i8', ('ensemble_number'))
+                                                  'u4', ('ensemble_number'))
         ensemble_number_nc[:] = np.arange(ens_num)
-        ci_nc = store.createVariable('ci', 'f8',
+        ci_nc = store.createVariable('ci', 'f4',
                                      ('time', 'ensemble_number',
                                       'south_north', 'west_east',),
                                      zlib=True)
-        U_nc = store.createVariable('U', 'f8',
+        U_nc = store.createVariable('U', 'f4',
                                     ('time', 'ensemble_number',
                                      'south_north', 'west_east_stag',),
                                     zlib=True)
-        V_nc = store.createVariable('V', 'f8',
+        V_nc = store.createVariable('V', 'f4',
                                     ('time', 'ensemble_number',
                                      'south_north_stag', 'west_east',),
                                     zlib=True)
