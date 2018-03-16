@@ -1500,7 +1500,7 @@ def forecast_system(data_file_path, results_file_path,
                     remove_div_flag = True
                     del q
 
-                if flags['assim_wrf'] and sat_time == wind_time:
+                if sat_time == wind_time:
                     logging.debug('Assim WRF')
                     with Dataset(data_file_path, mode='r') as store:
                         U = store.variables['U'][wind_times_all == wind_time,
@@ -1516,30 +1516,36 @@ def forecast_system(data_file_path, results_file_path,
                         U = U[0]
                         V = V[0]
                     remove_div_flag = True
-                    ensemble[:U_crop_size] = assimilate_wrf(
-                        ensemble=ensemble[:U_crop_size],
-                        observations=U.ravel(),
-                        R_inverse=1/wrf['sig']**2,
-                        wind_inflation=wrf['infl'],
-                        wind_shape=U_crop_shape,
-                        localization_length_wind=wrf['loc'],
-                        assimilation_positions=assim_pos_U_wrf,
-                        assimilation_positions_2d=assim_pos_2d_U_wrf,
-                        full_positions_2d=full_pos_2d_U_wrf)
+                    if flags['assim_wrf']:
+                        ensemble[:U_crop_size] = assimilate_wrf(
+                            ensemble=ensemble[:U_crop_size],
+                            observations=U.ravel(),
+                            R_inverse=1/wrf['sig']**2,
+                            wind_inflation=wrf['infl'],
+                            wind_shape=U_crop_shape,
+                            localization_length_wind=wrf['loc'],
+                            assimilation_positions=assim_pos_U_wrf,
+                            assimilation_positions_2d=assim_pos_2d_U_wrf,
+                            full_positions_2d=full_pos_2d_U_wrf)
 
-                    ensemble[U_crop_size:
-                             U_crop_size + V_crop_size] = assimilate_wrf(
-                        ensemble=ensemble[U_crop_size:
-                                          U_crop_size + V_crop_size],
-                        observations=V.ravel(),
-                        R_inverse=1/wrf['sig']**2,
-                        wind_inflation=wrf['infl'],
-                        wind_shape=V_crop_shape,
-                        localization_length_wind=wrf['loc'],
-                        assimilation_positions=assim_pos_V_wrf,
-                        assimilation_positions_2d=assim_pos_2d_V_wrf,
-                        full_positions_2d=full_pos_2d_V_wrf)
-                    del U, V
+                        ensemble[U_crop_size:
+                                 U_crop_size + V_crop_size] = assimilate_wrf(
+                                     ensemble=ensemble[U_crop_size:
+                                                       U_crop_size + V_crop_size],
+                                     observations=V.ravel(),
+                                     R_inverse=1/wrf['sig']**2,
+                                     wind_inflation=wrf['infl'],
+                                     wind_shape=V_crop_shape,
+                                     localization_length_wind=wrf['loc'],
+                                     assimilation_positions=assim_pos_V_wrf,
+                                     assimilation_positions_2d=assim_pos_2d_V_wrf,
+                                     full_positions_2d=full_pos_2d_V_wrf)
+                        del U, V
+                    else:
+                        ensemble[:U_crop_size] = U.ravel()
+
+                        ensemble[U_crop_size:
+                                 U_crop_size + V_crop_size] = V.ravel()
                 if flags['assim_of']:
                     logging.debug('calc of')
                     # retreive OF vectors
