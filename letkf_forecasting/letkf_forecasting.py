@@ -1542,10 +1542,20 @@ def forecast_system(data_file_path, results_file_path,
                                      full_positions_2d=full_pos_2d_V_wrf)
                         del U, V
                     else:
-                        ensemble[:U_crop_size] = U.ravel()
-
+                        random_nums = np.random.normal(
+                            loc=0,
+                            scale=ens_params['wind_sigma'][0],
+                            size=ens_shape[1])
+                        ensemble[:U_crop_size] = (U.ravel()[:, None]
+                                                  + random_nums[None, :])
+                        random_nums = np.random.normal(
+                            loc=0,
+                            scale=ens_params['wind_sigma'][1],
+                            size=ens_shape[1])
                         ensemble[U_crop_size:
-                                 U_crop_size + V_crop_size] = V.ravel()
+                                 U_crop_size + V_crop_size] = (
+                                     V.ravel()[:, None]
+                                     + random_nums[None, :])
                 if flags['assim_of']:
                     logging.debug('calc of')
                     # retreive OF vectors
