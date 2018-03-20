@@ -3,6 +3,29 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 
 
+def var_plot(ensemble, domain_shape,
+             adjust, cmap='Greys', vmin=0, vmax=None):
+    var = ensemble.var(axis=1)
+    if vmax is None:
+        vmax = var.max()
+    nc = 11
+    bounds = np.linspace(vmin, vmax, nc)
+    norm = colors.BoundaryNorm(boundaries=bounds, ncolors=256)
+    fraction = 0.10
+    pad = 0.02
+    dy, dx = domain_shape
+    figsize = plt.figaspect(float(dy) /
+                            (adjust*(1 + fraction + pad)*float(dx)))
+    fig, ax = plt.subplots(sharey=True, sharex=True,
+                           figsize=figsize, dpi=150)
+    im = ax.pcolormesh(var.reshape(domain_shape),
+                       vmin=vmin, vmax=vmax, cmap=cmap, norm=norm)
+    plt.colorbar(im)
+    ax.set(xlim=[0, domain_shape[1]], ylim=[0, domain_shape[0]])
+    ax.set(aspect='equal', adjustable='box-forced')
+    return fig, ax
+
+
 def ensemble_stamps(
         others, other_titles, ensemble, nrows, ncols, domain_shape, adjust,
         cmap='Blues', vmin=0, vmax=1):
@@ -62,7 +85,7 @@ def ensemble_stamps(
 
     for i in range(nrows):
         for j in range(ncols):
-            ax[i, j].set(xlim=[100, domain_shape[1]], ylim=[0, domain_shape[0]])
+            ax[i, j].set(xlim=[0, domain_shape[1]], ylim=[0, domain_shape[0]])
             ax[i, j].set(aspect='equal', adjustable='box-forced')
 
     plt.subplots_adjust(wspace=0.02, hspace=0.02)
@@ -85,7 +108,7 @@ def ensemble_stamps(
     #                         fill=False, lw=lw, color='k')
     # rec = ax[0, j + 1].add_patch(rec)
     # rec.set_clip_on(False)
-    plt.show()
+
     return fig, ax
 
 
@@ -131,5 +154,4 @@ def subplots(data, x, y, subplot_titles, axes_label, sup_title=None,
     for j in range(ncols):
         ax[j].set(aspect='equal', adjustable='datalim')
         ax[j].set_xlabel(axes_label)
-    plt.show()
     return fig, ax
