@@ -4,16 +4,16 @@ import matplotlib.colors as colors
 
 
 def ensemble_stamps(
-        others, other_titles, ensemble, nrows, ncols, domain_shape, adjust):
-    cmap = 'Blues'
-    vmin = 0
-    vmax = 1
+        others, other_titles, ensemble, nrows, ncols, domain_shape, adjust,
+        cmap='Blues', vmin=0, vmax=1):
+    if vmin is None or vmax is None:
+        vmax = np.max(np.abs(ensemble))
+        vmin = -vmax
     nc = 11
     bounds = np.linspace(vmin, vmax, nc)
     norm = colors.BoundaryNorm(boundaries=bounds, ncolors=256)
     fraction = 0.10
     pad = 0.02
-    lw = 1.2
     dy, dx = domain_shape
     figsize = plt.figaspect(float(dy * nrows) /
                             (adjust*(1 + fraction + pad)*float(dx * ncols)))
