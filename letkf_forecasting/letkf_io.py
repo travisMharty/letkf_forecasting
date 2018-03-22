@@ -150,17 +150,26 @@ def read_coords(*, data_file_path, advect_params):
         we_stag_max_crop = store.variables['U'].we_max_crop
         sn_stag_min_crop = store.variables['V'].sn_min_crop
         sn_stag_max_crop = store.variables['V'].sn_max_crop
-    we_crop = we[we_min_crop:we_max_crop + 1]
-    sn_crop = sn[sn_min_crop:sn_max_crop + 1]
-    we_stag_crop = we[we_stag_min_crop:we_stag_max_crop + 1]
-    sn_stag_crop = sn[sn_stag_min_crop:sn_stag_max_crop + 1]
+    we_slice = slice(we_min_crop, we_max_crop)
+    sn_slice = slice(sn_min_crop, sn_max_crop)
+    we_stag_slice = slice(we_stag_min_crop, we_stag_max_crop)
+    sn_stag_slice = slice(sn_stag_min_crop, sn_stag_max_crop)
+    we_crop = we[we_slice]
+    sn_crop = sn[sn_slice]
+    we_stag_crop = we[we_stag_slice]
+    sn_stag_crop = sn[sn_stag_slice]
     sat_times, sat_times_all = calc_time_range(sat_times=sat_times,
                                                advect_params=advect_params)
     Coords = namedtuple('coords', ['we', 'sn', 'we_crop', 'sn_crop',
                                    'we_stag_crop', 'sn_stag_crop',
-                                   'sat_times', 'sat_times_all', 'wind_times'])
+                                   'sat_times', 'sat_times_all', 'wind_times',
+                                   'we_slice', 'sn_slice',
+                                   'we_stag_slice', 'sn_stag_slice'])
     coords = Coords(we=we, sn=sn, we_crop=we_crop, sn_crop=sn_crop,
                     we_stag_crop=we_stag_crop, sn_stag_crop=sn_stag_crop,
                     sat_times=sat_times, sat_times_all=sat_times_all,
-                    wind_times=wind_times)
+                    wind_times=wind_times,
+                    we_slice=we_slice, sn_slice=sn_slice,
+                    we_stag_slice=we_stag_slice, sn_stag_slice=sn_stag_slice)
+
     return coords

@@ -57,7 +57,7 @@ def dic2nt(dic, name):
     return nt
 
 
-def calc_system_variables(*, coords, advect_params, flags):
+def calc_system_variables(*, coords, advect_params, flags, pert_params):
     dx = (coords.we[1] - coords.we[0])*1000
     dy = (coords.sn[1] - coords.sn[0])*1000  # dx, dy in m not km
     max_horizon = pd.Timedelta(advect_params['max_horizon'])
@@ -93,7 +93,7 @@ def calc_system_variables(*, coords, advect_params, flags):
         sys_vars['FunctionSpace_wind'] = FunctionSpace_wind
     if flags['perturbation']:
         rf_eig, rf_vectors = eig_2d_covariance(
-            x=we_crop, y=sn_crop,
+            x=coords.we_crop, y=coords.sn_crop,
             Lx=pert_params['Lx'],
             Ly=pert_params['Ly'], tol=pert_params['tol'])
         rf_approx_var = (
@@ -105,7 +105,8 @@ def calc_system_variables(*, coords, advect_params, flags):
     return sys_vars
 
 
-def calc_assim_varaibles():
+def calc_assim_varaibles(*, advect_params, flags, sat2sat, sat2wind,
+                         wrf):
     client = Client(advect_params['client_address'])
     assim_vars = {'client': client}
     if flags['assim_sat2sat']:
@@ -151,25 +152,27 @@ def calc_assim_varaibles():
         assim_vars['assim_pos_V_wrf'] = assim_pos_V_wrf
         assim_vars['assim_pos_2d_V_wrf'] = assim_pos_2d_V_wrf
         assim_vars['full_pos_2d_V_wrf'] = full_pos_2d_V_wrf
-    if flags['assim_of']:
-        wind_x_range = (np.max([we_min_crop, we_stag_min_crop]),
-                        np.min([we_max_crop, we_stag_max_crop]))
-        wind_y_range = (np.max([sn_min_crop, sn_stag_min_crop]),
-                        np.min([sn_max_crop, sn_stag_max_crop]))
+        assim_vars = dic2nt(assim_vars, 'assim_vars')
     return assim_vars
 
 
-def return_ensemble():
+def return_wind_time(*, sat_time, coords):
+    int_index_wind = coords.wind_times.get_loc(sat_time,
+                                              method='pad')
+    wind_time = coords.wind_times[int_index_wind]
+    return wind_time
+
+
+def return_ensemble(*, data_file_path, ens_params, coords):
+    sat_time = coords.sat_times[0]
+    wind_time = return_wind_time(sat_time=sat_time, coords=coords)
     with Dataset(data_file_path, mode='r') as store:
-        q = store.variables['ci'][sat_times_all == sat_time,
-                                  sn_min_crop:sn_max_crop + 1,
-                                  we_min_crop:we_max_crop + 1]
-        U = store.variables['U'][wind_times_all == wind_time,
-                                 sn_min_crop:sn_max_crop + 1,
-                                 we_stag_min_crop:we_stag_max_crop + 1]
-        V = store.variables['V'][wind_times_all == wind_time,
-                                 sn_stag_min_crop:sn_stag_max_crop + 1,
-                                 we_min_crop:we_max_crop + 1]
+        q = store.variables['ci'][coords.sat_times_all == sat_time,
+                                  coords.sn_slice, coords.we_slice]
+        U = store.variables['U'][coords.wind_times == wind_time,
+                                 coords.sn_slice, coords.we_stag_slice]
+        V = store.variables['V'][coords.wind_times == wind_time,
+                                 coords.sn_stag_slice, coords.we_slice]
         #  boolean indexing does not drop dimension
         q = q[0]
         U = U[0]
@@ -178,7 +181,6 @@ def return_ensemble():
         q, U, V, CI_sigma=ens_params['ci_sigma'],
         wind_sigma=ens_params['winds_sigma'],
         ens_size=ens_params['ens_num'])
-    del q, U, V
     return ensemble
 
 
@@ -191,14 +193,16 @@ def forecast_setup(*, data_file_path, date, io, advect_params, ens_params,
     coords = read_coords(data_file_path=data_file_path,
                          advect_params=advect_params)
     sys_vars = calc_system_variables(
-        coords=coords, advect_params=advect_params, flags=flags)
-    assim_vars = calc_assim_varaibles()
-    ensemble = return_ensemble()
-    ens_shape = ensemble.shape
-
+        coords=coords, advect_params=advect_params, flags=flags,
+        pert_params=pert_params)
     if flags['assim']:
-        assim_variables = calc_assym_varaibles()
-        return param_dic, coords, sys_vars
+        ensemble = return_ensemble(data_file_path=data_file_path,
+                                   ens_params=ens_params,
+                                   coords=coords)
+        assim_vars = calc_assim_varaibles(advect_params=advect_params,
+                                          flags=flags, sat2sat=sat2sat,
+                                          sat2wind=sat2wind, wrf=wrf)
+        return param_dic, coords, sys_vars, assim_vars, ensemble
     else:
         return param_dic, coords, sys_vars
 
@@ -206,23 +210,23 @@ def forecast_setup(*, data_file_path, date, io, advect_params, ens_params,
 def forecast_system(*, data_file_path, results_file_path,
                     date, io, flags, advect_params, ens_params, pert_params,
                     sat2sat, sat2wind, wrf, opt_flow):
-    param_dic, coords, sys_vars = forecast_setup(
-        data_file_path=data_file_path, date=date, io=io,
-        flags=flags, advect_params=advect_params,
-        ens_params=ens_params, pert_params=pert_params,
-        sat2sat=sat2sat, sat2wind=sat2wind, wrf=wrf,
-        opt_flow=opt_flow)
-
-    return param_dic, coords, sys_vars
-
-    # Creat stuff used to remove divergenc
-
-    # Create things needed for assimilations
     if flags['assim']:
-        # start cluster
-
+        param_dic, coords, sys_vars, assim_vars, ensemble = forecast_setup(
+            data_file_path=data_file_path, date=date, io=io,
+            flags=flags, advect_params=advect_params,
+            ens_params=ens_params, pert_params=pert_params,
+            sat2sat=sat2sat, sat2wind=sat2wind, wrf=wrf,
+            opt_flow=opt_flow)
+        return param_dic, coords, sys_vars, assim_vars, ensemble
     else:
-        ens_params['ens_num'] = 1
+        param_dic, coords, sys_vars = forecast_setup(
+            data_file_path=data_file_path, date=date, io=io,
+            flags=flags, advect_params=advect_params,
+            ens_params=ens_params, pert_params=pert_params,
+            sat2sat=sat2sat, sat2wind=sat2wind, wrf=wrf,
+            opt_flow=opt_flow)
+
+
     for time_index in range(sat_times.size - 1):
         sat_time = sat_times[time_index]
         save_times = pd.date_range(sat_time, periods=(num_of_horizons + 1),
@@ -238,7 +242,7 @@ def forecast_system(*, data_file_path, results_file_path,
         if not flags['assim']:  # assums no perturbation
             with Dataset(data_file_path, mode='r') as store:
                 q = store.variables['ci'][sat_times_all == sat_time,
-                                          sn_min_crop:sn_max_crop + 1,
+                                          sn_mi_crop:sn_max_crop + 1,
                                           we_min_crop:we_max_crop + 1]
                 U = store.variables['U'][wind_times_all == wind_time,
                                          sn_min_crop:sn_max_crop + 1,
@@ -346,13 +350,13 @@ def forecast_system(*, data_file_path, results_file_path,
                         random_nums = np.random.normal(
                             loc=0,
                             scale=ens_params['wind_sigma'][0],
-                            size=ens_shape[1])
+                            size=ens_params['ens_num'])
                         ensemble[:U_crop_size] = (U.ravel()[:, None]
                                                   + random_nums[None, :])
                         random_nums = np.random.normal(
                             loc=0,
                             scale=ens_params['wind_sigma'][1],
-                            size=ens_shape[1])
+                            size=ens_params['ens_num'])
                         ensemble[U_crop_size:
                                  U_crop_size + V_crop_size] = (
                                      V.ravel()[:, None]
