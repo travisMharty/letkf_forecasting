@@ -1,6 +1,6 @@
 import numpy as np
 import scipy as sp
-import numexp as ne
+import numexpr as ne
 
 
 def time_deriv_3(q, dt, u, dx, v, dy):
