@@ -1,6 +1,7 @@
 import numpy as np
 import scipy as sp
 import numexpr as ne
+import fenics as fe
 
 
 def time_deriv_3(q, dt, u, dx, v, dy):
