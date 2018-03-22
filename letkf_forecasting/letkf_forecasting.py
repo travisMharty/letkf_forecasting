@@ -15,6 +15,7 @@ import cv2
 
 import letkf_forecasting.random_functions as rf
 import letkf_forecasting.letkf_io as letkf_io
+import letkf_forecasting.tmh_plot as tp
 
 # average radius of earth when modeled as a sphere From Wikipedia
 a = 6371000
@@ -295,16 +296,15 @@ def optimal_interpolation(background, b_sig,
 def reduced_enkf(ensemble,
                  observations, R_sig,
                  flat_locations, inflation,
-                 localization=None, x=None, y=None):
-
-    if localization is not None:
-        rhoHT = ((x[:, None] - x[None, flat_locations])**2 +
-                 (y[:, None] - y[None, flat_locations])**2)
-        rhoHT = np.exp(-rhoHT/(2*localization**2))
+                 localization=0, x=None, y=None):
     ens_num = ensemble.shape[1]
     obs_size = observations.size
     PHT = ensemble.dot(ensemble[flat_locations].T)
-    PHT = PHT*rhoHT
+    if localization < 10**50:
+        rhoHT = ((x[:, None] - x[None, flat_locations])**2 +
+                 (y[:, None] - y[None, flat_locations])**2)
+        rhoHT = np.exp(-rhoHT/(2*localization**2))
+        PHT = PHT*rhoHT
     K = sp.linalg.solve(
         (PHT[flat_locations, :] + R_sig**2*np.eye(flat_locations.size)),
         PHT.T).T
@@ -1184,9 +1184,12 @@ def optical_flow(image0, image1, time0, time1, u, v):
     v_of = v_of[good_wind]
     p1_good = p1_resh[good_wind]
     # p0_good = p0_resh[good_wind]
-    # return u_of, v_of, p0_good
+    # p0_good = np.round(p0_good)
+    # p0_good = p0_good.astype('int')
     p1_good = np.round(p1_good)
     p1_good = p1_good.astype('int')
+    # tp.of_vectors_plot(image0, image1, p0_good, p1_good,
+    #                    u_of, v_of, 'time0', 'time1', 1)
     return u_of, v_of, p1_good
 
 
@@ -1324,22 +1327,15 @@ def forecast_system(data_file_path, results_file_path,
     # Use all possible satellite images in system unless told to limit
     sat_times_all = sat_times.copy()
     if (start_time != 0) & (end_time != 0):
-        if start_time.tz == 'MST':
-            start_time = start_time.tz_convert('UTC')
-            end_time = end_time.tz_convert('UTC')
         sat_times_temp = pd.date_range(start_time, end_time, freq='15 min')
         sat_times = sat_times.intersection(sat_times_temp)
     elif start_time != 0:
-        if start_time.tz == 'MST':
-            start_time = start_time.tz_convert('UTC')
-        sat_times_temp = (pd.date_range(start_time, sat_times[-1],
-                                        freq='15 min').tz_localize('MST'))
+        sat_times_temp = pd.date_range(start_time, sat_times[-1],
+                                       freq='15 min')
         sat_times = sat_times.intersection(sat_times_temp)
     elif end_time != 0:
-        if end_time.tz == 'MST':
-            end_time = end_time.tz_convert('UTC')
-        sat_times_temp = (pd.date_range(sat_times[0], end_time,
-                                        freq='15 min').tz_localize('MST'))
+        sat_times_temp = pd.date_range(sat_times[0], end_time,
+                                       freq='15 min')
         sat_times = sat_times.intersection(sat_times_temp)
 
     # Advection calculations
