@@ -4,7 +4,7 @@ from distributed import Client
 import pandas as pd
 import scipy as sp
 import scipy.interpolate as interpolate
-from skimage import filters as ski_filters
+
 import fenics as fe
 from netCDF4 import Dataset, num2date
 
