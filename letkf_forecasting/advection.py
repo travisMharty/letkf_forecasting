@@ -82,7 +82,7 @@ def space_deriv_4(q, u, dx, v, dy):
     return qout
 
 
-Def Advect_5min(Q, Dt, U, dx, V, dy, T_steps):
+def advect_5min(q, dt, U, dx, V, dy, T_steps):
     """Check back later"""
     for t in range(T_steps):
         q = time_deriv_3(q, dt, U, dx, V, dy)
