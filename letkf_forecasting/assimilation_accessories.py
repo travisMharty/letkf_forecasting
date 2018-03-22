@@ -253,3 +253,66 @@ def get_flat_correct(
     y_correct = int(np.round(y_correct/dy))
     flat_correct = x_correct + y_correct*domain_shape[1]
     return flat_correct
+
+
+def test_parallax(sat, domain_shape, dx, dy, lats, lons, sensor_data,
+                  sensor_loc, start_time,
+                  end_time, location, cloud_height,
+                  sat_azimuth, sat_elevation,
+                  oi_sat_sig, oi_sensor_sig, oi_localization, oi_inflation):
+    """Check back later."""
+    # NEED: Incorporate OI? Would need to reformulate so that P is smaller.
+    sensor_loc = sensor_loc.sort_values(by='id', inplace=False)
+    time_range = (pd.date_range(start_time, end_time, freq='15 min')
+                  .tz_localize('MST'))
+    all_time = sat.index
+    time_range = np.intersect1d(time_range, all_time)
+
+    sensor_loc_test = sensor_loc[sensor_loc.test is True]
+    sensor_loc_assim = sensor_loc[sensor_loc.test is False]
+    sensor_data_test = sensor_data[sensor_loc_test.id.values]
+    sensor_data_assim = sensor_data[sensor_loc_assim.id.values]
+
+    flat_sensor_loc_test = find_flat_loc(
+        lats, lons, sensor_loc_test)
+    flat_sensor_loc_assim = find_flat_loc(
+        lats, lons, sensor_loc_assim)
+
+    sat_error = np.ones([time_range.size, flat_sensor_loc_test.size])*np.nan
+    oi_error = np.ones([time_range.size, flat_sensor_loc_test.size])*np.nan
+    lat_correction = np.ones(time_range.size)*np.nan
+    lon_correction = np.ones(time_range.size)*np.nan
+    for time_index in range(time_range.size):
+        sat_time = time_range[time_index]
+        q = sat.ix[sat_time].values
+        flat_correct = get_flat_correct(
+                cloud_height=cloud_height, dx=dx, dy=dy,
+                domain_shape=domain_shape, sat_azimuth=sat_azimuth,
+                sat_elevation=sat_elevation,
+                location=location, sensor_time=sat_time)
+        this_flat_sensor_loc_test = (flat_sensor_loc_test
+                                     - flat_correct)  # changed to-
+        sat_error[time_index] = (q[this_flat_sensor_loc_test] -
+                                 sensor_data_test.ix[sat_time].values)
+
+        this_flat_sensor_loc_assim = (flat_sensor_loc_assim
+                                      - flat_correct)  # changed to -
+        this_OI = optimal_interpolation(
+            q.ravel(), oi_sat_sig, sensor_data_assim.ix[sat_time],
+            oi_sensor_sig, q.ravel(), this_flat_sensor_loc_assim,
+            oi_localization, oi_inflation)
+        oi_error[time_index] = (this_OI[this_flat_sensor_loc_test] -
+                                sensor_data_test.ix[sat_time].values)
+
+        solar_position = location.get_solarposition(sat_time)
+        x_correct, y_correct = parallax_shift(
+            cloud_height, sat_azimuth, sat_elevation,
+            solar_position['azimuth'].values,
+            solar_position['elevation'].values)
+        lat_correct, lon_correct = to_lat_lon(x_correct, y_correct,
+                                              location.latitude)
+        lat_correction[time_index] = lat_correct
+        lon_correction[time_index] = lon_correct
+
+        # for whole image assimilation
+    return oi_error, sat_error, lat_correction, lon_correction, time_range
