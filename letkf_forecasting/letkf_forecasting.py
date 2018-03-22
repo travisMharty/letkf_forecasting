@@ -1,4 +1,5 @@
 import logging
+from collections import namedtuple
 import numpy as np
 from distributed import Client
 import pandas as pd
@@ -9,7 +10,7 @@ from letkf_forecasting.optical_flow import optical_flow
 from letkf_forecasting.letkf_io import (
     extract_components,
     save_netcdf,
-    read_netcdf,
+    read_coords,
 )
 from letkf_forecasting.random_functions import (
     perturb_irradiance,
@@ -33,18 +34,8 @@ from letkf_forecasting.assimilation import (
 )
 
 
-def forecast_setup(*, date, io, advect_params, ens_params,
-                   pert_params, flags, sat2sat, sat2wind, wrf, opt_flow):
-    param_dic = set_up_param_dic(
-        date=date, io=io, advect_params=advect_params, ens_params=ens_params,
-        pert_params=pert_params, flags=flags, sat2sat=sat2sat,
-        sat2wind=sat2wind, wrf=wrf, opt_flow=opt_flow)
-    read_netcdf()
-    return param_dic
-
-
-def set_up_param_dic(*, date, io, advect_params, ens_params,
-                     pert_params, flags, sat2sat, sat2wind, wrf, opt_flow):
+def set_up_param_dic(*, date, io, flags, advect_params, ens_params,
+                     pert_params, sat2sat, sat2wind, wrf, opt_flow):
     param_dic = date.copy()
     param_dic.update(io)
     param_dic.update(advect_params)
@@ -61,76 +52,37 @@ def set_up_param_dic(*, date, io, advect_params, ens_params,
     return param_dic
 
 
-def forecast_system(data_file_path, results_file_path,
-                    date, io, flags, advect_params, ens_params, pert_params,
-                    sat2sat, sat2wind, wrf, opt_flow):
-    param_dic = forecast_setup()
+def dic2nt(dic, name):
+    nt = namedtuple(name, dic.keys())(**dic)
+    return nt
 
 
-
-
-
-    # read initial data from satellite store
-    with Dataset(data_file_path, mode='r') as store:
-        sat_times = store.variables['time']
-        sat_times = num2date(sat_times[:], sat_times.units)
-        sat_times = pd.DatetimeIndex(
-            sat_times).tz_localize('UTC')
-        we = store.variables['west_east'][:]
-        sn = store.variables['south_north'][:]
-        we_min_crop = store.variables['ci'].we_min_crop
-        we_max_crop = store.variables['ci'].we_max_crop
-        sn_min_crop = store.variables['ci'].sn_min_crop
-        sn_max_crop = store.variables['ci'].sn_max_crop
-        wind_times_all = store.variables['time_wind']
-        wind_times_all = num2date(wind_times_all[:], wind_times_all.units)
-        wind_times_all = pd.DatetimeIndex(
-            wind_times_all).tz_localize('UTC')
-        we_stag_min_crop = store.variables['U'].we_min_crop
-        we_stag_max_crop = store.variables['U'].we_max_crop
-        sn_stag_min_crop = store.variables['V'].sn_min_crop
-        sn_stag_max_crop = store.variables['V'].sn_max_crop
-    we_crop = we[we_min_crop:we_max_crop + 1]
-    sn_crop = sn[sn_min_crop:sn_max_crop + 1]
-    we_stag_crop = we[we_stag_min_crop:we_stag_max_crop + 1]
-    sn_stag_crop = sn[sn_stag_min_crop:sn_stag_max_crop + 1]
-    dx = (we[1] - we[0])*1000
-    dy = (sn[1] - sn[0])*1000  # dx, dy in m not km
+def calc_system_variables(*, coords, advect_params, flags):
+    dx = (coords.we[1] - coords.we[0])*1000
+    dy = (coords.sn[1] - coords.sn[0])*1000  # dx, dy in m not km
     max_horizon = pd.Timedelta(advect_params['max_horizon'])
-    ci_crop_shape = np.array([sn_max_crop - sn_min_crop + 1,
-                              we_max_crop - we_min_crop + 1],
+    ci_crop_shape = np.array([coords.sn_crop.size,
+                              coords.we_crop.size],
                              dtype='int')
-    U_crop_shape = np.array([sn_max_crop - sn_min_crop + 1,
-                             we_stag_max_crop - we_stag_min_crop + 1],
+    U_crop_shape = np.array([coords.sn_crop.size,
+                             coords.we_stag_crop.size],
                             dtype='int')
-    V_crop_shape = np.array([sn_stag_max_crop - sn_stag_min_crop + 1,
-                             we_max_crop - we_min_crop + 1],
+    V_crop_shape = np.array([coords.sn_stag_crop.size,
+                             coords.we_crop.size],
                             dtype='int')
     U_crop_size = U_crop_shape[0]*U_crop_shape[1]
     V_crop_size = V_crop_shape[0]*V_crop_shape[1]
     wind_size = U_crop_size + V_crop_size
-
-    # Use all possible satellite images in system unless told to limit
-    start_time = advect_params['start_time']
-    end_time = advect_params['end_time']
-    sat_times_all = sat_times.copy()
-    if (start_time != 0) & (end_time != 0):
-        sat_times_temp = pd.date_range(start_time, end_time, freq='15 min')
-        sat_times = sat_times.intersection(sat_times_temp)
-    elif start_time != 0:
-        sat_times_temp = pd.date_range(start_time, sat_times[-1],
-                                       freq='15 min')
-        sat_times = sat_times.intersection(sat_times_temp)
-    elif end_time != 0:
-        sat_times_temp = pd.date_range(sat_times[0], end_time,
-                                       freq='15 min')
-        sat_times = sat_times.intersection(sat_times_temp)
-
-    # Advection calculations
     num_of_horizons = int((max_horizon/15).seconds/60)
-
-    # Creat stuff used to remove divergence
-    remove_div_flag = flags['div']
+    sys_vars = {'dx': dx, 'dy': dy,
+                'num_of_horizons': num_of_horizons,
+                'max_horizon': max_horizon,
+                'ci_crop_shape': ci_crop_shape,
+                'U_crop_shape': U_crop_shape,
+                'V_crop_shape': V_crop_shape,
+                'U_crop_size': U_crop_size,
+                'V_crop_size': V_crop_size,
+                'wind_size': wind_size}
     if flags['div']:
         mesh = fe.RectangleMesh(fe.Point(0, 0),
                                 fe.Point(int(V_crop_shape[1] - 1),
@@ -138,72 +90,137 @@ def forecast_system(data_file_path, results_file_path,
                                 int(V_crop_shape[1] - 1),
                                 int(U_crop_shape[0] - 1))
         FunctionSpace_wind = fe.FunctionSpace(mesh, 'P', 1)
+        sys_vars['FunctionSpace_wind'] = FunctionSpace_wind
+    if flags['perturbation']:
+        rf_eig, rf_vectors = eig_2d_covariance(
+            x=we_crop, y=sn_crop,
+            Lx=pert_params['Lx'],
+            Ly=pert_params['Ly'], tol=pert_params['tol'])
+        rf_approx_var = (
+            rf_vectors * rf_eig[None, :] * rf_vectors).sum(-1).mean()
+        sys_vars['rf_eig'] = rf_eig
+        sys_vars['rf_vectors'] = rf_vectors
+        sys_vars['rf_approx_var'] = rf_approx_var
+    sys_vars = dic2nt(sys_vars, 'sys_vars')
+    return sys_vars
+
+
+def calc_assim_varaibles():
+    client = Client(advect_params['client_address'])
+    assim_vars = {'client': client}
+    if flags['assim_sat2sat']:
+        assim_pos, assim_pos_2d, full_pos_2d = (
+            assimilation_position_generator(ci_crop_shape,
+                                            sat2sat['grid_size']))
+        noise_init = noise_fun(ci_crop_shape)
+        assim_vars['assim_pos'] = assim_pos
+        assim_vars['assim_pos_2d'] = assim_pos_2d
+        assim_vars['full_pos_2d'] = full_pos_2d
+        assim_vars['noise_init'] = noise_init
+    if flags['assim_sat2wind']:
+        assim_pos_sat2wind, assim_pos_2d_sat2wind, full_pos_2d_sat2wind = (
+            assimilation_position_generator(ci_crop_shape,
+                                            sat2wind['grid_size']))
+        assim_vars['assim_pos_sat2wind'] = assim_pos_sat2wind
+        assim_vars['assim_pos_2d_sat2wind'] = assim_pos_2d_sat2wind
+        assim_vars['full_pos_2d_sat2wind'] = full_pos_2d_sat2wind
+        # Check if these are needed
+    if flags['assim_sat2wind']:
+        assim_pos_U, assim_pos_2d_U, full_pos_2d_U = (
+            assimilation_position_generator(U_crop_shape,
+                                            sat2wind['grid_size']))
+        assim_pos_V, assim_pos_2d_V, full_pos_2d_V = (
+            assimilation_position_generator(V_crop_shape,
+                                            sat2wind['grid_size']))
+        assim_vars['assim_pos_U'] = assim_pos_U
+        assim_vars['assim_pos_2d_U'] = assim_pos_2d_U
+        assim_vars['full_pos_2d_U'] = full_pos_2d_U
+        assim_vars['assim_pos_V'] = assim_pos_V
+        assim_vars['assim_pos_2d_V'] = assim_pos_2d_V
+        assim_vars['full_pos_2d_V'] = full_pos_2d_V
+    if flags['assim_wrf']:
+        assim_pos_U_wrf, assim_pos_2d_U_wrf, full_pos_2d_U_wrf = (
+            assimilation_position_generator(U_crop_shape,
+                                            wrf['grid_size']))
+        assim_pos_V_wrf, assim_pos_2d_V_wrf, full_pos_2d_V_wrf = (
+            assimilation_position_generator(V_crop_shape,
+                                            wrf['grid_size']))
+        assim_vars['assim_pos_U_wrf'] = assim_pos_U_wrf
+        assim_vars['assim_pos_2d_U_wrf'] = assim_pos_2d_U_wrf
+        assim_vars['full_pos_2d_U_wrf'] = full_pos_2d_U_wrf
+        assim_vars['assim_pos_V_wrf'] = assim_pos_V_wrf
+        assim_vars['assim_pos_2d_V_wrf'] = assim_pos_2d_V_wrf
+        assim_vars['full_pos_2d_V_wrf'] = full_pos_2d_V_wrf
+    if flags['assim_of']:
+        wind_x_range = (np.max([we_min_crop, we_stag_min_crop]),
+                        np.min([we_max_crop, we_stag_max_crop]))
+        wind_y_range = (np.max([sn_min_crop, sn_stag_min_crop]),
+                        np.min([sn_max_crop, sn_stag_max_crop]))
+    return assim_vars
+
+
+def return_ensemble():
+    with Dataset(data_file_path, mode='r') as store:
+        q = store.variables['ci'][sat_times_all == sat_time,
+                                  sn_min_crop:sn_max_crop + 1,
+                                  we_min_crop:we_max_crop + 1]
+        U = store.variables['U'][wind_times_all == wind_time,
+                                 sn_min_crop:sn_max_crop + 1,
+                                 we_stag_min_crop:we_stag_max_crop + 1]
+        V = store.variables['V'][wind_times_all == wind_time,
+                                 sn_stag_min_crop:sn_stag_max_crop + 1,
+                                 we_min_crop:we_max_crop + 1]
+        #  boolean indexing does not drop dimension
+        q = q[0]
+        U = U[0]
+        V = V[0]
+    ensemble = ensemble_creator(
+        q, U, V, CI_sigma=ens_params['ci_sigma'],
+        wind_sigma=ens_params['winds_sigma'],
+        ens_size=ens_params['ens_num'])
+    del q, U, V
+    return ensemble
+
+
+def forecast_setup(*, data_file_path, date, io, advect_params, ens_params,
+                   pert_params, flags, sat2sat, sat2wind, wrf, opt_flow):
+    param_dic = set_up_param_dic(
+        date=date, io=io, advect_params=advect_params, ens_params=ens_params,
+        pert_params=pert_params, flags=flags, sat2sat=sat2sat,
+        sat2wind=sat2wind, wrf=wrf, opt_flow=opt_flow)
+    coords = read_coords(data_file_path=data_file_path,
+                         advect_params=advect_params)
+    sys_vars = calc_system_variables(
+        coords=coords, advect_params=advect_params, flags=flags)
+    assim_vars = calc_assim_varaibles()
+    ensemble = return_ensemble()
+    ens_shape = ensemble.shape
+
+    if flags['assim']:
+        assim_variables = calc_assym_varaibles()
+        return param_dic, coords, sys_vars
+    else:
+        return param_dic, coords, sys_vars
+
+
+def forecast_system(*, data_file_path, results_file_path,
+                    date, io, flags, advect_params, ens_params, pert_params,
+                    sat2sat, sat2wind, wrf, opt_flow):
+    param_dic, coords, sys_vars = forecast_setup(
+        data_file_path=data_file_path, date=date, io=io,
+        flags=flags, advect_params=advect_params,
+        ens_params=ens_params, pert_params=pert_params,
+        sat2sat=sat2sat, sat2wind=sat2wind, wrf=wrf,
+        opt_flow=opt_flow)
+
+    return param_dic, coords, sys_vars
+
+    # Creat stuff used to remove divergenc
 
     # Create things needed for assimilations
     if flags['assim']:
         # start cluster
-        client = Client(advect_params['client_address'])
-        if flags['assim_sat2sat']:
-            assim_pos, assim_pos_2d, full_pos_2d = (
-                assimilation_position_generator(ci_crop_shape,
-                                                sat2sat['grid_size']))
-            noise_init = noise_fun(ci_crop_shape)
-            noise = noise_init.copy()
-        if flags['assim_sat2wind']:
-            assim_pos_sat2wind, assim_pos_2d_sat2wind, full_pos_2d_sat2wind = (
-                assimilation_position_generator(ci_crop_shape,
-                                                sat2wind['grid_size']))
-        # Check if these are needed
-        if flags['assim_sat2wind']:
-            assim_pos_U, assim_pos_2d_U, full_pos_2d_U = (
-                assimilation_position_generator(U_crop_shape,
-                                                sat2wind['grid_size']))
-            assim_pos_V, assim_pos_2d_V, full_pos_2d_V = (
-                assimilation_position_generator(V_crop_shape,
-                                                sat2wind['grid_size']))
-        if flags['assim_wrf']:
-            assim_pos_U_wrf, assim_pos_2d_U_wrf, full_pos_2d_U_wrf = (
-                assimilation_position_generator(U_crop_shape,
-                                                wrf['grid_size']))
-            assim_pos_V_wrf, assim_pos_2d_V_wrf, full_pos_2d_V_wrf = (
-                assimilation_position_generator(V_crop_shape,
-                                                wrf['grid_size']))
-        if flags['perturbation']:
-            rf_eig, rf_vectors = eig_2d_covariance(
-                x=we_crop, y=sn_crop,
-                Lx=pert_params['Lx'],
-                Ly=pert_params['Ly'], tol=pert_params['tol'])
-            rf_approx_var = (
-                rf_vectors * rf_eig[None, :] * rf_vectors).sum(-1).mean()
-        if flags['assim_of']:
-            wind_x_range = (np.max([we_min_crop, we_stag_min_crop]),
-                            np.min([we_max_crop, we_stag_max_crop]))
-            wind_y_range = (np.max([sn_min_crop, sn_stag_min_crop]),
-                            np.min([sn_max_crop, sn_stag_max_crop]))
-        sat_time = sat_times[0]
-        int_index_wind = wind_times_all.get_loc(sat_times[0],
-                                                method='pad')
-        wind_time = wind_times_all[int_index_wind]
-        with Dataset(data_file_path, mode='r') as store:
-            q = store.variables['ci'][sat_times_all == sat_time,
-                                      sn_min_crop:sn_max_crop + 1,
-                                      we_min_crop:we_max_crop + 1]
-            U = store.variables['U'][wind_times_all == wind_time,
-                                     sn_min_crop:sn_max_crop + 1,
-                                     we_stag_min_crop:we_stag_max_crop + 1]
-            V = store.variables['V'][wind_times_all == wind_time,
-                                     sn_stag_min_crop:sn_stag_max_crop + 1,
-                                     we_min_crop:we_max_crop + 1]
-            #  boolean indexing does not drop dimension
-            q = q[0]
-            U = U[0]
-            V = V[0]
-        ensemble = ensemble_creator(
-            q, U, V, CI_sigma=ens_params['ci_sigma'],
-            wind_sigma=ens_params['winds_sigma'],
-            ens_size=ens_params['ens_num'])
-        del q, U, V
-        ens_shape = ensemble.shape
+
     else:
         ens_params['ens_num'] = 1
     for time_index in range(sat_times.size - 1):
@@ -366,10 +383,10 @@ def forecast_system(data_file_path, results_file_path,
 
                     # need to select only pos in crop domain; convert to crop
                     keep = np.logical_and(
-                        np.logical_and(pos[:, 0] > wind_x_range[0],
-                                       pos[:, 0] < wind_x_range[1]),
-                        np.logical_and(pos[:, 1] > wind_y_range[0],
-                                       pos[:, 1] < wind_y_range[1]))
+                        np.logical_and(pos[:, 0] > coords.we[0],
+                                       pos[:, 0] < coords.we[-1]),
+                        np.logical_and(pos[:, 1] > coords.sn[0],
+                                       pos[:, 1] < coords.sn[-1]))
                     pos = pos[keep]
                     u_of = u_of[keep]
                     v_of = v_of[keep]
