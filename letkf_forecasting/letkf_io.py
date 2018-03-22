@@ -1,4 +1,5 @@
 import os
+from collections import namedtuple
 import numpy as np
 import pandas as pd
 import glob
@@ -100,3 +101,66 @@ def extract_components(ensemble_array, ens_num, time_num,
     ci = ensemble_array[:, :, wind_size:].reshape(
         time_num, ens_num, ci_shape[0], ci_shape[1])
     return U, V, ci
+
+
+def calc_time_range(*, sat_times, advect_params):
+    # Use all possible satellite images in system unless told to limit
+    sat_times_all = sat_times.copy()
+    start_time = advect_params['start_time']
+    end_time = advect_params['end_time']
+    if (start_time != 0) & (end_time != 0):
+        start_time = pd.Timestamp(start_time)
+        end_time = pd.Timestamp(end_time)
+        start_time = start_time.tz_localize('UTC')
+        end_time = end_time.tz_localize('UTC')
+        sat_times_temp = pd.date_range(start_time, end_time, freq='15 min')
+        sat_times = sat_times.intersection(sat_times_temp)
+    elif start_time != 0:
+        start_time = pd.Timestamp(start_time)
+        start_time = start_time.tz_localize('UTC')
+        sat_times_temp = pd.date_range(start_time, sat_times[-1],
+                                       freq='15 min')
+        sat_times = sat_times.intersection(sat_times_temp)
+    elif end_time != 0:
+        end_time = pd.Timestamp(end_time)
+        end_time = end_time.tz_localize('UTC')
+        sat_times_temp = pd.date_range(sat_times[0], end_time,
+                                       freq='15 min')
+        sat_times = sat_times.intersection(sat_times_temp)
+    return sat_times, sat_times_all
+
+
+def read_coords(*, data_file_path, advect_params):
+    with Dataset(data_file_path, mode='r') as store:
+        sat_times = store.variables['time']
+        sat_times = num2date(sat_times[:], sat_times.units)
+        sat_times = pd.DatetimeIndex(
+            sat_times).tz_localize('UTC')
+        we = store.variables['west_east'][:]
+        sn = store.variables['south_north'][:]
+        we_min_crop = store.variables['ci'].we_min_crop
+        we_max_crop = store.variables['ci'].we_max_crop
+        sn_min_crop = store.variables['ci'].sn_min_crop
+        sn_max_crop = store.variables['ci'].sn_max_crop
+        wind_times = store.variables['time_wind']
+        wind_times = num2date(wind_times[:], wind_times.units)
+        wind_times = pd.DatetimeIndex(
+            wind_times).tz_localize('UTC')
+        we_stag_min_crop = store.variables['U'].we_min_crop
+        we_stag_max_crop = store.variables['U'].we_max_crop
+        sn_stag_min_crop = store.variables['V'].sn_min_crop
+        sn_stag_max_crop = store.variables['V'].sn_max_crop
+    we_crop = we[we_min_crop:we_max_crop + 1]
+    sn_crop = sn[sn_min_crop:sn_max_crop + 1]
+    we_stag_crop = we[we_stag_min_crop:we_stag_max_crop + 1]
+    sn_stag_crop = sn[sn_stag_min_crop:sn_stag_max_crop + 1]
+    sat_times, sat_times_all = calc_time_range(sat_times=sat_times,
+                                               advect_params=advect_params)
+    Coords = namedtuple('coords', ['we', 'sn', 'we_crop', 'sn_crop',
+                                   'we_stag_crop', 'sn_stag_crop',
+                                   'sat_times', 'sat_times_all', 'wind_times'])
+    coords = Coords(we=we, sn=sn, we_crop=we_crop, sn_crop=sn_crop,
+                    we_stag_crop=we_stag_crop, sn_stag_crop=sn_stag_crop,
+                    sat_times=sat_times, sat_times_all=sat_times_all,
+                    wind_times=wind_times)
+    return coords
