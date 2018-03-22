@@ -134,3 +134,82 @@ def noise_fun(domain_shape):
     noise_init[:, -25:] = 1
     noise_init = sp.ndimage.gaussian_filter(noise_init, 12)
     return noise_init
+
+
+def divergence(u, v, dx, dy):
+    dudy, dudx = np.gradient(u, dy, dx)
+    dvdy, dvdx = np.gradient(v, dy, dx)
+    return dudx + dvdy
+
+
+def remove_divergence(V, u, v, sigma):
+    # this could bimproved by increasing the order in V
+
+    c_shape = u.shape
+    V_div = divergence(u, v, 1, 1)
+    ff = fe.Function(V)
+    d2v_map = fe.dof_to_vertex_map(V)
+    array_ff = V_div.ravel()
+    array_ff = array_ff[d2v_map]
+    ff.vector().set_local(array_ff)
+    uu = fe.TrialFunction(V)
+    vv = fe.TestFunction(V)
+    a = fe.dot(fe.grad(uu), fe.grad(vv))*fe.dx
+    L = ff*vv*fe.dx
+    uu = fe.Function(V)
+    fe.solve(a == L, uu)
+    phi = uu.compute_vertex_values().reshape(c_shape)
+    grad_phi = np.gradient(phi, 1, 1)
+    u_corrected = u + grad_phi[1]
+    v_corrected = v + grad_phi[0]
+    sigma = 2
+    u_corrected = sp.ndimage.filters.gaussian_filter(u_corrected, sigma=sigma)
+    v_corrected = sp.ndimage.filters.gaussian_filter(v_corrected, sigma=sigma)
+    return u_corrected, v_corrected
+
+
+def remove_divergence_single(
+        FunctionSpace, u, v, sigma):
+    # this is not done on Arakawa Grid which sucks...
+    # the interpolations are quick and dirty.
+    temp_u = u
+    temp_u = .5*(temp_u[:, :-1] + temp_u[:, 1:])
+    temp_v = v
+    temp_v = .5*(temp_v[:-1, :] + temp_v[1:, :])
+    temp_u, temp_v = remove_divergence(FunctionSpace,
+                                       temp_u, temp_v, sigma)
+    temp1 = np.pad(temp_u, ((0, 0), (0, 1)), mode='edge')
+    temp2 = np.pad(temp_u, ((0, 0), (1, 0)), mode='edge')
+    temp_u = .5*(temp1 + temp2)
+    temp1 = np.pad(temp_v, ((0, 1), (0, 0)), mode='edge')
+    temp2 = np.pad(temp_v, ((1, 0), (0, 0)), mode='edge')
+    temp_v = .5*(temp1 + temp2)
+    return temp_u, temp_v
+
+
+def remove_divergence_ensemble(
+        FunctionSpace, wind_ensemble, U_crop_shape, V_crop_shape, sigma):
+    # this is not done on Arakawa Grid which sucks...
+    # the interpolations are quick and dirty.
+
+    U_size = U_crop_shape[0]*U_crop_shape[1]
+    V_size = V_crop_shape[0]*V_crop_shape[1]
+    ens_size = wind_ensemble.shape[1]
+    for ens_num in range(ens_size):
+        temp_u = wind_ensemble[:U_size, ens_num].reshape(U_crop_shape)
+        temp_u = .5*(temp_u[:, :-1] + temp_u[:, 1:])
+        temp_v = wind_ensemble[U_size:U_size + V_size,
+                               ens_num].reshape(V_crop_shape)
+        temp_v = .5*(temp_v[:-1, :] + temp_v[1:, :])
+        # hardwired smoothing in sigma
+        temp_u, temp_v = remove_divergence(FunctionSpace,
+                                           temp_u, temp_v, sigma)
+        temp1 = np.pad(temp_u, ((0, 0), (0, 1)), mode='edge')
+        temp2 = np.pad(temp_u, ((0, 0), (1, 0)), mode='edge')
+        temp_u = .5*(temp1 + temp2)
+        temp1 = np.pad(temp_v, ((0, 1), (0, 0)), mode='edge')
+        temp2 = np.pad(temp_v, ((1, 0), (0, 0)), mode='edge')
+        temp_v = .5*(temp1 + temp2)
+        wind_ensemble[:U_size, ens_num] = temp_u.ravel()
+        wind_ensemble[U_size:U_size + V_size, ens_num] = temp_v.ravel()
+    return wind_ensemble
