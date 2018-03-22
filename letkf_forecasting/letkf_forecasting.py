@@ -8,6 +8,9 @@ from netCDF4 import Dataset, num2date
 import letkf_forecasting.random_functions as rf
 import letkf_forecasting.letkf_io as letkf_io
 from letkf_forecasting.optical_flow import optical_flow
+from letkf_forecasting.letkf_io import (
+    extract_components
+)
 from letkf_forecasting.random_functions import (
     perturb_irradiance
 )
@@ -428,18 +431,3 @@ def forecast_system(data_file_path, results_file_path,
                 we_crop, sn_crop, we_stag_crop, sn_stag_crop,
                 save_times, ens_params['ens_num'])
     return
-
-
-def extract_components(ensemble_array, ens_num, time_num,
-                       U_shape, V_shape, ci_shape):
-    U_size = U_shape[0]*U_shape[1]
-    V_size = V_shape[0]*V_shape[1]
-    wind_size = U_size + V_size
-    ensemble_array = np.transpose(ensemble_array, (0, 2, 1))
-    U = ensemble_array[:, :, :U_size].reshape(
-        time_num, ens_num, U_shape[0], U_shape[1])
-    V = ensemble_array[:, :, U_size:wind_size].reshape(
-        time_num, ens_num, V_shape[0], V_shape[1])
-    ci = ensemble_array[:, :, wind_size:].reshape(
-        time_num, ens_num, ci_shape[0], ci_shape[1])
-    return U, V, ci

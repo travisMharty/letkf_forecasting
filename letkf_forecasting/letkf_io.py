@@ -85,3 +85,18 @@ def save_netcdf(file_path_r, U, V, ci, param_dic, we_crop, sn_crop,
         U_nc[:, :, :, :] = U
         V_nc[:, :, :, :] = V
         ci_nc[:, :, :, :] = ci
+
+
+def extract_components(ensemble_array, ens_num, time_num,
+                       U_shape, V_shape, ci_shape):
+    U_size = U_shape[0]*U_shape[1]
+    V_size = V_shape[0]*V_shape[1]
+    wind_size = U_size + V_size
+    ensemble_array = np.transpose(ensemble_array, (0, 2, 1))
+    U = ensemble_array[:, :, :U_size].reshape(
+        time_num, ens_num, U_shape[0], U_shape[1])
+    V = ensemble_array[:, :, U_size:wind_size].reshape(
+        time_num, ens_num, V_shape[0], V_shape[1])
+    ci = ensemble_array[:, :, wind_size:].reshape(
+        time_num, ens_num, ci_shape[0], ci_shape[1])
+    return U, V, ci
