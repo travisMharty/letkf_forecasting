@@ -629,69 +629,6 @@ def assimilate_wind(ensemble, observations, flat_sensor_indices, R_inverse,
     return ensemble[:wind_size]
 
 
-def perturb_irradiance(ensemble, domain_shape, edge_weight, pert_mean,
-                       pert_sigma, rf_approx_var, rf_eig, rf_vectors):
-    ens_size = ensemble.shape[1]
-    average = ensemble.mean(axis=1)
-    average = average.reshape(domain_shape)
-    target = ski_filters.sobel(average)
-    target = target/target.max()
-    target[target < 0.1] = 0
-    target = sp.ndimage.gaussian_filter(target, sigma=4)
-    target = target/target.max()
-    cloud_target = 1 - average
-    cloud_target = (cloud_target/cloud_target.max()).clip(min=0,
-                                                          max=1)
-    target = np.maximum(cloud_target, target*edge_weight)
-    target = target/target.max()
-    target = sp.ndimage.gaussian_filter(target, sigma=5)
-    target = target.ravel()
-    sample = np.random.randn(rf_eig.size, ens_size)
-    sample = rf_vectors.dot(np.sqrt(rf_eig[:, None])*sample)
-    target_mean = target.mean()
-    target_var = (target**2).mean()
-    cor_mean = pert_mean/target_mean
-    cor_sd = pert_sigma/np.sqrt(rf_approx_var*target_var)
-    ensemble = (
-        ensemble +
-        (cor_sd*sample + cor_mean)*target[:, None])
-    return ensemble
-
-
-def logistic(array, L, k, x0):
-    return L/(1 + np.exp(-k*(array - x0)))
-
-
-def perturb_irradiance_new(ensemble, domain_shape, edge_weight, pert_mean,
-                           pert_sigma, rf_approx_var, rf_eig, rf_vectors):
-    L = 1
-    k = 20
-    x0 = 0.2
-    ens_size = ensemble.shape[1]
-    average = ensemble.mean(axis=1)
-    average = average.reshape(domain_shape)
-    cloud_target = 1 - average
-    cloud_target = logistic(cloud_target, L=L, k=k, x0=x0)
-    cloud_target = sp.ndimage.maximum_filter(cloud_target, size=9)
-    cloud_target = sp.ndimage.gaussian_filter(cloud_target, sigma=5)
-    cloud_target = cloud_target/cloud_target.max()
-    cloud_target = cloud_target.clip(min=0, max=1)
-    cloud_target = cloud_target.ravel()
-
-    sample = np.random.randn(rf_eig.size, ens_size)
-    sample = rf_vectors.dot(np.sqrt(rf_eig[:, None])*sample)
-    target_mean = cloud_target.mean()
-    target_var = (cloud_target**2).mean()
-    cor_mean = pert_mean/target_mean
-    cor_sd = pert_sigma/np.sqrt(rf_approx_var*target_var)
-    # cor_sd = pert_sigma/np.sqrt(rf_approx_var)
-    ensemble = (
-        ensemble +
-        (cor_sd*sample + cor_mean)*cloud_target[:, None])
-    ensemble = ensemble.clip(min=ensemble.min(), max=1)
-    return ensemble
-
-
 def forecast_system(data_file_path, results_file_path,
                     date, io, flags, advect_params, ens_params, pert_params,
                     sat2sat, sat2wind, wrf, opt_flow):
