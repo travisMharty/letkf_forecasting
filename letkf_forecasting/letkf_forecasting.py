@@ -5,14 +5,15 @@ import pandas as pd
 import fenics as fe
 from netCDF4 import Dataset, num2date
 
-import letkf_forecasting.random_functions as rf
-import letkf_forecasting.letkf_io as letkf_io
 from letkf_forecasting.optical_flow import optical_flow
 from letkf_forecasting.letkf_io import (
-    extract_components
+    extract_components,
+    save_netcdf,
+    read_netcdf,
 )
 from letkf_forecasting.random_functions import (
-    perturb_irradiance
+    perturb_irradiance,
+    eig_2d_covariance,
 )
 from letkf_forecasting.advection import (
     advect_5min_ensemble,
@@ -32,9 +33,18 @@ from letkf_forecasting.assimilation import (
 )
 
 
-def forecast_system(data_file_path, results_file_path,
-                    date, io, flags, advect_params, ens_params, pert_params,
-                    sat2sat, sat2wind, wrf, opt_flow):
+def forecast_setup(*, date, io, advect_params, ens_params,
+                   pert_params, flags, sat2sat, sat2wind, wrf, opt_flow):
+    param_dic = set_up_param_dic(
+        date=date, io=io, advect_params=advect_params, ens_params=ens_params,
+        pert_params=pert_params, flags=flags, sat2sat=sat2sat,
+        sat2wind=sat2wind, wrf=wrf, opt_flow=opt_flow)
+    read_netcdf()
+    return param_dic
+
+
+def set_up_param_dic(*, date, io, advect_params, ens_params,
+                     pert_params, flags, sat2sat, sat2wind, wrf, opt_flow):
     param_dic = date.copy()
     param_dic.update(io)
     param_dic.update(advect_params)
@@ -48,8 +58,18 @@ def forecast_system(data_file_path, results_file_path,
         for k in keys:
             temp[name + k] = temp.pop(k)
         param_dic.update(temp)
-    start_time = advect_params['start_time']
-    end_time = advect_params['end_time']
+    return param_dic
+
+
+def forecast_system(data_file_path, results_file_path,
+                    date, io, flags, advect_params, ens_params, pert_params,
+                    sat2sat, sat2wind, wrf, opt_flow):
+    param_dic = forecast_setup()
+
+
+
+
+
     # read initial data from satellite store
     with Dataset(data_file_path, mode='r') as store:
         sat_times = store.variables['time']
@@ -91,6 +111,8 @@ def forecast_system(data_file_path, results_file_path,
     wind_size = U_crop_size + V_crop_size
 
     # Use all possible satellite images in system unless told to limit
+    start_time = advect_params['start_time']
+    end_time = advect_params['end_time']
     sat_times_all = sat_times.copy()
     if (start_time != 0) & (end_time != 0):
         sat_times_temp = pd.date_range(start_time, end_time, freq='15 min')
@@ -147,7 +169,7 @@ def forecast_system(data_file_path, results_file_path,
                 assimilation_position_generator(V_crop_shape,
                                                 wrf['grid_size']))
         if flags['perturbation']:
-            rf_eig, rf_vectors = rf.eig_2d_covariance(
+            rf_eig, rf_vectors = eig_2d_covariance(
                 x=we_crop, y=sn_crop,
                 Lx=pert_params['Lx'],
                 Ly=pert_params['Ly'], tol=pert_params['tol'])
@@ -230,7 +252,7 @@ def forecast_system(data_file_path, results_file_path,
                     q = advect_5min(q, dt, U, dx, V, dy, T_steps)
                     q = 1 - q
                 q_array = np.concatenate([q_array, q[None, :, :]], axis=0)
-            letkf_io.save_netcdf(
+            save_netcdf(
                 results_file_path,
                 np.repeat(U[None, None, :, :], num_of_horizons + 1, axis=0),
                 np.repeat(V[None, None, :, :], num_of_horizons + 1, axis=0),
@@ -426,7 +448,7 @@ def forecast_system(data_file_path, results_file_path,
             U, V, ci = extract_components(
                 ensemble_array, ens_params['ens_num'], num_of_horizons + 1,
                 U_crop_shape, V_crop_shape, ci_crop_shape)
-            letkf_io.save_netcdf(
+            save_netcdf(
                 results_file_path, U, V, ci, param_dic,
                 we_crop, sn_crop, we_stag_crop, sn_stag_crop,
                 save_times, ens_params['ens_num'])
