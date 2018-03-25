@@ -207,6 +207,16 @@ def forecast_setup(*, data_file_path, date, io, advect_params, ens_params,
         return param_dic, coords, sys_vars
 
 
+def preprocess(*, ensemble, flags, remove_div_flag, coords, sys_vars):
+    if remove_div_flag and flags['div']:
+        logging.debug('remove divergence')
+        remove_div_flag = False
+        ensemble[:coords.wind_size] = remove_divergence_ensemble(
+            sys_vars.FunctionSpace_wind, ensemble[:coords.wind_size],
+            coords.U_crop_shape, coords.V_crop_shape, 4)  # hardwired smoothing
+    return ensemble
+
+
 def forecast_system(*, data_file_path, results_file_path,
                     date, io, flags, advect_params, ens_params, pert_params,
                     sat2sat, sat2wind, wrf, opt_flow):
@@ -225,6 +235,16 @@ def forecast_system(*, data_file_path, results_file_path,
             ens_params=ens_params, pert_params=pert_params,
             sat2sat=sat2sat, sat2wind=sat2wind, wrf=wrf,
             opt_flow=opt_flow)
+    remove_div_flag = True
+    for time_index in range(coords.sat_times.size - 1):
+        ensemble, remove_div_flag = preprocess(
+            ensemble=ensemble, flags=flags,
+            remove_div_flag=remove_div_flag,
+            coords=coords, sys_vars=sys_vars)
+        ensemble_array = ensemble[None, :, :].copy()
+        ensemble_array, ensemble = forecast(ensemble)
+        save(ensemble_array)
+        ensemble = assimilate(ensemble)
 
 
     for time_index in range(sat_times.size - 1):
