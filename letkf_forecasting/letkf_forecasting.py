@@ -105,22 +105,22 @@ def calc_system_variables(*, coords, advect_params, flags, pert_params):
     return sys_vars
 
 
-def calc_assim_varaibles(*, advect_params, flags, sat2sat, sat2wind,
+def calc_assim_varaibles(*, coords, advect_params, flags, sat2sat, sat2wind,
                          wrf):
     client = Client(advect_params['client_address'])
     assim_vars = {'client': client}
     if flags['assim_sat2sat']:
         assim_pos, assim_pos_2d, full_pos_2d = (
-            assimilation_position_generator(ci_crop_shape,
+            assimilation_position_generator(coords.ci_crop_shape,
                                             sat2sat['grid_size']))
-        noise_init = noise_fun(ci_crop_shape)
+        noise_init = noise_fun(coords.ci_crop_shape)
         assim_vars['assim_pos'] = assim_pos
         assim_vars['assim_pos_2d'] = assim_pos_2d
         assim_vars['full_pos_2d'] = full_pos_2d
         assim_vars['noise_init'] = noise_init
     if flags['assim_sat2wind']:
         assim_pos_sat2wind, assim_pos_2d_sat2wind, full_pos_2d_sat2wind = (
-            assimilation_position_generator(ci_crop_shape,
+            assimilation_position_generator(coords.ci_crop_shape,
                                             sat2wind['grid_size']))
         assim_vars['assim_pos_sat2wind'] = assim_pos_sat2wind
         assim_vars['assim_pos_2d_sat2wind'] = assim_pos_2d_sat2wind
@@ -128,10 +128,10 @@ def calc_assim_varaibles(*, advect_params, flags, sat2sat, sat2wind,
         # Check if these are needed
     if flags['assim_sat2wind']:
         assim_pos_U, assim_pos_2d_U, full_pos_2d_U = (
-            assimilation_position_generator(U_crop_shape,
+            assimilation_position_generator(coords.U_crop_shape,
                                             sat2wind['grid_size']))
         assim_pos_V, assim_pos_2d_V, full_pos_2d_V = (
-            assimilation_position_generator(V_crop_shape,
+            assimilation_position_generator(coords.V_crop_shape,
                                             sat2wind['grid_size']))
         assim_vars['assim_pos_U'] = assim_pos_U
         assim_vars['assim_pos_2d_U'] = assim_pos_2d_U
@@ -141,10 +141,10 @@ def calc_assim_varaibles(*, advect_params, flags, sat2sat, sat2wind,
         assim_vars['full_pos_2d_V'] = full_pos_2d_V
     if flags['assim_wrf']:
         assim_pos_U_wrf, assim_pos_2d_U_wrf, full_pos_2d_U_wrf = (
-            assimilation_position_generator(U_crop_shape,
+            assimilation_position_generator(coords.U_crop_shape,
                                             wrf['grid_size']))
         assim_pos_V_wrf, assim_pos_2d_V_wrf, full_pos_2d_V_wrf = (
-            assimilation_position_generator(V_crop_shape,
+            assimilation_position_generator(coords.V_crop_shape,
                                             wrf['grid_size']))
         assim_vars['assim_pos_U_wrf'] = assim_pos_U_wrf
         assim_vars['assim_pos_2d_U_wrf'] = assim_pos_2d_U_wrf
@@ -152,7 +152,7 @@ def calc_assim_varaibles(*, advect_params, flags, sat2sat, sat2wind,
         assim_vars['assim_pos_V_wrf'] = assim_pos_V_wrf
         assim_vars['assim_pos_2d_V_wrf'] = assim_pos_2d_V_wrf
         assim_vars['full_pos_2d_V_wrf'] = full_pos_2d_V_wrf
-        assim_vars = dic2nt(assim_vars, 'assim_vars')
+    assim_vars = dic2nt(assim_vars, 'assim_vars')
     return assim_vars
 
 
@@ -217,6 +217,38 @@ def preprocess(*, ensemble, flags, remove_div_flag, coords, sys_vars):
     return ensemble
 
 
+def forecast(*, ensemble, flags, coords,
+             sys_params, advect_params, pert_params):
+    ensemble_array = ensemble.copy()[None, :, :]
+    cx = abs(ensemble[:coords.U_crop_size]).max()
+    cy = abs(ensemble[coords.U_crop_size:
+                      coords.wind_size]).max()
+    T_steps = int(np.ceil((5*60)*(cx/sys_params.dx
+                                  + cy/sys_params.dy)
+                          / advect_params['C_max']))
+    dt = (5*60)/T_steps
+    for m in range(sys_params.num_of_horizons):
+        logging.info(str(pd.Timedelta('15min')*(m + 1)))
+        for n in range(3):
+            ensemble = advect_5min_ensemble(
+                ensemble, dt, sys_params.dx, sys_params.dy,
+                T_steps,
+                coords.U_crop_shape, coords.V_crop_shape,
+                coords.ci_crop_shape, sys_params.client)
+            if flags['perturbation']:
+                ensemble[wind_size:] = perturb_irradiance(
+                    ensemble[wind_size:], ci_crop_shape,
+                    pert_params['edge_weight'],
+                    pert_params['pert_mean'],
+                    pert_params['pert_sigma'],
+                    rf_approx_var, rf_eig, rf_vectors)
+        ensemble_array = np.concatenate(
+            [ensemble_array, ensemble[None, :, :]],
+            axis=0)
+        if num_of_advec == m:
+            ensemble = ensemble.copy()
+
+
 def forecast_system(*, data_file_path, results_file_path,
                     date, io, flags, advect_params, ens_params, pert_params,
                     sat2sat, sat2wind, wrf, opt_flow):
@@ -241,7 +273,6 @@ def forecast_system(*, data_file_path, results_file_path,
             ensemble=ensemble, flags=flags,
             remove_div_flag=remove_div_flag,
             coords=coords, sys_vars=sys_vars)
-        ensemble_array = ensemble[None, :, :].copy()
         ensemble_array, ensemble = forecast(ensemble)
         save(ensemble_array)
         ensemble = assimilate(ensemble)
