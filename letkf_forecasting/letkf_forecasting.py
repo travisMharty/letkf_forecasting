@@ -105,7 +105,7 @@ def calc_system_variables(*, coords, advect_params, flags, pert_params):
     return sys_vars
 
 
-def calc_assim_varaibles(*, coords, advect_params, flags, sat2sat, sat2wind,
+def calc_assim_variables(*, coords, advect_params, flags, sat2sat, sat2wind,
                          wrf):
     client = Client(advect_params['client_address'])
     assim_vars = {'client': client}
@@ -163,7 +163,7 @@ def return_wind_time(*, sat_time, coords):
     return wind_time
 
 
-def return_ensemble(*, data_file_path, ens_params, coords):
+def return_ensemble(*, data_file_path, ens_params, coords, flags):
     sat_time = coords.sat_times[0]
     wind_time = return_wind_time(sat_time=sat_time, coords=coords)
     with Dataset(data_file_path, mode='r') as store:
@@ -177,10 +177,13 @@ def return_ensemble(*, data_file_path, ens_params, coords):
         q = q[0]
         U = U[0]
         V = V[0]
-    ensemble = ensemble_creator(
-        q, U, V, CI_sigma=ens_params['ci_sigma'],
-        wind_sigma=ens_params['winds_sigma'],
-        ens_size=ens_params['ens_num'])
+    if flags['assim']:
+        ensemble = ensemble_creator(
+            q, U, V, CI_sigma=ens_params['ci_sigma'],
+            wind_sigma=ens_params['winds_sigma'],
+            ens_size=ens_params['ens_num'])
+    else:
+        ensemble = np.concatenate([U.ravel(), V.ravel(), q.ravel()])[:, None]
     return ensemble
 
 
@@ -195,16 +198,17 @@ def forecast_setup(*, data_file_path, date, io, advect_params, ens_params,
     sys_vars = calc_system_variables(
         coords=coords, advect_params=advect_params, flags=flags,
         pert_params=pert_params)
+    ensemble = return_ensemble(data_file_path=data_file_path,
+                               ens_params=ens_params,
+                               coords=coords, flags=flags)
     if flags['assim']:
-        ensemble = return_ensemble(data_file_path=data_file_path,
-                                   ens_params=ens_params,
-                                   coords=coords)
-        assim_vars = calc_assim_varaibles(advect_params=advect_params,
+        assim_vars = calc_assim_variables(coords=coords,
+                                          advect_params=advect_params,
                                           flags=flags, sat2sat=sat2sat,
                                           sat2wind=sat2wind, wrf=wrf)
-        return param_dic, coords, sys_vars, assim_vars, ensemble
     else:
-        return param_dic, coords, sys_vars
+        assim_vars = None
+    return param_dic, coords, sys_vars, assim_vars, ensemble
 
 
 def preprocess(*, ensemble, flags, remove_div_flag, coords, sys_vars):
@@ -213,7 +217,7 @@ def preprocess(*, ensemble, flags, remove_div_flag, coords, sys_vars):
         remove_div_flag = False
         ensemble[:coords.wind_size] = remove_divergence_ensemble(
             sys_vars.FunctionSpace_wind, ensemble[:coords.wind_size],
-            coords.U_crop_shape, coords.V_crop_shape, 4)  # hardwired smoothing
+            coords.U_crop_shape, coords.V_crop_shape, 4)  # smoothing
     return ensemble
 
 
@@ -236,16 +240,17 @@ def forecast(*, ensemble, flags, coords,
                 coords.U_crop_shape, coords.V_crop_shape,
                 coords.ci_crop_shape, sys_params.client)
             if flags['perturbation']:
-                ensemble[wind_size:] = perturb_irradiance(
-                    ensemble[wind_size:], ci_crop_shape,
+                ensemble[coords.wind_size:] = perturb_irradiance(
+                    ensemble[coords.wind_size:], coords.ci_crop_shape,
                     pert_params['edge_weight'],
                     pert_params['pert_mean'],
                     pert_params['pert_sigma'],
-                    rf_approx_var, rf_eig, rf_vectors)
+                    sys_params.rf_approx_var,
+                    sys_params.rf_eig, sys_params.rf_vectors)
         ensemble_array = np.concatenate(
             [ensemble_array, ensemble[None, :, :]],
             axis=0)
-        if num_of_advec == m:
+        if sys_params.num_of_advec == m:
             ensemble = ensemble.copy()
 
 
