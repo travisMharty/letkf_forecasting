@@ -422,8 +422,7 @@ def return_of(*, coords, time_index, sat_time, data_file_path):
 
 
 def assimilate_of_sys(*, ensemble, data_file_path, sat_time, time_index,
-                      coords, sys_vars, wrf,
-                      remove_div_flag):
+                      coords, sys_vars, remove_div_flag):
     if flags['assim_of']:
         logging.debug('calc of')
         u_of, v_of, u_of_flat_pos, v_of_flat_pos = return_of(
@@ -443,7 +442,7 @@ def assimilate_of_sys(*, ensemble, data_file_path, sat_time, time_index,
             x=x_temp.ravel(), y=y_temp.ravel())
         x_temp = np.arange(sys_vars.V_crop_shape[1])*dx/1000
         y_temp = np.arange(sys_vars.V_crop_shape[0])*dx/1000
-        x_temp, y_temp = np.meshgrid(x_temp, y_temp)
+        x_temp, y_temp = np.meshgrpid(x_temp, y_temp)
         ensemble[sys_vars.U_crop_size:
                  sys_vars.wind_size] = reduced_enkf(
                      ensemble=ensemble[sys_vars.U_crop_size:
@@ -477,7 +476,6 @@ def forecast_system(*, data_file_path, results_file_path,
             sys_vars=sys_vars,
             advect_params=advect_params, pert_params=pert_params,
             assim_vars=assim_vars)
-        return ensemble_array, ensemble
         save(ensemble_array=ensemble_array, coords=coords,
              ens_params=ens_params, param_dic=param_dic,
              sys_vars=sys_vars, save_times=save_times)
@@ -495,8 +493,12 @@ def forecast_system(*, data_file_path, results_file_path,
             sat_time=sat_time, coords=coords, sys_vars=sys_vars,
             assim_vars=assim_vars, wrf=wrf,
             remove_div_flag=remove_div_flag, ens_params=ens_params)
-        ensemble = assimilate_of_sys()
-
+        ensemble = assimilate_of_sys(
+            ensemble=ensemlbe, data_file_path=data_file_path,
+            sat_time=sat_time, time_index=time_index,
+            coords=coords, sys_vars=sys_vars,
+            remove_div_flag=remove_div_flag)
+    return None
 
     for time_index in range(sat_times.size - 1):
         sat_time = sat_times[time_index]
