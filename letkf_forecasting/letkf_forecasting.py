@@ -380,6 +380,80 @@ def assimilate_wrf_sys(*, ensemble, data_file_path, sat_time,
     return ensemble, remove_div_flag
 
 
+def return_of(*, coords, time_index, sat_time, data_file_path):
+    # retreive OF vectors
+    time0 = coords.sat_times[time_index - 1]
+    with Dataset(data_file_path, mode='r') as store:
+        this_U = store.variables['U'][
+            coords.wind_times == wind_time, :, :]
+        this_V = store.variables['V'][
+            coords.wind_times == wind_time, :, :]
+        image0 = store.variables['ci'][coords.sat_times_all == time0,
+                                       :, :]
+        image1 = store.variables['ci'][
+            coords.sat_times_all == sat_time, :, :]
+        # boolean indexing does not drop dimension
+        this_U = this_U[0]
+        this_V = this_V[0]
+        image0 = image0[0]
+        image1 = image1[0]
+        u_of, v_of, pos = optical_flow(image0, image1,
+                                       time0, sat_time,
+                                       this_U, this_V)
+        del this_U, this_V, image0, image1
+        pos = pos*4  # optical flow done on coarse grid
+
+    # need to select only pos in crop domain; convert to crop
+    keep = np.logical_and(
+        np.logical_and(pos[:, 0] > coords.we[0],
+                       pos[:, 0] < coords.we[-1]),
+        np.logical_and(pos[:, 1] > coords.sn[0],
+                       pos[:, 1] < coords.sn[-1]))
+    pos = pos[keep]
+    u_of = u_of[keep]
+    v_of = v_of[keep]
+    pos[:, 0] -= wind_x_range[0]
+    pos[:, 1] -= wind_y_range[0]
+    pos = pos.T
+    pos = pos[::-1]
+    u_of_flat_pos = np.ravel_multi_index(pos, U_crop_shape)
+    v_of_flat_pos = np.ravel_multi_index(pos, V_crop_shape)
+    return u_of, v_of, u_of_flat_pos, v_of_flat_pos
+
+
+def assimilate_of_sys(*, ensemble, data_file_path, sat_time, time_index,
+                      coords, sys_vars, wrf,
+                      remove_div_flag):
+    if flags['assim_of']:
+        logging.debug('calc of')
+        u_of, v_of, u_of_flat_pos, v_of_flat_pos = return_of(
+            coords=coords, time_index=time_index, sat_time=sat_time,
+            data_file_path=data_file_path)
+        logging.debug('assim of')
+        remove_div_flag = True
+        x_temp = np.arange(sys_vars.U_crop_shape[1])*sys_vars.dx/1000  # in km
+        y_temp = np.arange(sys_vars.U_crop_shape[0])*sys_vars.dy/1000
+        x_temp, y_temp = np.meshgrid(x_temp, y_temp)
+        ensemble[:sys_vars.U_crop_size] = reduced_enkf(
+            ensemble=ensemble[:sys_vars.U_crop_size],
+            observations=u_of, R_sig=opt_flow['sig'],
+            flat_locations=u_of_flat_pos,
+            inflation=opt_flow['infl'],
+            localization=opt_flow['loc'],
+            x=x_temp.ravel(), y=y_temp.ravel())
+        x_temp = np.arange(sys_vars.V_crop_shape[1])*dx/1000
+        y_temp = np.arange(sys_vars.V_crop_shape[0])*dx/1000
+        x_temp, y_temp = np.meshgrid(x_temp, y_temp)
+        ensemble[sys_vars.U_crop_size:
+                 sys_vars.wind_size] = reduced_enkf(
+                     ensemble=ensemble[sys_vars.U_crop_size:
+                                       sys_vars.wind_size],
+                     observations=v_of, R_sig=opt_flow['sig'],
+                     flat_locations=v_of_flat_pos,
+                     inflation=opt_flow['infl'],
+                     localization=opt_flow['loc'],
+                     x=x_temp.ravel(), y=y_temp.ravel())
+    return ensemble, remove_div_flag
 
 
 def forecast_system(*, data_file_path, results_file_path,
