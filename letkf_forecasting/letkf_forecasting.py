@@ -105,22 +105,22 @@ def calc_system_variables(*, coords, advect_params, flags, pert_params):
     return sys_vars
 
 
-def calc_assim_variables(*, coords, advect_params, flags, sat2sat, sat2wind,
+def calc_assim_variables(*, sys_vars, advect_params, flags, sat2sat, sat2wind,
                          wrf):
     client = Client(advect_params['client_address'])
     assim_vars = {'client': client}
     if flags['assim_sat2sat']:
         assim_pos, assim_pos_2d, full_pos_2d = (
-            assimilation_position_generator(coords.ci_crop_shape,
+            assimilation_position_generator(sys_vars.ci_crop_shape,
                                             sat2sat['grid_size']))
-        noise_init = noise_fun(coords.ci_crop_shape)
+        noise_init = noise_fun(sys_vars.ci_crop_shape)
         assim_vars['assim_pos'] = assim_pos
         assim_vars['assim_pos_2d'] = assim_pos_2d
         assim_vars['full_pos_2d'] = full_pos_2d
         assim_vars['noise_init'] = noise_init
     if flags['assim_sat2wind']:
         assim_pos_sat2wind, assim_pos_2d_sat2wind, full_pos_2d_sat2wind = (
-            assimilation_position_generator(coords.ci_crop_shape,
+            assimilation_position_generator(sys_vars.ci_crop_shape,
                                             sat2wind['grid_size']))
         assim_vars['assim_pos_sat2wind'] = assim_pos_sat2wind
         assim_vars['assim_pos_2d_sat2wind'] = assim_pos_2d_sat2wind
@@ -128,10 +128,10 @@ def calc_assim_variables(*, coords, advect_params, flags, sat2sat, sat2wind,
         # Check if these are needed
     if flags['assim_sat2wind']:
         assim_pos_U, assim_pos_2d_U, full_pos_2d_U = (
-            assimilation_position_generator(coords.U_crop_shape,
+            assimilation_position_generator(sys_vars.U_crop_shape,
                                             sat2wind['grid_size']))
         assim_pos_V, assim_pos_2d_V, full_pos_2d_V = (
-            assimilation_position_generator(coords.V_crop_shape,
+            assimilation_position_generator(sys_vars.V_crop_shape,
                                             sat2wind['grid_size']))
         assim_vars['assim_pos_U'] = assim_pos_U
         assim_vars['assim_pos_2d_U'] = assim_pos_2d_U
@@ -141,10 +141,10 @@ def calc_assim_variables(*, coords, advect_params, flags, sat2sat, sat2wind,
         assim_vars['full_pos_2d_V'] = full_pos_2d_V
     if flags['assim_wrf']:
         assim_pos_U_wrf, assim_pos_2d_U_wrf, full_pos_2d_U_wrf = (
-            assimilation_position_generator(coords.U_crop_shape,
+            assimilation_position_generator(sys_vars.U_crop_shape,
                                             wrf['grid_size']))
         assim_pos_V_wrf, assim_pos_2d_V_wrf, full_pos_2d_V_wrf = (
-            assimilation_position_generator(coords.V_crop_shape,
+            assimilation_position_generator(sys_vars.V_crop_shape,
                                             wrf['grid_size']))
         assim_vars['assim_pos_U_wrf'] = assim_pos_U_wrf
         assim_vars['assim_pos_2d_U_wrf'] = assim_pos_2d_U_wrf
@@ -202,7 +202,7 @@ def forecast_setup(*, data_file_path, date, io, advect_params, ens_params,
                                ens_params=ens_params,
                                coords=coords, flags=flags)
     if flags['assim']:
-        assim_vars = calc_assim_variables(coords=coords,
+        assim_vars = calc_assim_variables(sys_vars=sys_vars,
                                           advect_params=advect_params,
                                           flags=flags, sat2sat=sat2sat,
                                           sat2wind=sat2wind, wrf=wrf)
@@ -215,18 +215,18 @@ def preprocess(*, ensemble, flags, remove_div_flag, coords, sys_vars):
     if remove_div_flag and flags['div']:
         logging.debug('remove divergence')
         remove_div_flag = False
-        ensemble[:coords.wind_size] = remove_divergence_ensemble(
-            sys_vars.FunctionSpace_wind, ensemble[:coords.wind_size],
-            coords.U_crop_shape, coords.V_crop_shape, 4)  # smoothing
-    return ensemble
+        ensemble[:sys_vars.wind_size] = remove_divergence_ensemble(
+            sys_vars.FunctionSpace_wind, ensemble[:sys_vars.wind_size],
+            sys_vars.U_crop_shape, sys_vars.V_crop_shape, 4)  # smoothing
+    return ensemble, remove_div_flag
 
 
 def forecast(*, ensemble, num_of_advect, flags, coords,
              sys_vars, advect_params, pert_params, assim_vars):
     ensemble_array = ensemble.copy()[None, :, :]
-    cx = abs(ensemble[:coords.U_crop_size]).max()
-    cy = abs(ensemble[coords.U_crop_size:
-                      coords.wind_size]).max()
+    cx = abs(ensemble[:sys_vars.U_crop_size]).max()
+    cy = abs(ensemble[sys_vars.U_crop_size:
+                      sys_vars.wind_size]).max()
     T_steps = int(np.ceil((5*60)*(cx/sys_vars.dx
                                   + cy/sys_vars.dy)
                           / advect_params['C_max']))
@@ -238,18 +238,18 @@ def forecast(*, ensemble, num_of_advect, flags, coords,
                 ensemble = advect_5min_ensemble(
                     ensemble, dt, sys_vars.dx, sys_vars.dy,
                     T_steps,
-                    coords.U_crop_shape, coords.V_crop_shape,
-                    coords.ci_crop_shape, assim_vars.client)
+                    sys_vars.U_crop_shape, sys_vars.V_crop_shape,
+                    sys_vars.ci_crop_shape, assim_vars.client)
             else:
                 ensemble = advect_5min_single(
                     ensemble, dt, sys_vars.dx, sys_vars.dy,
                     T_steps,
-                    coords.U_crop_shape, coords.V_crop_shape,
-                    coords.ci_crop_shape, assim_vars.client)
+                    sys_vars.U_crop_shape, sys_vars.V_crop_shape,
+                    sys_vars.ci_crop_shape, assim_vars.client)
 
             if flags['perturbation']:
-                ensemble[coords.wind_size:] = perturb_irradiance(
-                    ensemble[coords.wind_size:], coords.ci_crop_shape,
+                ensemble[sys_vars.wind_size:] = perturb_irradiance(
+                    ensemble[sys_vars.wind_size:], sys_vars.ci_crop_shape,
                     pert_params['edge_weight'],
                     pert_params['pert_mean'],
                     pert_params['pert_sigma'],
