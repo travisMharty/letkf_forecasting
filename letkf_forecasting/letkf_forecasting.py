@@ -282,6 +282,18 @@ def save(*, ensemble_array, coords, ens_params, param_dic, sys_vars,
         save_times, ens_params['ens_num'])
 
 
+def assimilate_sat2sat_sys(*, ensemble, data_file_path, sat_time,
+                           coords, sys_vars):
+    if not flags['assim_sat2sat']:
+        with Dataset(data_file_path, mode='r') as store:
+            q = store.variables['ci'][coords.sat_times_all == sat_time,
+                                      coords.sn_slice, coords.we_slice]
+            # boolean indexing does not drop dimension
+            q = q[0]
+        ensemble[sys_vars.wind_size:] = q.ravel()[:, None]
+    return ensemble
+
+
 
 
 def forecast_system(*, data_file_path, results_file_path,
