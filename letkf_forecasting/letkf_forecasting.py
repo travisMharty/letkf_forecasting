@@ -497,7 +497,7 @@ def forecast_system(*, data_file_path, results_file_path,
             assim_vars=assim_vars, wrf=wrf,
             remove_div_flag=remove_div_flag, ens_params=ens_params,
             flags=flags)
-        ensemble = assimilate_of_sys(
+        ensemble, remove_div_flag = assimilate_of_sys(
             ensemble=ensemble, data_file_path=data_file_path,
             sat_time=sat_time, time_index=time_index,
             coords=coords, sys_vars=sys_vars,
