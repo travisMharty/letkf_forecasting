@@ -221,8 +221,11 @@ def preprocess(*, ensemble, flags, remove_div_flag, coords, sys_vars):
     return ensemble, remove_div_flag
 
 
-def forecast(*, ensemble, flags, coords,
+def forecast(*, ensemble, flags, coords, time_index,
              sys_vars, advect_params, pert_params, assim_vars):
+    # save_times = pd.date_range(sat_time, periods=(num_of_horizons + 1),
+    #                            freq='15min')
+    # save_times = save_times.tz_convert(None)
     num_of_advect = int((
         coords.sat_times[time_index + 1] -
         coords.sat_times[time_index]).seconds/(60*15))
