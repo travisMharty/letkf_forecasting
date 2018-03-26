@@ -294,6 +294,32 @@ def assimilate_sat2sat_sys(*, ensemble, data_file_path, sat_time,
     return ensemble
 
 
+def assimilate_sat2wind_sys(*, ensemble, data_file_path, sat_time,
+                            coords, sys_vars, assim_vars, sat2wind,
+                            remove_div_flag):
+    if flags['assim_sat2wind']:
+        logging.debug('Assim sat2wind')
+        with Dataset(data_file_path, mode='r') as store:
+            q = store.variables['ci'][coords.sat_times_all == sat_time,
+                                      sys_vars.sn_slice,sys_vars.we_slice]
+            #  boolean indexing does not drop dimension
+            q = q[0]
+        ensemble = assimilate_sat_to_wind(
+            ensemble=ensemble,
+            observations=q.ravel(),
+            R_inverse_wind=1/sat2wind['sig']**2,
+            wind_inflation=sat2wind['infl'],
+            domain_shape=sys_vars.ci_crop_shape,
+            U_shape=sys_vars.U_crop_shape,
+            V_shape=sys_vars.V_crop_shape,
+            localization_length_wind=sat2wind['loc'],
+            assimilation_positions=assim_vars.assim_pos_sat2wind,
+            assimilation_positions_2d=assim_vars.assim_pos_2d_sat2wind,
+            full_positions_2d=assim_vars.full_pos_2d_sat2wind)
+        remove_div_flag = True
+    return ensemble, remove_div_flag
+
+
 
 
 def forecast_system(*, data_file_path, results_file_path,
