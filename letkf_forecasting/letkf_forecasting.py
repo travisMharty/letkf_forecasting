@@ -20,7 +20,7 @@ from letkf_forecasting.advection import (
     advect_5min_ensemble,
     remove_divergence_ensemble,
     noise_fun,
-    advect_5min,
+    advect_5min_single,
     remove_divergence_single
 )
 from letkf_forecasting.assimilation_accessories import (
@@ -221,64 +221,72 @@ def preprocess(*, ensemble, flags, remove_div_flag, coords, sys_vars):
     return ensemble
 
 
-def forecast(*, ensemble, flags, coords,
-             sys_params, advect_params, pert_params):
+def forecast(*, ensemble, num_of_advect, flags, coords,
+             sys_vars, advect_params, pert_params, assim_vars):
     ensemble_array = ensemble.copy()[None, :, :]
     cx = abs(ensemble[:coords.U_crop_size]).max()
     cy = abs(ensemble[coords.U_crop_size:
                       coords.wind_size]).max()
-    T_steps = int(np.ceil((5*60)*(cx/sys_params.dx
-                                  + cy/sys_params.dy)
+    T_steps = int(np.ceil((5*60)*(cx/sys_vars.dx
+                                  + cy/sys_vars.dy)
                           / advect_params['C_max']))
     dt = (5*60)/T_steps
-    for m in range(sys_params.num_of_horizons):
+    for m in range(sys_vars.num_of_horizons):
         logging.info(str(pd.Timedelta('15min')*(m + 1)))
         for n in range(3):
-            ensemble = advect_5min_ensemble(
-                ensemble, dt, sys_params.dx, sys_params.dy,
-                T_steps,
-                coords.U_crop_shape, coords.V_crop_shape,
-                coords.ci_crop_shape, sys_params.client)
+            if flags['assim']:
+                ensemble = advect_5min_ensemble(
+                    ensemble, dt, sys_vars.dx, sys_vars.dy,
+                    T_steps,
+                    coords.U_crop_shape, coords.V_crop_shape,
+                    coords.ci_crop_shape, assim_vars.client)
+            else:
+                ensemble = advect_5min_single(
+                    ensemble, dt, sys_vars.dx, sys_vars.dy,
+                    T_steps,
+                    coords.U_crop_shape, coords.V_crop_shape,
+                    coords.ci_crop_shape, assim_vars.client)
+
             if flags['perturbation']:
                 ensemble[coords.wind_size:] = perturb_irradiance(
                     ensemble[coords.wind_size:], coords.ci_crop_shape,
                     pert_params['edge_weight'],
                     pert_params['pert_mean'],
                     pert_params['pert_sigma'],
-                    sys_params.rf_approx_var,
-                    sys_params.rf_eig, sys_params.rf_vectors)
+                    sys_vars.rf_approx_var,
+                    sys_vars.rf_eig, sys_vars.rf_vectors)
         ensemble_array = np.concatenate(
             [ensemble_array, ensemble[None, :, :]],
             axis=0)
-        if sys_params.num_of_advec == m:
-            ensemble = ensemble.copy()
+        if num_of_advect == m:
+            background = ensemble.copy()
+    return ensemble_array, background
 
 
 def forecast_system(*, data_file_path, results_file_path,
                     date, io, flags, advect_params, ens_params, pert_params,
                     sat2sat, sat2wind, wrf, opt_flow):
-    if flags['assim']:
-        param_dic, coords, sys_vars, assim_vars, ensemble = forecast_setup(
-            data_file_path=data_file_path, date=date, io=io,
-            flags=flags, advect_params=advect_params,
-            ens_params=ens_params, pert_params=pert_params,
-            sat2sat=sat2sat, sat2wind=sat2wind, wrf=wrf,
-            opt_flow=opt_flow)
-        return param_dic, coords, sys_vars, assim_vars, ensemble
-    else:
-        param_dic, coords, sys_vars = forecast_setup(
-            data_file_path=data_file_path, date=date, io=io,
-            flags=flags, advect_params=advect_params,
-            ens_params=ens_params, pert_params=pert_params,
-            sat2sat=sat2sat, sat2wind=sat2wind, wrf=wrf,
-            opt_flow=opt_flow)
+    param_dic, coords, sys_vars, assim_vars, ensemble = forecast_setup(
+        data_file_path=data_file_path, date=date, io=io,
+        flags=flags, advect_params=advect_params,
+        ens_params=ens_params, pert_params=pert_params,
+        sat2sat=sat2sat, sat2wind=sat2wind, wrf=wrf,
+        opt_flow=opt_flow)
+    return param_dic, coords, sys_vars, assim_vars, ensemble
     remove_div_flag = True
     for time_index in range(coords.sat_times.size - 1):
         ensemble, remove_div_flag = preprocess(
             ensemble=ensemble, flags=flags,
             remove_div_flag=remove_div_flag,
             coords=coords, sys_vars=sys_vars)
-        ensemble_array, ensemble = forecast(ensemble)
+        num_of_advect = int((
+            coords.sat_times[time_index + 1] -
+            coords.sat_times[time_index]).seconds/(60*15))
+        ensemble_array, ensemble = forecast(
+            ensemble=ensemble, num_of_advect=num_of_advect,
+            flags=flags, coords=coords, sys_vars=sys_vars,
+            advect_params=advect_params, pert_params=pert_params,
+            assim_vars=assim_vars)
         save(ensemble_array)
         ensemble = assimilate(ensemble)
 
