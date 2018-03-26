@@ -202,7 +202,7 @@ def forecast_setup(*, data_file_path, date, io, advect_params, ens_params,
                                ens_params=ens_params,
                                coords=coords, flags=flags)
     if flags['assim']:
-        assim_vars = calc_assim_variables(sys_vars=sys_vars,
+        assim_vars = calc_assim_variables(sys_vars=sys_vars+,
                                           advect_params=advect_params,
                                           flags=flags, sat2sat=sat2sat,
                                           sat2wind=sat2wind, wrf=wrf)
@@ -221,8 +221,11 @@ def preprocess(*, ensemble, flags, remove_div_flag, coords, sys_vars):
     return ensemble, remove_div_flag
 
 
-def forecast(*, ensemble, num_of_advect, flags, coords,
+def forecast(*, ensemble, flags, coords,
              sys_vars, advect_params, pert_params, assim_vars):
+    num_of_advect = int((
+        coords.sat_times[time_index + 1] -
+        coords.sat_times[time_index]).seconds/(60*15))
     ensemble_array = ensemble.copy()[None, :, :]
     cx = abs(ensemble[:sys_vars.U_crop_size]).max()
     cy = abs(ensemble[sys_vars.U_crop_size:
@@ -278,9 +281,6 @@ def forecast_system(*, data_file_path, results_file_path,
             ensemble=ensemble, flags=flags,
             remove_div_flag=remove_div_flag,
             coords=coords, sys_vars=sys_vars)
-        num_of_advect = int((
-            coords.sat_times[time_index + 1] -
-            coords.sat_times[time_index]).seconds/(60*15))
         ensemble_array, ensemble = forecast(
             ensemble=ensemble, num_of_advect=num_of_advect,
             flags=flags, coords=coords, sys_vars=sys_vars,
