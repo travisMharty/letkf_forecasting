@@ -223,9 +223,10 @@ def preprocess(*, ensemble, flags, remove_div_flag, coords, sys_vars):
 
 def forecast(*, ensemble, flags, coords, time_index,
              sys_vars, advect_params, pert_params, assim_vars):
-    # save_times = pd.date_range(sat_time, periods=(num_of_horizons + 1),
-    #                            freq='15min')
-    # save_times = save_times.tz_convert(None)
+    save_times = pd.date_range(sat_time,
+                               periods=(sys_vars.num_of_horizons + 1),
+                               freq='15min')
+    save_times = save_times.tz_convert(None)
     num_of_advect = int((
         coords.sat_times[time_index + 1] -
         coords.sat_times[time_index]).seconds/(60*15))
@@ -266,7 +267,21 @@ def forecast(*, ensemble, flags, coords, time_index,
             axis=0)
         if num_of_advect == m:
             background = ensemble.copy()
-    return ensemble_array, background
+    return ensemble_array, save_times, background
+
+
+def save(*, ensemble_array, coords, ens_params, param_dic, sys_vars,
+         save_times):
+    U, V, ci = extract_components(
+        ensemble_array, ens_params['ens_num'], sys_vars.num_of_horizons + 1,
+        sys_vars.U_crop_shape, sys_vars.V_crop_shape, sys_vars.ci_crop_shape)
+    save_netcdf(
+        results_file_path, U, V, ci, param_dic,
+        coords.we_crop, coords.sn_crop,
+        coords.we_stag_crop, coords.sn_stag_crop,
+        save_times, ens_params['ens_num'])
+
+
 
 
 def forecast_system(*, data_file_path, results_file_path,
@@ -290,8 +305,10 @@ def forecast_system(*, data_file_path, results_file_path,
             advect_params=advect_params, pert_params=pert_params,
             assim_vars=assim_vars)
         return ensemble_array, ensemble
-        save(ensemble_array)
         ensemble = assimilate(ensemble)
+        save(ensemble_array=ensemble_array, coords=coords,
+             ens_params=ens_params, param_dic=param_dic,
+             sys_vars=sys_vars, save_times=save_times)
 
 
     for time_index in range(sat_times.size - 1):
