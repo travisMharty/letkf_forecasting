@@ -202,7 +202,7 @@ def forecast_setup(*, data_file_path, date, io, advect_params, ens_params,
                                ens_params=ens_params,
                                coords=coords, flags=flags)
     if flags['assim']:
-        assim_vars = calc_assim_variables(sys_vars=sys_vars+,
+        assim_vars = calc_assim_variables(sys_vars=sys_vars,
                                           advect_params=advect_params,
                                           flags=flags, sat2sat=sat2sat,
                                           sat2wind=sat2wind, wrf=wrf)
@@ -216,12 +216,14 @@ def preprocess(*, ensemble, flags, remove_div_flag, coords, sys_vars):
         logging.debug('remove divergence')
         remove_div_flag = False
         ensemble[:sys_vars.wind_size] = remove_divergence_ensemble(
-            sys_vars.FunctionSpace_wind, ensemble[:sys_vars.wind_size],
-            sys_vars.U_crop_shape, sys_vars.V_crop_shape, 4)  # smoothing
+            FunctionSpace=sys_vars.FunctionSpace_wind,
+            wind_ensemble=ensemble[:sys_vars.wind_size],
+            U_crop_shape=sys_vars.U_crop_shape,
+            V_crop_shape=sys_vars.V_crop_shape, sigma=4)
     return ensemble, remove_div_flag
 
 
-def forecast(*, ensemble, flags, coords, time_index,
+def forecast(*, ensemble, flags, coords, time_index, sat_time,
              sys_vars, advect_params, pert_params, assim_vars):
     save_times = pd.date_range(sat_time,
                                periods=(sys_vars.num_of_horizons + 1),
@@ -271,7 +273,7 @@ def forecast(*, ensemble, flags, coords, time_index,
 
 
 def save(*, ensemble_array, coords, ens_params, param_dic, sys_vars,
-         save_times):
+         save_times, results_file_path):
     U, V, ci = extract_components(
         ensemble_array, ens_params['ens_num'], sys_vars.num_of_horizons + 1,
         sys_vars.U_crop_shape, sys_vars.V_crop_shape, sys_vars.ci_crop_shape)
@@ -283,7 +285,7 @@ def save(*, ensemble_array, coords, ens_params, param_dic, sys_vars,
 
 
 def assimilate_sat2sat_sys(*, ensemble, data_file_path, sat_time,
-                           coords, sys_vars):
+                           coords, sys_vars, flags):
     if not flags['assim_sat2sat']:
         with Dataset(data_file_path, mode='r') as store:
             q = store.variables['ci'][coords.sat_times_all == sat_time,
@@ -296,12 +298,12 @@ def assimilate_sat2sat_sys(*, ensemble, data_file_path, sat_time,
 
 def assimilate_sat2wind_sys(*, ensemble, data_file_path, sat_time,
                             coords, sys_vars, assim_vars, sat2wind,
-                            remove_div_flag):
+                            remove_div_flag, flags):
     if flags['assim_sat2wind']:
         logging.debug('Assim sat2wind')
         with Dataset(data_file_path, mode='r') as store:
             q = store.variables['ci'][coords.sat_times_all == sat_time,
-                                      sys_vars.sn_slice,sys_vars.we_slice]
+                                      coords.sn_slice, coords.we_slice]
             #  boolean indexing does not drop dimension
             q = q[0]
         ensemble = assimilate_sat_to_wind(
@@ -322,10 +324,8 @@ def assimilate_sat2wind_sys(*, ensemble, data_file_path, sat_time,
 
 def assimilate_wrf_sys(*, ensemble, data_file_path, sat_time,
                        coords, sys_vars, assim_vars, wrf,
-                       remove_div_flag, ens_params):
-    int_index_wind = coords.wind_times.get_loc(sat_time,
-                                               method='pad')
-    wind_time = coords.wind_times[int_index_wind]
+                       remove_div_flag, ens_params, flags):
+    wind_time = return_wind_time(sat_time=sat_time, coords=coords)
     if sat_time == wind_time:
         logging.debug('Assim WRF')
         with Dataset(data_file_path, mode='r') as store:
@@ -380,8 +380,9 @@ def assimilate_wrf_sys(*, ensemble, data_file_path, sat_time,
     return ensemble, remove_div_flag
 
 
-def return_of(*, coords, time_index, sat_time, data_file_path):
+def return_of(*, coords, time_index, sat_time, data_file_path, sys_vars):
     # retreive OF vectors
+    wind_time = return_wind_time(sat_time=sat_time, coords=coords)
     time0 = coords.sat_times[time_index - 1]
     with Dataset(data_file_path, mode='r') as store:
         this_U = store.variables['U'][
@@ -405,29 +406,29 @@ def return_of(*, coords, time_index, sat_time, data_file_path):
 
     # need to select only pos in crop domain; convert to crop
     keep = np.logical_and(
-        np.logical_and(pos[:, 0] > coords.we[0],
-                       pos[:, 0] < coords.we[-1]),
-        np.logical_and(pos[:, 1] > coords.sn[0],
-                       pos[:, 1] < coords.sn[-1]))
+        np.logical_and(pos[:, 0] > coords.we_slice.start,
+                       pos[:, 0] < coords.we_slice.stop),
+        np.logical_and(pos[:, 1] > coords.sn_slice.start,
+                       pos[:, 1] < coords.sn_slice.stop))
     pos = pos[keep]
     u_of = u_of[keep]
     v_of = v_of[keep]
-    pos[:, 0] -= wind_x_range[0]
-    pos[:, 1] -= wind_y_range[0]
+    pos[:, 0] -= coords.we_slice.start
+    pos[:, 1] -= coords.sn_slice.start
     pos = pos.T
     pos = pos[::-1]
-    u_of_flat_pos = np.ravel_multi_index(pos, U_crop_shape)
-    v_of_flat_pos = np.ravel_multi_index(pos, V_crop_shape)
+    u_of_flat_pos = np.ravel_multi_index(pos, sys_vars.U_crop_shape)
+    v_of_flat_pos = np.ravel_multi_index(pos, sys_vars.V_crop_shape)
     return u_of, v_of, u_of_flat_pos, v_of_flat_pos
 
 
 def assimilate_of_sys(*, ensemble, data_file_path, sat_time, time_index,
-                      coords, sys_vars, remove_div_flag):
+                      coords, sys_vars, remove_div_flag, flags, opt_flow):
     if flags['assim_of']:
         logging.debug('calc of')
         u_of, v_of, u_of_flat_pos, v_of_flat_pos = return_of(
             coords=coords, time_index=time_index, sat_time=sat_time,
-            data_file_path=data_file_path)
+            data_file_path=data_file_path, sys_vars=sys_vars)
         logging.debug('assim of')
         remove_div_flag = True
         x_temp = np.arange(sys_vars.U_crop_shape[1])*sys_vars.dx/1000  # in km
@@ -440,9 +441,9 @@ def assimilate_of_sys(*, ensemble, data_file_path, sat_time, time_index,
             inflation=opt_flow['infl'],
             localization=opt_flow['loc'],
             x=x_temp.ravel(), y=y_temp.ravel())
-        x_temp = np.arange(sys_vars.V_crop_shape[1])*dx/1000
-        y_temp = np.arange(sys_vars.V_crop_shape[0])*dx/1000
-        x_temp, y_temp = np.meshgrpid(x_temp, y_temp)
+        x_temp = np.arange(sys_vars.V_crop_shape[1])*sys_vars.dx/1000
+        y_temp = np.arange(sys_vars.V_crop_shape[0])*sys_vars.dy/1000
+        x_temp, y_temp = np.meshgrid(x_temp, y_temp)
         ensemble[sys_vars.U_crop_size:
                  sys_vars.wind_size] = reduced_enkf(
                      ensemble=ensemble[sys_vars.U_crop_size:
@@ -466,38 +467,42 @@ def forecast_system(*, data_file_path, results_file_path,
         opt_flow=opt_flow)
     remove_div_flag = True
     for time_index in range(coords.sat_times.size - 1):
+        sat_time = coords.sat_times[time_index + 1]
         ensemble, remove_div_flag = preprocess(
             ensemble=ensemble, flags=flags,
             remove_div_flag=remove_div_flag,
             coords=coords, sys_vars=sys_vars)
         ensemble_array, save_times, ensemble = forecast(
-            ensemble=ensemble, num_of_advect=num_of_advect,
+            ensemble=ensemble, sat_time=sat_time,
             flags=flags, coords=coords, time_index=time_index,
             sys_vars=sys_vars,
             advect_params=advect_params, pert_params=pert_params,
             assim_vars=assim_vars)
         save(ensemble_array=ensemble_array, coords=coords,
              ens_params=ens_params, param_dic=param_dic,
-             sys_vars=sys_vars, save_times=save_times)
-        sat_time = coords.sat_times[time_index + 1]
+             sys_vars=sys_vars, save_times=save_times,
+             results_file_path=results_file_path)
         ensemble = assimilate_sat2sat_sys(
             ensemble=ensemble, data_file_path=data_file_path,
-            sat_time=sat_time, coords=coords, sys_vars=sys_vars)
+            sat_time=sat_time, coords=coords, sys_vars=sys_vars,
+            flags=flags)
         ensemble, remove_div_flag = assimilate_sat2wind_sys(
             ensemble=ensemble, data_file_path=data_file_path,
             sat_time=sat_time, coords=coords, sys_vars=sys_vars,
             assim_vars=assim_vars, sat2wind=sat2wind,
-            remove_div_flag=remove_div_flag)
+            remove_div_flag=remove_div_flag, flags=flags)
         ensmeble, remove_div_flag = assimilate_wrf_sys(
             ensemble=ensemble, data_file_path=data_file_path,
             sat_time=sat_time, coords=coords, sys_vars=sys_vars,
             assim_vars=assim_vars, wrf=wrf,
-            remove_div_flag=remove_div_flag, ens_params=ens_params)
+            remove_div_flag=remove_div_flag, ens_params=ens_params,
+            flags=flags)
         ensemble = assimilate_of_sys(
-            ensemble=ensemlbe, data_file_path=data_file_path,
+            ensemble=ensemble, data_file_path=data_file_path,
             sat_time=sat_time, time_index=time_index,
             coords=coords, sys_vars=sys_vars,
-            remove_div_flag=remove_div_flag)
+            remove_div_flag=remove_div_flag,
+            flags=flags, opt_flow=opt_flow)
     return None
 
     for time_index in range(sat_times.size - 1):

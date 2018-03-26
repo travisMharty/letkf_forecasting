@@ -208,7 +208,7 @@ def remove_divergence_single(
 
 
 def remove_divergence_ensemble(
-        FunctionSpace, wind_ensemble, U_crop_shape, V_crop_shape, sigma):
+        *, FunctionSpace, wind_ensemble, U_crop_shape, V_crop_shape, sigma):
     # this is not done on Arakawa Grid which sucks...
     # the interpolations are quick and dirty.
 

@@ -1,5 +1,7 @@
 import numpy as np
 import scipy as sp
+import letkf_forecasting.assimilation_accessories as assimilation_accessories
+from scipy import interpolate
 
 
 def optimal_interpolation(background, b_sig,
@@ -137,8 +139,9 @@ def assimilate(ensemble, observations, flat_sensor_indices, R_inverse,
         kal_count = 0
         W_interp = np.zeros([assimilation_positions.size, ens_size**2])
         for interp_position in assimilation_positions:
-            local_positions = nearest_positions(interp_position, domain_shape,
-                                                localization_length)
+            local_positions = assimilation_accessories.nearest_positions(
+                interp_position, domain_shape,
+                localization_length)
             local_ensemble = ensemble[local_positions]
             local_x_bar = x_bar[local_positions]
             local_obs = observations[local_positions]  # assume H is I
@@ -257,8 +260,9 @@ def assimilate_full_wind(ensemble, observations, flat_sensor_indices,
     # bad_count = 0
     for interp_position in assimilation_positions:
         # for the irradiance portion of the ensemble
-        local_positions = nearest_positions(interp_position, domain_shape,
-                                            localization_length)
+        local_positions = assimilation_accessories.nearest_positions(
+            interp_position, domain_shape,
+            localization_length)
         local_ensemble = ensemble_csi[local_positions]
         local_x_bar = x_bar_csi[local_positions]
         local_obs = observations[local_positions]  # assume H is I
@@ -278,8 +282,9 @@ def assimilate_full_wind(ensemble, observations, flat_sensor_indices,
         W_interp[kal_count] = np.ravel(W_a)  # separate w_bar??
 
         # should eventually change to assimilate on coarser wind grid
-        local_positions = nearest_positions(interp_position, domain_shape,
-                                            localization_length_wind)
+        local_positions = assimilation_accessories.nearest_positions(
+            interp_position, domain_shape,
+            localization_length_wind)
         local_ensemble = ensemble_csi[local_positions]
         local_x_bar = x_bar_csi[local_positions]
         local_obs = observations[local_positions]  # assume H is I
@@ -403,8 +408,9 @@ def assimilate_sat_to_wind(ensemble, observations,
     # bad_count = 0
     for interp_position in assimilation_positions:
         # # for the irradiance portion of the ensemble
-        # local_positions = nearest_positions(interp_position, domain_shape,
-        #                                     localization_length)
+        # local_positions = assimilation_accessories.nearest_positions(
+        #     interp_position, domain_shape,
+        #     localization_length)
         # local_ensemble = ensemble_csi[local_positions]
         # local_x_bar = x_bar_csi[local_positions]
         # local_obs = observations[local_positions] # assume H is I
@@ -424,8 +430,9 @@ def assimilate_sat_to_wind(ensemble, observations,
         # W_interp[kal_count] = np.ravel(W_a) # separate w_bar??
 
         # should eventually change to assimilate on coarser wind grid
-        local_positions = nearest_positions(interp_position, domain_shape,
-                                            localization_length_wind)
+        local_positions = assimilation_accessories.nearest_positions(
+            interp_position, domain_shape,
+            localization_length_wind)
         local_ensemble = ensemble_csi[local_positions]
         local_x_bar = x_bar_csi[local_positions]
         local_obs = observations[local_positions]  # assume H is I
@@ -532,8 +539,9 @@ def assimilate_wrf(ensemble, observations,
     W_interp = np.zeros([assimilation_positions.size, ens_size**2])
     for interp_position in assimilation_positions:
         # for the irradiance portion of the ensemble
-        local_positions = nearest_positions(interp_position, wind_shape,
-                                            localization_length_wind)
+        local_positions = assimilation_accessories.nearest_positions(
+            interp_position, wind_shape,
+            localization_length_wind)
         local_ensemble = ensemble[local_positions]
         local_x_bar = x_bar[local_positions]
         local_obs = observations[local_positions]  # assume H is I
