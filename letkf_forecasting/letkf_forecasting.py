@@ -320,6 +320,66 @@ def assimilate_sat2wind_sys(*, ensemble, data_file_path, sat_time,
     return ensemble, remove_div_flag
 
 
+def assimilate_wrf_sys(*, ensemble, data_file_path, sat_time,
+                       coords, sys_vars, assim_vars, wrf,
+                       remove_div_flag, ens_params):
+    int_index_wind = coords.wind_times.get_loc(sat_time,
+                                               method='pad')
+    wind_time = coords.wind_times[int_index_wind]
+    if sat_time == wind_time:
+        logging.debug('Assim WRF')
+        with Dataset(data_file_path, mode='r') as store:
+            U = store.variables['U'][coords.wind_times == wind_time,
+                                     coords.sn_slice,
+                                     coords.we_stag_slice]
+            V = store.variables['V'][coords.wind_times == wind_time,
+                                     coords.sn_stag_slice,
+                                     coords.we_slice]
+            #  boolean indexing does not drop dimension
+            U = U[0]
+            V = V[0]
+        remove_div_flag = True
+        if flags['assim_wrf']:
+            ensemble[:sys_vars.U_crop_size] = assimilate_wrf(
+                ensemble=ensemble[:sys_vars.U_crop_size],
+                observations=U.ravel(),
+                R_inverse=1/wrf['sig']**2,
+                wind_inflation=wrf['infl'],
+                wind_shape=sys_vars.U_crop_shape,
+                localization_length_wind=wrf['loc'],
+                assimilation_positions=assim_vars.assim_pos_U_wrf,
+                assimilation_positions_2d=assim_vars.assim_pos_2d_U_wrf,
+                full_positions_2d=assim_vars.full_pos_2d_U_wrf)
+
+            ensemble[sys_vars.U_crop_size:sys_vars.wind_size] = assimilate_wrf(
+                ensemble=ensemble[sys_vars.U_crop_size:
+                                  sys_vars.wind_size],
+                observations=V.ravel(),
+                R_inverse=1/wrf['sig']**2,
+                wind_inflation=wrf['infl'],
+                wind_shape=sys_vars.V_crop_shape,
+                localization_length_wind=wrf['loc'],
+                assimilation_positions=assim_vars.assim_pos_V_wrf,
+                assimilation_positions_2d=assim_vars.assim_pos_2d_V_wrf,
+                full_positions_2d=assim_vars.full_pos_2d_V_wrf)
+        else:
+            random_nums = np.random.normal(
+                loc=0,
+                scale=ens_params['wind_sigma'][0],
+                size=ens_params['ens_num'])
+            ensemble[:sys_vars.U_crop_size] = (U.ravel()[:, None]
+                                               + random_nums[None, :])
+            random_nums = np.random.normal(
+                loc=0,
+                scale=ens_params['wind_sigma'][1],
+                size=ens_params['ens_num'])
+            ensemble[sys_vars.U_crop_size:
+                     sys_vars.wind_size] = (
+                         V.ravel()[:, None]
+                         + random_nums[None, :])
+    return ensemble, remove_div_flag
+
+
 
 
 def forecast_system(*, data_file_path, results_file_path,
