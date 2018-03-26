@@ -158,7 +158,7 @@ def calc_assim_variables(*, coords, advect_params, flags, sat2sat, sat2wind,
 
 def return_wind_time(*, sat_time, coords):
     int_index_wind = coords.wind_times.get_loc(sat_time,
-                                              method='pad')
+                                               method='pad')
     wind_time = coords.wind_times[int_index_wind]
     return wind_time
 
@@ -272,7 +272,6 @@ def forecast_system(*, data_file_path, results_file_path,
         ens_params=ens_params, pert_params=pert_params,
         sat2sat=sat2sat, sat2wind=sat2wind, wrf=wrf,
         opt_flow=opt_flow)
-    return param_dic, coords, sys_vars, assim_vars, ensemble
     remove_div_flag = True
     for time_index in range(coords.sat_times.size - 1):
         ensemble, remove_div_flag = preprocess(
@@ -287,6 +286,7 @@ def forecast_system(*, data_file_path, results_file_path,
             flags=flags, coords=coords, sys_vars=sys_vars,
             advect_params=advect_params, pert_params=pert_params,
             assim_vars=assim_vars)
+        return ensemble_array, ensemble
         save(ensemble_array)
         ensemble = assimilate(ensemble)
 

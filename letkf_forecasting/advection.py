@@ -137,13 +137,14 @@ def advect_5min_single(
     CI_fields = ensemble[wind_size:].copy()
     CI_fields = CI_fields.reshape(domain_shape)
     CI_fields = 1 - CI_fields
-    U = ensemble[:U_size].reshape( U_shape[0], U_shape[1])
+    U = ensemble[:U_size].reshape(U_shape[0], U_shape[1])
     V = ensemble[U_size: V_size + U_size].reshape(
         ens_size, V_shape[0], V_shape[1])
     CI_fields = advect_5min(CI_fields, dt, U, dx, V, dy)
 
     ensemble = np.concatenate([U, V, CI_fields])[:, None]
     return ensemble
+
 
 def noise_fun(domain_shape):
     noise_init = np.zeros(domain_shape)
