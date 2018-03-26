@@ -471,16 +471,31 @@ def forecast_system(*, data_file_path, results_file_path,
             ensemble=ensemble, flags=flags,
             remove_div_flag=remove_div_flag,
             coords=coords, sys_vars=sys_vars)
-        ensemble_array, ensemble = forecast(
+        ensemble_array, save_times, ensemble = forecast(
             ensemble=ensemble, num_of_advect=num_of_advect,
-            flags=flags, coords=coords, sys_vars=sys_vars,
+            flags=flags, coords=coords, time_index=time_index,
+            sys_vars=sys_vars,
             advect_params=advect_params, pert_params=pert_params,
             assim_vars=assim_vars)
         return ensemble_array, ensemble
-        ensemble = assimilate(ensemble)
         save(ensemble_array=ensemble_array, coords=coords,
              ens_params=ens_params, param_dic=param_dic,
              sys_vars=sys_vars, save_times=save_times)
+        sat_time = coords.sat_times[time_index + 1]
+        ensemble = assimilate_sat2sat_sys(
+            ensemble=ensemble, data_file_path=data_file_path,
+            sat_time=sat_time, coords=coords, sys_vars=sys_vars)
+        ensemble, remove_div_flag = assimilate_sat2wind_sys(
+            ensemble=ensemble, data_file_path=data_file_path,
+            sat_time=sat_time, coords=coords, sys_vars=sys_vars,
+            assim_vars=assim_vars, sat2wind=sat2wind,
+            remove_div_flag=remove_div_flag)
+        ensmeble, remove_div_flag = assimilate_wrf_sys(
+            ensemble=ensemble, data_file_path=data_file_path,
+            sat_time=sat_time, coords=coords, sys_vars=sys_vars,
+            assim_vars=assim_vars, wrf=wrf,
+            remove_div_flag=remove_div_flag, ens_params=ens_params)
+        ensemble = assimilate_of_sys()
 
 
     for time_index in range(sat_times.size - 1):
