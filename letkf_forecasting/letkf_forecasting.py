@@ -396,16 +396,16 @@ def return_opt_flow(*, coords, time_index, sat_time, data_file_path, sys_vars):
                                        :, :]
         image1 = store.variables['ci'][
             coords.sat_times_all == sat_time, :, :]
-        # boolean indexing does not drop dimension
-        this_U = this_U[0]
-        this_V = this_V[0]
-        image0 = image0[0]
-        image1 = image1[0]
-        u_opt_flow, v_opt_flow, pos = optical_flow(image0, image1,
-                                                   time0, sat_time,
-                                                   this_U, this_V)
-        del this_U, this_V, image0, image1
-        pos = pos*4  # optical flow done on coarse grid
+    # boolean indexing does not drop dimension
+    this_U = this_U[0]
+    this_V = this_V[0]
+    image0 = image0[0]
+    image1 = image1[0]
+    u_opt_flow, v_opt_flow, pos = optical_flow(image0, image1,
+                                               time0, sat_time,
+                                               this_U, this_V)
+    del this_U, this_V, image0, image1
+    pos = pos*4  # optical flow done on coarse grid
 
     # need to select only pos in crop domain; convert to crop
     keep = np.logical_and(
