@@ -342,10 +342,11 @@ def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
             V = V[0]
         remove_div_flag = True
         if flags['assim_wrf']:
+            R_inverse = 1/wrf['sig']**2
             ensemble[:sys_vars.U_crop_size] = assimilate_wrf(
                 ensemble=ensemble[:sys_vars.U_crop_size],
                 observations=U.ravel(),
-                R_inverse=1/wrf['sig']**2,
+                R_inverse=R_inverse,
                 wind_inflation=wrf['infl'],
                 wind_shape=sys_vars.U_crop_shape,
                 localization_length_wind=wrf['loc'],
@@ -357,7 +358,7 @@ def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
                 ensemble=ensemble[sys_vars.U_crop_size:
                                   sys_vars.wind_size],
                 observations=V.ravel(),
-                R_inverse=1/wrf['sig']**2,
+                R_inverse=R_inverse,
                 wind_inflation=wrf['infl'],
                 wind_shape=sys_vars.V_crop_shape,
                 localization_length_wind=wrf['loc'],
