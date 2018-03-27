@@ -11,7 +11,7 @@ flags:
   assim: 0
   perturbation: 0
   div: 1
-  assim_of: 0
+  assim_opt_flow: 0
   assim_sat2sat: 0
   assim_sat2wind: 0
   assim_wrf: 0
@@ -61,4 +61,4 @@ opt_flow:
   sig: None
   loc: None  # in km not grid spaces
   infl: None
-  name: 'of'
+  name: 'opt_flow'
