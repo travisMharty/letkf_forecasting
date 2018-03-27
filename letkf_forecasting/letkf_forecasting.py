@@ -252,7 +252,6 @@ def forecast(*, ensemble, flags, coords, time_index, sat_time,
                     T_steps,
                     sys_vars.U_crop_shape, sys_vars.V_crop_shape,
                     sys_vars.ci_crop_shape, assim_vars.client)
-
             if flags['perturbation']:
                 ensemble[sys_vars.wind_size:] = perturb_irradiance(
                     ensemble[sys_vars.wind_size:], sys_vars.ci_crop_shape,
@@ -295,7 +294,7 @@ def maybe_assim_sat2sat(*, ensemble, data_file_path, sat_time,
 
 def maybe_assim_sat2wind(*, ensemble, data_file_path, sat_time,
                          coords, sys_vars, assim_vars, sat2wind,
-                         remove_div_flag, flags):
+                         flags):
     if flags['assim_sat2wind']:
         logging.debug('Assim sat2wind')
         q = return_single_time(data_file_path, coords.sat_times_all,
@@ -313,13 +312,15 @@ def maybe_assim_sat2wind(*, ensemble, data_file_path, sat_time,
             assimilation_positions=assim_vars.assim_pos_sat2wind,
             assimilation_positions_2d=assim_vars.assim_pos_2d_sat2wind,
             full_positions_2d=assim_vars.full_pos_2d_sat2wind)
-        remove_div_flag = True
-    return ensemble, remove_div_flag
+        div_wrf_flag = True
+    else:
+        div_wrf_flag = False
+    return ensemble, div_wrf_flag
 
 
 def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
                     coords, sys_vars, assim_vars, wrf,
-                    remove_div_flag, ens_params, flags):
+                    ens_params, flags):
     wind_time = return_wind_time(sat_time=sat_time, coords=coords)
     if sat_time == wind_time:
         logging.debug('Assim WRF')
@@ -328,7 +329,7 @@ def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
                                   [coords.sn_slice, coords.sn_stag_slice],
                                   [coords.we_stag_slice, coords.we_slice],
                                   ['U', 'V'])
-        remove_div_flag = True
+        div_wrf_flag = True
         if flags['assim_wrf']:
             R_inverse = 1/wrf['sig']**2
             ensemble[:sys_vars.U_crop_size] = assimilate_wrf(
@@ -368,7 +369,9 @@ def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
                      sys_vars.wind_size] = (
                          V.ravel()[:, None]
                          + random_nums[None, :])
-    return ensemble, remove_div_flag
+    else:
+        div_wrf_flag = False
+    return ensemble, div_wrf_flag
 
 
 def return_opt_flow(*, coords, time_index, sat_time, data_file_path, sys_vars):
@@ -411,8 +414,9 @@ def return_opt_flow(*, coords, time_index, sat_time, data_file_path, sys_vars):
 
 
 def maybe_assim_opt_flow(*, ensemble, data_file_path, sat_time, time_index,
-                         coords, sys_vars, remove_div_flag, flags, opt_flow):
+                         coords, sys_vars, flags, opt_flow):
     if flags['assim_opt_flow']:
+        div_opt_flow_flag = True
         logging.debug('calc opt_flow')
         returned = return_opt_flow(
             coords=coords, time_index=time_index, sat_time=sat_time,
@@ -420,7 +424,6 @@ def maybe_assim_opt_flow(*, ensemble, data_file_path, sat_time, time_index,
         u_opt_flow, v_opt_flow = returned[:2]
         u_opt_flow_flat_pos, v_opt_flow_flat_pos = returned[2:]
         logging.debug('assim opt_flow')
-        remove_div_flag = True
         x_temp = np.arange(sys_vars.U_crop_shape[1])*sys_vars.dx/1000  # in km
         y_temp = np.arange(sys_vars.U_crop_shape[0])*sys_vars.dy/1000
         x_temp, y_temp = np.meshgrid(x_temp, y_temp)
@@ -443,7 +446,9 @@ def maybe_assim_opt_flow(*, ensemble, data_file_path, sat_time, time_index,
                      inflation=opt_flow['infl'],
                      localization=opt_flow['loc'],
                      x=x_temp.ravel(), y=y_temp.ravel())
-    return ensemble, remove_div_flag
+    else:
+        div_opt_flow_flag = False
+    return ensemble, div_opt_flow_flag
 
 
 def forecast_system(*, data_file_path, results_file_path,
@@ -479,23 +484,25 @@ def forecast_system(*, data_file_path, results_file_path,
             ensemble=ensemble, data_file_path=data_file_path,
             sat_time=sat_time, coords=coords, sys_vars=sys_vars,
             flags=flags)
-        ensemble, remove_div_flag = maybe_assim_sat2wind(
+        ensemble, div_sat2wind_flag = maybe_assim_sat2wind(
             ensemble=ensemble, data_file_path=data_file_path,
             sat_time=sat_time, coords=coords, sys_vars=sys_vars,
             assim_vars=assim_vars, sat2wind=sat2wind,
-            remove_div_flag=remove_div_flag, flags=flags)
-        ensmeble, remove_div_flag = maybe_assim_wrf(
+            flags=flags)
+        ensmeble, div_wrf_flag = maybe_assim_wrf(
             ensemble=ensemble, data_file_path=data_file_path,
             sat_time=sat_time, coords=coords, sys_vars=sys_vars,
             assim_vars=assim_vars, wrf=wrf,
-            remove_div_flag=remove_div_flag, ens_params=ens_params,
+            ens_params=ens_params,
             flags=flags)
-        ensemble, remove_div_flag = maybe_assim_opt_flow(
+        ensemble, div_opt_flow_flag = maybe_assim_opt_flow(
             ensemble=ensemble, data_file_path=data_file_path,
             sat_time=sat_time, time_index=time_index,
             coords=coords, sys_vars=sys_vars,
-            remove_div_flag=remove_div_flag,
             flags=flags, opt_flow=opt_flow)
+        remove_div_flag = (div_sat2wind_flag
+                           or div_wrf_flag
+                           or div_opt_flow_flag)
         ensemble, remove_div_flag = preprocess(
             ensemble=ensemble, flags=flags,
             remove_div_flag=remove_div_flag,
