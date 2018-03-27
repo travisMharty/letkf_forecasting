@@ -169,7 +169,7 @@ def return_ensemble(*, data_file_path, ens_params, coords, flags):
     wind_time = return_wind_time(sat_time=sat_time, coords=coords)
     q = return_single_time(data_file_path, coords.sat_times_all,
                            sat_time, [coords.sn_slice],
-                           [coords.we_slice], ['ci'])
+                           [coords.we_slice], ['ci'])[0]
     U, V = return_single_time(data_file_path, coords.wind_times, wind_time,
                               [coords.sn_slice, coords.sn_stag_slice],
                               [coords.we_stag_slice, coords.we_slice],
@@ -288,7 +288,7 @@ def maybe_assim_sat2sat(*, ensemble, data_file_path, sat_time,
     else:
         q = return_single_time(data_file_path, coords.sat_times_all,
                                sat_time, [coords.sn_slice], [coords.we_slice],
-                               ['ci'])
+                               ['ci'])[0]
         ensemble[sys_vars.wind_size:] = q.ravel()[:, None]
     return ensemble
 
@@ -300,7 +300,7 @@ def maybe_assim_sat2wind(*, ensemble, data_file_path, sat_time,
         logging.debug('Assim sat2wind')
         q = return_single_time(data_file_path, coords.sat_times_all,
                                sat_time, [coords.sn_slice], [coords.we_slice],
-                               ['ci'])
+                               ['ci'])[0]
         ensemble = assimilate_sat_to_wind(
             ensemble=ensemble,
             observations=q.ravel(),
