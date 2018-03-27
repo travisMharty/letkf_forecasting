@@ -284,9 +284,11 @@ def save(*, ensemble_array, coords, ens_params, param_dic, sys_vars,
         save_times, ens_params['ens_num'])
 
 
-def assimilate_sat2sat_sys(*, ensemble, data_file_path, sat_time,
-                           coords, sys_vars, flags):
-    if not flags['assim_sat2sat']:
+def maybe_assim_sat2sat(*, ensemble, data_file_path, sat_time,
+                        coords, sys_vars, flags):
+    if flags['assim_sat2sat']:
+        raise NotImplementedError
+    else:
         with Dataset(data_file_path, mode='r') as store:
             q = store.variables['ci'][coords.sat_times_all == sat_time,
                                       coords.sn_slice, coords.we_slice]
@@ -296,9 +298,9 @@ def assimilate_sat2sat_sys(*, ensemble, data_file_path, sat_time,
     return ensemble
 
 
-def assimilate_sat2wind_sys(*, ensemble, data_file_path, sat_time,
-                            coords, sys_vars, assim_vars, sat2wind,
-                            remove_div_flag, flags):
+def maybe_assim_sat2wind(*, ensemble, data_file_path, sat_time,
+                         coords, sys_vars, assim_vars, sat2wind,
+                         remove_div_flag, flags):
     if flags['assim_sat2wind']:
         logging.debug('Assim sat2wind')
         with Dataset(data_file_path, mode='r') as store:
@@ -322,9 +324,9 @@ def assimilate_sat2wind_sys(*, ensemble, data_file_path, sat_time,
     return ensemble, remove_div_flag
 
 
-def assimilate_wrf_sys(*, ensemble, data_file_path, sat_time,
-                       coords, sys_vars, assim_vars, wrf,
-                       remove_div_flag, ens_params, flags):
+def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
+                    coords, sys_vars, assim_vars, wrf,
+                    remove_div_flag, ens_params, flags):
     wind_time = return_wind_time(sat_time=sat_time, coords=coords)
     if sat_time == wind_time:
         logging.debug('Assim WRF')
@@ -380,8 +382,8 @@ def assimilate_wrf_sys(*, ensemble, data_file_path, sat_time,
     return ensemble, remove_div_flag
 
 
-def return_of(*, coords, time_index, sat_time, data_file_path, sys_vars):
-    # retreive OF vectors
+def return_opt_flow(*, coords, time_index, sat_time, data_file_path, sys_vars):
+    # retreive OPT_FLOW vectors
     wind_time = return_wind_time(sat_time=sat_time, coords=coords)
     time0 = coords.sat_times[time_index - 1]
     with Dataset(data_file_path, mode='r') as store:
@@ -398,9 +400,9 @@ def return_of(*, coords, time_index, sat_time, data_file_path, sys_vars):
         this_V = this_V[0]
         image0 = image0[0]
         image1 = image1[0]
-        u_of, v_of, pos = optical_flow(image0, image1,
-                                       time0, sat_time,
-                                       this_U, this_V)
+        u_opt_flow, v_opt_flow, pos = optical_flow(image0, image1,
+                                                   time0, sat_time,
+                                                   this_U, this_V)
         del this_U, this_V, image0, image1
         pos = pos*4  # optical flow done on coarse grid
 
@@ -411,33 +413,35 @@ def return_of(*, coords, time_index, sat_time, data_file_path, sys_vars):
         np.logical_and(pos[:, 1] > coords.sn_slice.start,
                        pos[:, 1] < coords.sn_slice.stop))
     pos = pos[keep]
-    u_of = u_of[keep]
-    v_of = v_of[keep]
+    u_opt_flow = u_opt_flow[keep]
+    v_opt_flow = v_opt_flow[keep]
     pos[:, 0] -= coords.we_slice.start
     pos[:, 1] -= coords.sn_slice.start
     pos = pos.T
     pos = pos[::-1]
-    u_of_flat_pos = np.ravel_multi_index(pos, sys_vars.U_crop_shape)
-    v_of_flat_pos = np.ravel_multi_index(pos, sys_vars.V_crop_shape)
-    return u_of, v_of, u_of_flat_pos, v_of_flat_pos
+    u_opt_flow_flat_pos = np.ravel_multi_index(pos, sys_vars.U_crop_shape)
+    v_opt_flow_flat_pos = np.ravel_multi_index(pos, sys_vars.V_crop_shape)
+    return u_opt_flow, v_opt_flow, u_opt_flow_flat_pos, v_opt_flow_flat_pos
 
 
-def assimilate_of_sys(*, ensemble, data_file_path, sat_time, time_index,
-                      coords, sys_vars, remove_div_flag, flags, opt_flow):
-    if flags['assim_of']:
-        logging.debug('calc of')
-        u_of, v_of, u_of_flat_pos, v_of_flat_pos = return_of(
+def maybe_assim_opt_flow(*, ensemble, data_file_path, sat_time, time_index,
+                         coords, sys_vars, remove_div_flag, flags, opt_flow):
+    if flags['assim_opt_flow']:
+        logging.debug('calc opt_flow')
+        returned = return_opt_flow(
             coords=coords, time_index=time_index, sat_time=sat_time,
             data_file_path=data_file_path, sys_vars=sys_vars)
-        logging.debug('assim of')
+        u_opt_flow, v_opt_flow = returned[:2]
+        u_opt_flow_flat_pos, v_opt_flow_flat_pos = returned[2:]
+        logging.debug('assim opt_flow')
         remove_div_flag = True
         x_temp = np.arange(sys_vars.U_crop_shape[1])*sys_vars.dx/1000  # in km
         y_temp = np.arange(sys_vars.U_crop_shape[0])*sys_vars.dy/1000
         x_temp, y_temp = np.meshgrid(x_temp, y_temp)
         ensemble[:sys_vars.U_crop_size] = reduced_enkf(
             ensemble=ensemble[:sys_vars.U_crop_size],
-            observations=u_of, R_sig=opt_flow['sig'],
-            flat_locations=u_of_flat_pos,
+            observations=u_opt_flow, R_sig=opt_flow['sig'],
+            flat_locations=u_opt_flow_flat_pos,
             inflation=opt_flow['infl'],
             localization=opt_flow['loc'],
             x=x_temp.ravel(), y=y_temp.ravel())
@@ -448,8 +452,8 @@ def assimilate_of_sys(*, ensemble, data_file_path, sat_time, time_index,
                  sys_vars.wind_size] = reduced_enkf(
                      ensemble=ensemble[sys_vars.U_crop_size:
                                        sys_vars.wind_size],
-                     observations=v_of, R_sig=opt_flow['sig'],
-                     flat_locations=v_of_flat_pos,
+                     observations=v_opt_flow, R_sig=opt_flow['sig'],
+                     flat_locations=v_opt_flow_flat_pos,
                      inflation=opt_flow['infl'],
                      localization=opt_flow['loc'],
                      x=x_temp.ravel(), y=y_temp.ravel())
@@ -485,22 +489,22 @@ def forecast_system(*, data_file_path, results_file_path,
     for time_index in range(1, coords.sat_times.size):
         sat_time = coords.sat_times[time_index]
         logging.info(str(sat_time))
-        ensemble = assimilate_sat2sat_sys(
+        ensemble = maybe_assim_sat2sat(
             ensemble=ensemble, data_file_path=data_file_path,
             sat_time=sat_time, coords=coords, sys_vars=sys_vars,
             flags=flags)
-        ensemble, remove_div_flag = assimilate_sat2wind_sys(
+        ensemble, remove_div_flag = maybe_assim_sat2wind(
             ensemble=ensemble, data_file_path=data_file_path,
             sat_time=sat_time, coords=coords, sys_vars=sys_vars,
             assim_vars=assim_vars, sat2wind=sat2wind,
             remove_div_flag=remove_div_flag, flags=flags)
-        ensmeble, remove_div_flag = assimilate_wrf_sys(
+        ensmeble, remove_div_flag = maybe_assim_wrf(
             ensemble=ensemble, data_file_path=data_file_path,
             sat_time=sat_time, coords=coords, sys_vars=sys_vars,
             assim_vars=assim_vars, wrf=wrf,
             remove_div_flag=remove_div_flag, ens_params=ens_params,
             flags=flags)
-        ensemble, remove_div_flag = assimilate_of_sys(
+        ensemble, remove_div_flag = maybe_assim_opt_flow(
             ensemble=ensemble, data_file_path=data_file_path,
             sat_time=sat_time, time_index=time_index,
             coords=coords, sys_vars=sys_vars,
