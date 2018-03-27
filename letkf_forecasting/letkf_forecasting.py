@@ -466,23 +466,25 @@ def forecast_system(*, data_file_path, results_file_path,
         sat2sat=sat2sat, sat2wind=sat2wind, wrf=wrf,
         opt_flow=opt_flow)
     remove_div_flag = True
-    for time_index in range(coords.sat_times.size - 1):
-        sat_time = coords.sat_times[time_index + 1]
+    ensemble, remove_div_flag = preprocess(
+        ensemble=ensemble, flags=flags,
+        remove_div_flag=remove_div_flag,
+        coords=coords, sys_vars=sys_vars)
+    time_index = 0
+    sat_time = coords.sat_times[time_index]
+    ensemble_array, save_times, ensemble = forecast(
+        ensemble=ensemble, sat_time=sat_time,
+        flags=flags, coords=coords, time_index=time_index,
+        sys_vars=sys_vars,
+        advect_params=advect_params, pert_params=pert_params,
+        assim_vars=assim_vars)
+    save(ensemble_array=ensemble_array, coords=coords,
+         ens_params=ens_params, param_dic=param_dic,
+         sys_vars=sys_vars, save_times=save_times,
+         results_file_path=results_file_path)
+    for time_index in range(1, coords.sat_times.size):
+        sat_time = coords.sat_times[time_index]
         logging.info(str(sat_time))
-        ensemble, remove_div_flag = preprocess(
-            ensemble=ensemble, flags=flags,
-            remove_div_flag=remove_div_flag,
-            coords=coords, sys_vars=sys_vars)
-        ensemble_array, save_times, ensemble = forecast(
-            ensemble=ensemble, sat_time=sat_time,
-            flags=flags, coords=coords, time_index=time_index,
-            sys_vars=sys_vars,
-            advect_params=advect_params, pert_params=pert_params,
-            assim_vars=assim_vars)
-        save(ensemble_array=ensemble_array, coords=coords,
-             ens_params=ens_params, param_dic=param_dic,
-             sys_vars=sys_vars, save_times=save_times,
-             results_file_path=results_file_path)
         ensemble = assimilate_sat2sat_sys(
             ensemble=ensemble, data_file_path=data_file_path,
             sat_time=sat_time, coords=coords, sys_vars=sys_vars,
@@ -504,4 +506,18 @@ def forecast_system(*, data_file_path, results_file_path,
             coords=coords, sys_vars=sys_vars,
             remove_div_flag=remove_div_flag,
             flags=flags, opt_flow=opt_flow)
+        ensemble, remove_div_flag = preprocess(
+            ensemble=ensemble, flags=flags,
+            remove_div_flag=remove_div_flag,
+            coords=coords, sys_vars=sys_vars)
+        ensemble_array, save_times, ensemble = forecast(
+            ensemble=ensemble, sat_time=sat_time,
+            flags=flags, coords=coords, time_index=time_index,
+            sys_vars=sys_vars,
+            advect_params=advect_params, pert_params=pert_params,
+            assim_vars=assim_vars)
+        save(ensemble_array=ensemble_array, coords=coords,
+             ens_params=ens_params, param_dic=param_dic,
+             sys_vars=sys_vars, save_times=save_times,
+             results_file_path=results_file_path)
     return None
