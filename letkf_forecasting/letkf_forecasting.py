@@ -382,10 +382,10 @@ def return_opt_flow(*, coords, time_index, sat_time, data_file_path, sys_vars):
                                         ['U', 'V'])
     image0 = return_single_time(data_file_path, coords.sat_times_all,
                                 time0, [slice(None)], [slice(None)],
-                                ['ci'])
+                                ['ci'])[0]
     image1 = return_single_time(data_file_path, coords.sat_times_all,
                                 sat_time, [slice(None)], [slice(None)],
-                                ['ci'])
+                                ['ci'])[0]
     u_opt_flow, v_opt_flow, pos = optical_flow(image0, image1,
                                                time0, sat_time,
                                                this_U, this_V)
