@@ -34,26 +34,26 @@ from letkf_forecasting.assimilation import (
 )
 
 
-def set_up_param_dic(*, date, io, flags, advect_params, ens_params,
+def set_up_param_dict(*, date, io, flags, advect_params, ens_params,
                      pert_params, sat2sat, sat2wind, wrf, opt_flow):
-    param_dic = date.copy()
-    param_dic.update(io)
-    param_dic.update(advect_params)
-    param_dic.update(ens_params)
-    param_dic.update(pert_params)
-    for dic in [flags, sat2sat, sat2wind, wrf, opt_flow]:
-        temp = dic.copy()
+    param_dict = date.copy()
+    param_dict.update(io)
+    param_dict.update(advect_params)
+    param_dict.update(ens_params)
+    param_dict.update(pert_params)
+    for adict in [flags, sat2sat, sat2wind, wrf, opt_flow]:
+        temp = adict.copy()
         name = temp['name'] + '_'
         del temp['name']
         keys = list(temp.keys())
         for k in keys:
             temp[name + k] = temp.pop(k)
-        param_dic.update(temp)
-    return param_dic
+        param_dict.update(temp)
+    return param_dict
 
 
-def dic2nt(dic, name):
-    nt = namedtuple(name, dic.keys())(**dic)
+def dict2nt(adict, aname):
+    nt = namedtuple(aname, adict.keys())(**adict)
     return nt
 
 
@@ -101,7 +101,7 @@ def calc_system_variables(*, coords, advect_params, flags, pert_params):
         sys_vars['rf_eig'] = rf_eig
         sys_vars['rf_vectors'] = rf_vectors
         sys_vars['rf_approx_var'] = rf_approx_var
-    sys_vars = dic2nt(sys_vars, 'sys_vars')
+    sys_vars = dict2nt(sys_vars, 'sys_vars')
     return sys_vars
 
 
@@ -152,7 +152,7 @@ def calc_assim_variables(*, sys_vars, advect_params, flags, sat2sat, sat2wind,
         assim_vars['assim_pos_V_wrf'] = assim_pos_V_wrf
         assim_vars['assim_pos_2d_V_wrf'] = assim_pos_2d_V_wrf
         assim_vars['full_pos_2d_V_wrf'] = full_pos_2d_V_wrf
-    assim_vars = dic2nt(assim_vars, 'assim_vars')
+    assim_vars = dict2nt(assim_vars, 'assim_vars')
     return assim_vars
 
 
@@ -189,7 +189,7 @@ def return_ensemble(*, data_file_path, ens_params, coords, flags):
 
 def forecast_setup(*, data_file_path, date, io, advect_params, ens_params,
                    pert_params, flags, sat2sat, sat2wind, wrf, opt_flow):
-    param_dic = set_up_param_dic(
+    param_dict = set_up_param_dict(
         date=date, io=io, advect_params=advect_params, ens_params=ens_params,
         pert_params=pert_params, flags=flags, sat2sat=sat2sat,
         sat2wind=sat2wind, wrf=wrf, opt_flow=opt_flow)
@@ -208,7 +208,7 @@ def forecast_setup(*, data_file_path, date, io, advect_params, ens_params,
                                           sat2wind=sat2wind, wrf=wrf)
     else:
         assim_vars = None
-    return param_dic, coords, sys_vars, assim_vars, ensemble
+    return param_dict, coords, sys_vars, assim_vars, ensemble
 
 
 def preprocess(*, ensemble, flags, remove_div_flag, coords, sys_vars):
@@ -272,13 +272,13 @@ def forecast(*, ensemble, flags, coords, time_index, sat_time,
     return ensemble_array, save_times, background
 
 
-def save(*, ensemble_array, coords, ens_params, param_dic, sys_vars,
+def save(*, ensemble_array, coords, ens_params, param_dict, sys_vars,
          save_times, results_file_path):
     U, V, ci = extract_components(
         ensemble_array, ens_params['ens_num'], sys_vars.num_of_horizons + 1,
         sys_vars.U_crop_shape, sys_vars.V_crop_shape, sys_vars.ci_crop_shape)
     save_netcdf(
-        results_file_path, U, V, ci, param_dic,
+        results_file_path, U, V, ci, param_dict,
         coords.we_crop, coords.sn_crop,
         coords.we_stag_crop, coords.sn_stag_crop,
         save_times, ens_params['ens_num'])
@@ -464,7 +464,7 @@ def maybe_assim_opt_flow(*, ensemble, data_file_path, sat_time, time_index,
 def forecast_system(*, data_file_path, results_file_path,
                     date, io, flags, advect_params, ens_params, pert_params,
                     sat2sat, sat2wind, wrf, opt_flow):
-    param_dic, coords, sys_vars, assim_vars, ensemble = forecast_setup(
+    param_dict, coords, sys_vars, assim_vars, ensemble = forecast_setup(
         data_file_path=data_file_path, date=date, io=io,
         flags=flags, advect_params=advect_params,
         ens_params=ens_params, pert_params=pert_params,
@@ -484,7 +484,7 @@ def forecast_system(*, data_file_path, results_file_path,
         advect_params=advect_params, pert_params=pert_params,
         assim_vars=assim_vars)
     save(ensemble_array=ensemble_array, coords=coords,
-         ens_params=ens_params, param_dic=param_dic,
+         ens_params=ens_params, param_dict=param_dict,
          sys_vars=sys_vars, save_times=save_times,
          results_file_path=results_file_path)
     for time_index in range(1, coords.sat_times.size):
@@ -522,7 +522,7 @@ def forecast_system(*, data_file_path, results_file_path,
             advect_params=advect_params, pert_params=pert_params,
             assim_vars=assim_vars)
         save(ensemble_array=ensemble_array, coords=coords,
-             ens_params=ens_params, param_dic=param_dic,
+             ens_params=ens_params, param_dict=param_dict,
              sys_vars=sys_vars, save_times=save_times,
              results_file_path=results_file_path)
     return None

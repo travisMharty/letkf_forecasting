@@ -34,12 +34,12 @@ def time2name(Timestamp):
     return f'{year:04}{month:02}{day:02}_{hour:02}{minute:02}Z.nc'
 
 
-def save_netcdf(file_path_r, U, V, ci, param_dic, we_crop, sn_crop,
+def save_netcdf(file_path_r, U, V, ci, param_dict, we_crop, sn_crop,
                 we_stag_crop, sn_stag_crop,
                 sat_times, ens_num):
     file_path = os.path.join(file_path_r, time2name(sat_times[0]))
     with Dataset(file_path, mode='w') as store:
-        for k, v in param_dic.items():
+        for k, v in param_dict.items():
             setattr(store, k, v)
         store.createDimension('west_east', size=we_crop.size)
         store.createDimension('south_north', size=sn_crop.size)
