@@ -357,13 +357,13 @@ def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
         else:
             random_nums = np.random.normal(
                 loc=0,
-                scale=ens_params['wind_sigma'][0],
+                scale=ens_params['winds_sigma'][0],
                 size=ens_params['ens_num'])
             ensemble[:sys_vars.U_crop_size] = (U.ravel()[:, None]
                                                + random_nums[None, :])
             random_nums = np.random.normal(
                 loc=0,
-                scale=ens_params['wind_sigma'][1],
+                scale=ens_params['winds_sigma'][1],
                 size=ens_params['ens_num'])
             ensemble[sys_vars.U_crop_size:
                      sys_vars.wind_size] = (

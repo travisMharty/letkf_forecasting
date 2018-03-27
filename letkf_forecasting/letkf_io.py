@@ -181,8 +181,8 @@ def return_single_time(data_file_path, times, time,
     to_return = []
     with Dataset(data_file_path, mode='r') as store:
         for variable, sn_slice, we_slice in zip(variables_list,
-                                                we_slice_list,
-                                                sn_slice_list):
+                                                sn_slice_list,
+                                                we_slice_list):
             temp = store.variables[variable][
                 index_num, sn_slice, we_slice]
             to_return.append(temp)
