@@ -8,6 +8,7 @@ from netCDF4 import Dataset, num2date
 
 from letkf_forecasting.optical_flow import optical_flow
 from letkf_forecasting.letkf_io import (
+    return_single_time,
     extract_components,
     save_netcdf,
     read_coords,
@@ -166,17 +167,13 @@ def return_wind_time(*, sat_time, coords):
 def return_ensemble(*, data_file_path, ens_params, coords, flags):
     sat_time = coords.sat_times[0]
     wind_time = return_wind_time(sat_time=sat_time, coords=coords)
-    with Dataset(data_file_path, mode='r') as store:
-        q = store.variables['ci'][coords.sat_times_all == sat_time,
-                                  coords.sn_slice, coords.we_slice]
-        U = store.variables['U'][coords.wind_times == wind_time,
-                                 coords.sn_slice, coords.we_stag_slice]
-        V = store.variables['V'][coords.wind_times == wind_time,
-                                 coords.sn_stag_slice, coords.we_slice]
-        #  boolean indexing does not drop dimension
-        q = q[0]
-        U = U[0]
-        V = V[0]
+    q = return_single_time(data_file_path, coords.sat_times_all,
+                           sat_time, [coords.sn_slice],
+                           [coords.we_slice], ['ci'])
+    U, V = return_single_time(data_file_path, coords.wind_times, wind_time,
+                              [coords.sn_slice, coords.sn_stag_slice],
+                              [coords.we_stag_slice, coords.we_slice],
+                              ['U', 'V'])
     if flags['assim']:
         ensemble = ensemble_creator(
             q, U, V, CI_sigma=ens_params['ci_sigma'],
@@ -289,11 +286,9 @@ def maybe_assim_sat2sat(*, ensemble, data_file_path, sat_time,
     if flags['assim_sat2sat']:
         raise NotImplementedError
     else:
-        with Dataset(data_file_path, mode='r') as store:
-            q = store.variables['ci'][coords.sat_times_all == sat_time,
-                                      coords.sn_slice, coords.we_slice]
-            # boolean indexing does not drop dimension
-            q = q[0]
+        q = return_single_time(data_file_path, coords.sat_times_all,
+                               sat_time, [coords.sn_slice], [coords.we_slice],
+                               ['ci'])
         ensemble[sys_vars.wind_size:] = q.ravel()[:, None]
     return ensemble
 
@@ -303,11 +298,9 @@ def maybe_assim_sat2wind(*, ensemble, data_file_path, sat_time,
                          remove_div_flag, flags):
     if flags['assim_sat2wind']:
         logging.debug('Assim sat2wind')
-        with Dataset(data_file_path, mode='r') as store:
-            q = store.variables['ci'][coords.sat_times_all == sat_time,
-                                      coords.sn_slice, coords.we_slice]
-            #  boolean indexing does not drop dimension
-            q = q[0]
+        q = return_single_time(data_file_path, coords.sat_times_all,
+                               sat_time, [coords.sn_slice], [coords.we_slice],
+                               ['ci'])
         ensemble = assimilate_sat_to_wind(
             ensemble=ensemble,
             observations=q.ravel(),
@@ -330,16 +323,11 @@ def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
     wind_time = return_wind_time(sat_time=sat_time, coords=coords)
     if sat_time == wind_time:
         logging.debug('Assim WRF')
-        with Dataset(data_file_path, mode='r') as store:
-            U = store.variables['U'][coords.wind_times == wind_time,
-                                     coords.sn_slice,
-                                     coords.we_stag_slice]
-            V = store.variables['V'][coords.wind_times == wind_time,
-                                     coords.sn_stag_slice,
-                                     coords.we_slice]
-            #  boolean indexing does not drop dimension
-            U = U[0]
-            V = V[0]
+        U, V = return_single_time(data_file_path, coords.wind_times,
+                                  wind_time,
+                                  [coords.sn_slice, coords.sn_stag_slice],
+                                  [coords.we_stag_slice, coords.we_slice],
+                                  ['U', 'V'])
         remove_div_flag = True
         if flags['assim_wrf']:
             R_inverse = 1/wrf['sig']**2
@@ -387,20 +375,17 @@ def return_opt_flow(*, coords, time_index, sat_time, data_file_path, sys_vars):
     # retreive OPT_FLOW vectors
     wind_time = return_wind_time(sat_time=sat_time, coords=coords)
     time0 = coords.sat_times[time_index - 1]
-    with Dataset(data_file_path, mode='r') as store:
-        this_U = store.variables['U'][
-            coords.wind_times == wind_time, :, :]
-        this_V = store.variables['V'][
-            coords.wind_times == wind_time, :, :]
-        image0 = store.variables['ci'][coords.sat_times_all == time0,
-                                       :, :]
-        image1 = store.variables['ci'][
-            coords.sat_times_all == sat_time, :, :]
-    # boolean indexing does not drop dimension
-    this_U = this_U[0]
-    this_V = this_V[0]
-    image0 = image0[0]
-    image1 = image1[0]
+    this_U, this_V = return_single_time(data_file_path, coords.wind_times,
+                                        wind_time,
+                                        [slice(None), slice(None)],
+                                        [slice(None), slice(None)],
+                                        ['U', 'V'])
+    image0 = return_single_time(data_file_path, coords.sat_times_all,
+                                time0, [slice(None)], [slice(None)],
+                                ['ci'])
+    image1 = return_single_time(data_file_path, coords.sat_times_all,
+                                sat_time, [slice(None)], [slice(None)],
+                                ['ci'])
     u_opt_flow, v_opt_flow, pos = optical_flow(image0, image1,
                                                time0, sat_time,
                                                this_U, this_V)
