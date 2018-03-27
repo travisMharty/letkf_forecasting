@@ -30,10 +30,10 @@ def main():
     if args.day is not None:
         date['day'] = args.day
     # Create path to save results
-    results_file_path = letkf_io.create_path(date['year'],
-                                             date['month'],
-                                             date['day'],
-                                             cfg['io']['run_name'])
+    results_file_path = letkf_io.create_folder(date['year'],
+                                               date['month'],
+                                               date['day'],
+                                               cfg['io']['run_name'])
     home = os.path.expanduser('~')
     data_file_path = cfg['io']['data_file_path'].format(
         home=home, year=date['year'],
