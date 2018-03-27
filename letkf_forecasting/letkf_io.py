@@ -173,3 +173,17 @@ def read_coords(*, data_file_path, advect_params):
                     we_stag_slice=we_stag_slice, sn_stag_slice=sn_stag_slice)
 
     return coords
+
+
+def return_single_time(data_file_path, times, time,
+                       sn_slice_list, we_slice_list, variables_list):
+    index_num = times.get_loc(time)
+    to_return = []
+    with Dataset(data_file_path, mode='r') as store:
+        for variable, sn_slice, we_slice in zip(variables_list,
+                                                we_slice_list,
+                                                sn_slice_list):
+            temp = store.variables[variable][
+                index_num, sn_slice, we_slice]
+            to_return.append(temp)
+    return to_return
