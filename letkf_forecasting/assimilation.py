@@ -35,7 +35,7 @@ def reduced_enkf(ensemble,
     ens_num = ensemble.shape[1]
     obs_size = observations.size
     PHT = ensemble.dot(ensemble[flat_locations].T)
-    if localization < 10**50:
+    if localization > 1e-16:
         rhoHT = ((x[:, None] - x[None, flat_locations])**2 +
                  (y[:, None] - y[None, flat_locations])**2)
         rhoHT = np.exp(-rhoHT/(2*localization**2))
@@ -48,7 +48,6 @@ def reduced_enkf(ensemble,
     rand_obs = rand_obs.reshape(obs_size, ens_num)
     rand_obs += observations[:, None]
     analysis = ensemble + K.dot(rand_obs - ensemble[flat_locations])
-
     return analysis
 
 
