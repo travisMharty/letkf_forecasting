@@ -34,9 +34,9 @@ pert_params:
   Lx: 5
   Ly: 5
   tol: 0.005
-  pert_sigma: 0.05
+  pert_sigma: 0.01
   pert_mean: 0
-  edge_weight: 1
+  edge_weight: 2
 
 # assimilation_params
 sat2sat:
