@@ -41,7 +41,7 @@ def of_vectors_plot(clouds0_8b, clouds1_8b, p0_good, p1_good, u, v,
     return fig, ax
 
 
-def wrf_of_plot(ensemble, U_shape, V_shape,
+def wrf_opt_flow_plot(ensemble, U_shape, V_shape,
                 U_of, V_of, of_coord,
                 adjust, cmap='bwr'):
     fraction = 0.10
@@ -57,7 +57,7 @@ def wrf_of_plot(ensemble, U_shape, V_shape,
                            figsize=figsize, dpi=300)
     vmax = np.max([np.abs(U).max(), np.abs(V).max(),
                    np.abs(U_of).max(), np.abs(V_of).max()])
-    nc = 11
+    nc = 15
     bounds = np.linspace(-vmax, vmax, nc)
     norm = colors.BoundaryNorm(boundaries=bounds, ncolors=256)
     im = ax[0].pcolormesh(U,
@@ -74,14 +74,63 @@ def wrf_of_plot(ensemble, U_shape, V_shape,
 
     im = ax[1].pcolormesh(V,
                           cmap=cmap,
-                          vmin=-vmax,
-                          vmax=vmax)
+                          norm=norm)
     ax[1].scatter(of_coord[:, 0], of_coord[:, 1], c=V_of,
                   cmap=cmap,
-                  vmin=-vmax,
-                  vmax=vmax)
+                  norm=norm)
     ax[1].set_aspect('equal', 'datalim')
     ax[1].set_title('V')
+    ax[1].set_xlabel('Distance (km)')
+    cb = plt.colorbar(im, ax=ax.tolist(), pad=pad,
+                      fraction=fraction, label='Wind Speed (m/s)')
+    cb.ax.set_ylabel('Wind Speed (m/s)')
+    ax[0].set(xlim=[0, dx])
+    ax[0].set(ylim=[0, dy])
+    ax[1].set(xlim=[0, dx])
+    ax[1].set(ylim=[0, dy])
+
+    return fig, ax
+
+
+def opt_flow_var_plot(ensemble, U_shape, V_shape,
+                      U_of, V_of, of_coord,
+                      adjust, cmap='bwr'):
+    fraction = 0.10
+    pad = 0.02
+    nrows, ncols = 1, 2
+    dy, dx = U_shape
+    U_size = U_shape[0]*U_shape[1]
+    wind_size = U_size + V_shape[0]*V_shape[1]
+    U = ensemble[:U_size].var(axis=1).reshape(U_shape)
+    V = ensemble[U_size:wind_size].var(axis=1).reshape(V_shape)
+    figsize = plt.figaspect(float(dy * nrows) / float(adjust * dx * ncols))
+    fig, ax = plt.subplots(nrows, ncols, sharey=True, sharex=True,
+                           figsize=figsize, dpi=300)
+    vmax = np.max([np.abs(U).max(), np.abs(V).max(),
+                   np.abs(U_of).max(), np.abs(V_of).max()])
+    nc = 15
+    bounds = np.linspace(-vmax, vmax, nc)
+    norm = colors.BoundaryNorm(boundaries=bounds, ncolors=256)
+    im = ax[0].pcolormesh(U,
+                          cmap=cmap,
+                          norm=norm)
+    ax[0].scatter(of_coord[:, 0], of_coord[:, 1],
+                  cmap=cmap,
+                  norm=norm)
+    # qu = ax[0].quiver(p0_good[:, 0], p0_good[:, 1], u, v)
+    ax[0].set_aspect('equal', 'datalim')
+    ax[0].set_title('U_var')
+    ax[0].set_xlabel('Distance (km)')
+    ax[0].set_ylabel('Distance (km)')
+
+    im = ax[1].pcolormesh(V,
+                          cmap=cmap,
+                          norm=norm)
+    ax[1].scatter(of_coord[:, 0], of_coord[:, 1],
+                  cmap=cmap,
+                  norm=norm)
+    ax[1].set_aspect('equal', 'datalim')
+    ax[1].set_title('V_var')
     ax[1].set_xlabel('Distance (km)')
     cb = plt.colorbar(im, ax=ax.tolist(), pad=pad,
                       fraction=fraction, label='Wind Speed (m/s)')
