@@ -517,4 +517,3 @@ def forecast_system(*, data_file_path, results_file_path,
              ens_params=ens_params, param_dict=param_dict,
              sys_vars=sys_vars, save_times=save_times,
              results_file_path=results_file_path)
-    return None
