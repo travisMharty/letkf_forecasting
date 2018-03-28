@@ -448,7 +448,9 @@ def maybe_assim_opt_flow(*, ensemble, data_file_path, sat_time, time_index,
                      x=x_temp.ravel(), y=y_temp.ravel())
     else:
         div_opt_flow_flag = False
-    return ensemble, div_opt_flow_flag
+    to_return = (ensemble, div_opt_flow_flag, u_opt_flow, v_opt_flow,
+                 u_opt_flow_flat_pos, v_opt_flow_flat_pos)
+    return to_return
 
 
 def forecast_system(*, data_file_path, results_file_path,
@@ -495,11 +497,12 @@ def forecast_system(*, data_file_path, results_file_path,
             assim_vars=assim_vars, wrf=wrf,
             ens_params=ens_params,
             flags=flags)
-        ensemble, div_opt_flow_flag = maybe_assim_opt_flow(
+        returned = maybe_assim_opt_flow(
             ensemble=ensemble, data_file_path=data_file_path,
             sat_time=sat_time, time_index=time_index,
             coords=coords, sys_vars=sys_vars,
             flags=flags, opt_flow=opt_flow)
+        ensemble, div_opt_flow_flag =  returned[:2]
         remove_div_flag = (div_sat2wind_flag
                            or div_wrf_flag
                            or div_opt_flow_flag)
