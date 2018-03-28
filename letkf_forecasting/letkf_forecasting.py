@@ -502,7 +502,7 @@ def forecast_system(*, data_file_path, results_file_path,
             sat_time=sat_time, time_index=time_index,
             coords=coords, sys_vars=sys_vars,
             flags=flags, opt_flow=opt_flow)
-        ensemble, div_opt_flow_flag =  returned[:2]
+        ensemble, div_opt_flow_flag = returned[:2]
         remove_div_flag = (div_sat2wind_flag
                            or div_wrf_flag
                            or div_opt_flow_flag)
