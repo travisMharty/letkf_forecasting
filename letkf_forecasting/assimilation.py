@@ -28,13 +28,23 @@ def optimal_interpolation(background, b_sig,
     return to_return
 
 
+def reduced_cov(ensemble, locations):
+    this_ens = ensemble.copy()
+    Ne = this_ens.shape[1]
+    mu = this_ens.mean(axis=1)
+    this_ens -= mu[:, None]
+    cov = this_ens.dot(this_ens[locations].T)
+    cov = cov/(Ne - 1)
+    return cov
+
+
 def reduced_enkf(ensemble,
                  observations, R_sig,
                  flat_locations, inflation,
                  localization=0, x=None, y=None):
     ens_num = ensemble.shape[1]
     obs_size = observations.size
-    PHT = ensemble.dot(ensemble[flat_locations].T)
+    PHT = reduced_cov(ensemble, flat_locations)
     if localization > 1e-16:
         rhoHT = ((x[:, None] - x[None, flat_locations])**2 +
                  (y[:, None] - y[None, flat_locations])**2)
