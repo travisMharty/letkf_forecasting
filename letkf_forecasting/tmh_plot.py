@@ -42,8 +42,8 @@ def of_vectors_plot(clouds0_8b, clouds1_8b, p0_good, p1_good, u, v,
 
 
 def wrf_opt_flow_plot(ensemble, U_shape, V_shape,
-                U_of, V_of, of_coord,
-                adjust, cmap='bwr'):
+                      U_of, V_of, of_coord,
+                      adjust, cmap='bwr'):
     fraction = 0.10
     pad = 0.02
     nrows, ncols = 1, 2
@@ -69,8 +69,8 @@ def wrf_opt_flow_plot(ensemble, U_shape, V_shape,
     # qu = ax[0].quiver(p0_good[:, 0], p0_good[:, 1], u, v)
     ax[0].set_aspect('equal', 'datalim')
     ax[0].set_title('U')
-    ax[0].set_xlabel('Distance (km)')
-    ax[0].set_ylabel('Distance (km)')
+    ax[0].set_xlabel('Position (km/4)')
+    ax[0].set_ylabel('Position (km/4)')
 
     im = ax[1].pcolormesh(V,
                           cmap=cmap,
@@ -80,7 +80,7 @@ def wrf_opt_flow_plot(ensemble, U_shape, V_shape,
                   norm=norm)
     ax[1].set_aspect('equal', 'datalim')
     ax[1].set_title('V')
-    ax[1].set_xlabel('Distance (km)')
+    ax[1].set_xlabel('Position (km/4)')
     cb = plt.colorbar(im, ax=ax.tolist(), pad=pad,
                       fraction=fraction, label='Wind Speed (m/s)')
     cb.ax.set_ylabel('Wind Speed (m/s)')
@@ -92,17 +92,17 @@ def wrf_opt_flow_plot(ensemble, U_shape, V_shape,
     return fig, ax
 
 
-def opt_flow_var_plot(ensemble, U_shape, V_shape,
-                      U_of, V_of, of_coord,
-                      adjust, cmap='Greys'):
+def opt_flow_sd_plot(ensemble, U_shape, V_shape,
+                     U_of, V_of, of_coord,
+                     adjust, cmap='Greys'):
     fraction = 0.10
     pad = 0.02
     nrows, ncols = 1, 2
     dy, dx = U_shape
     U_size = U_shape[0]*U_shape[1]
     wind_size = U_size + V_shape[0]*V_shape[1]
-    U = ensemble[:U_size].var(axis=1).reshape(U_shape)
-    V = ensemble[U_size:wind_size].var(axis=1).reshape(V_shape)
+    U = np.sqrt(ensemble[:U_size].var(axis=1).reshape(U_shape))
+    V = np.sqrt(ensemble[U_size:wind_size].var(axis=1).reshape(V_shape))
     figsize = plt.figaspect(float(dy * nrows) / float(adjust * dx * ncols))
     fig, ax = plt.subplots(nrows, ncols, sharey=True, sharex=True,
                            figsize=figsize, dpi=300)
@@ -119,9 +119,9 @@ def opt_flow_var_plot(ensemble, U_shape, V_shape,
                   norm=norm)
     # qu = ax[0].quiver(p0_good[:, 0], p0_good[:, 1], u, v)
     ax[0].set_aspect('equal', 'datalim')
-    ax[0].set_title('U_var')
-    ax[0].set_xlabel('Distance (km)')
-    ax[0].set_ylabel('Distance (km)')
+    ax[0].set_title('U_sd')
+    ax[0].set_xlabel('Position (km/4)')
+    ax[0].set_ylabel('Position (km/4)')
 
     im = ax[1].pcolormesh(V,
                           cmap=cmap,
@@ -131,7 +131,7 @@ def opt_flow_var_plot(ensemble, U_shape, V_shape,
                   norm=norm)
     ax[1].set_aspect('equal', 'datalim')
     ax[1].set_title('V_var')
-    ax[1].set_xlabel('Distance (km)')
+    ax[1].set_xlabel('Position (km/4)')
     cb = plt.colorbar(im, ax=ax.tolist(), pad=pad,
                       fraction=fraction, label='Wind Speed (m/s)')
     cb.ax.set_ylabel('Wind Speed (m/s)')
