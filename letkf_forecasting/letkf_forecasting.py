@@ -226,9 +226,13 @@ def forecast(*, ensemble, flags, coords, time_index, sat_time,
                                periods=(sys_vars.num_of_horizons + 1),
                                freq='15min')
     save_times = save_times.tz_convert(None)
-    num_of_advect = int((
-        coords.sat_times[time_index + 1] -
-        coords.sat_times[time_index]).seconds/(60*15))
+    if time_index + 1 < coords.sat_times.size:
+        num_of_advect = int((
+            coords.sat_times[time_index + 1] -
+            coords.sat_times[time_index]).seconds/(60*15))
+    else:
+        num_of_advect = 0
+        background = None
     ensemble_array = ensemble.copy()[None, :, :]
     cx = abs(ensemble[:sys_vars.U_crop_size]).max()
     cy = abs(ensemble[sys_vars.U_crop_size:
