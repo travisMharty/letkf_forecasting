@@ -46,10 +46,12 @@ def main():
     logging.info('Started')
 
     lf.forecast_system(
-        data_file_path, results_file_path,
-        cfg['date'], cfg['io'], cfg['flags'], cfg['advect_params'],
-        cfg['ens_params'], cfg['pert_params'],
-        cfg['sat2sat'], cfg['sat2wind'], cfg['wrf'], cfg['opt_flow'])
+        data_file_path=data_file_path, results_file_path=results_file_path,
+        date=cfg['date'], io=cfg['io'], flags=cfg['flags'],
+        advect_params=cfg['advect_params'],
+        ens_params=cfg['ens_params'], pert_params=cfg['pert_params'],
+        sat2sat=cfg['sat2sat'], sat2wind=cfg['sat2wind'], wrf=cfg['wrf'],
+        opt_flow=cfg['opt_flow'])
     logging.info('Ended')
     time1 = time_py.time()
     print('It took: ' + str((time1 - time0)/60))
