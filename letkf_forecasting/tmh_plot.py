@@ -94,7 +94,7 @@ def wrf_opt_flow_plot(ensemble, U_shape, V_shape,
 
 def opt_flow_var_plot(ensemble, U_shape, V_shape,
                       U_of, V_of, of_coord,
-                      adjust, cmap='bwr'):
+                      adjust, cmap='Greys'):
     fraction = 0.10
     pad = 0.02
     nrows, ncols = 1, 2
@@ -106,10 +106,10 @@ def opt_flow_var_plot(ensemble, U_shape, V_shape,
     figsize = plt.figaspect(float(dy * nrows) / float(adjust * dx * ncols))
     fig, ax = plt.subplots(nrows, ncols, sharey=True, sharex=True,
                            figsize=figsize, dpi=300)
-    vmax = np.max([np.abs(U).max(), np.abs(V).max(),
-                   np.abs(U_of).max(), np.abs(V_of).max()])
+    vmax = np.max([np.abs(U).max(), np.abs(V).max()])
+    vmin = 0
     nc = 15
-    bounds = np.linspace(-vmax, vmax, nc)
+    bounds = np.linspace(vmin, vmax, nc)
     norm = colors.BoundaryNorm(boundaries=bounds, ncolors=256)
     im = ax[0].pcolormesh(U,
                           cmap=cmap,
