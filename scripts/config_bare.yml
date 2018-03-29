@@ -34,7 +34,7 @@ pert_params:
   Lx: 5
   Ly: 5
   tol: 0.005
-  pert_sigma: 0.01
+  pert_sigma: 0.02
   pert_mean: 0
   edge_weight: 2
 
@@ -60,5 +60,5 @@ wrf:
 opt_flow:
   sig: 1
   loc: 20  # in km not grid spaces
-  infl: 2
+  infl: 2.5
   name: 'opt_flow'
