@@ -1,0 +1,64 @@
+date:
+  year: None
+  month: None
+  day: None
+
+io:
+  data_file_path: '{home}/data/{year:04}/{month:02}/{day:02}/data.nc'
+  run_name: 'bare'
+
+flags:
+  assim: 1
+  perturbation: 1
+  div: 1
+  assim_opt_flow: 1
+  assim_sat2sat: 0
+  assim_sat2wind: 0
+  assim_wrf: 0
+  wrf_mean: 0
+  name: 'flag'
+
+advect_params:
+  start_time: 0
+  end_time: 0
+  C_max: 0.7
+  max_horizon: '1hour'
+  client_address: '127.0.0.1:8786'
+
+ens_params:
+  ens_num: 20
+  winds_sigma: !!python/tuple [1, 1]
+  ci_sigma: 0.2
+
+pert_params:
+  Lx: 5
+  Ly: 5
+  tol: 0.005
+  pert_sigma: 0.01
+  pert_mean: 0
+  edge_weight: 2
+
+# assimilation_params
+sat2sat:
+  sig: 0.05
+  loc: 4
+  infl: 1.5
+  grid_size: 20
+  name: 'sat2sat'
+sat2wind:
+  sig: 1
+  loc: 120
+  infl: 4
+  grid_size: 20
+  name: 'sat2wind'
+wrf:
+  sig: 0.5
+  infl: 1
+  loc: 4
+  grid_size: 5
+  name: 'wrf'
+opt_flow:
+  sig: 1
+  loc: 20  # in km not grid spaces
+  infl: 2
+  name: 'opt_flow'
