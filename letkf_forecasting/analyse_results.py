@@ -64,7 +64,7 @@ def add_crop_attributes(ds):
 
 def return_average_error(truth, full_day, horizon):
     rmse = (return_horizon(full_day, horizon) - truth)**2
-    rmse = rmse.mean(dim=['south_north', 'west_east'])
+    rmse = np.sqrt(rmse.mean(dim=['south_north', 'west_east']))
     rmse = rmse.to_pandas()
     return rmse
 
@@ -75,6 +75,28 @@ def error_compare(year, month, day, runs):
     truth = add_crop_attributes(truth)
     truth = return_error_domain(truth)
     error_dfs = []
+    for run in runs:
+        full_day = return_day(year, month, day, run)
+        full_day = add_crop_attributes(full_day)
+        full_day = return_error_domain(full_day)
+        full_day = return_ens_mean(full_day)
+        fore15 = return_average_error(truth, full_day, 15)
+        fore30 = return_average_error(truth, full_day, 30)
+        fore45 = return_average_error(truth, full_day, 45)
+        fore60 = return_average_error(truth, full_day, 60)
+        error_dfs.append(pd.concat([fore15, fore30, fore45, fore60],
+                                   axis=1, keys=[15, 30, 45, 60]))
+    return error_dfs
+
+
+def error_spread_compare(year, month, day, runs):
+    truth = xr.open_dataset(
+        f'/home2/travis/data/{year:04}/{month:02}/{day:02}/data.nc')
+    truth = add_crop_attributes(truth)
+    truth = return_error_domain(truth)
+    error_dfs = []
+    var_wind = []
+    var_ci = []
     for run in runs:
         full_day = return_day(year, month, day, run)
         full_day = add_crop_attributes(full_day)
