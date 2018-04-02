@@ -35,14 +35,19 @@ def return_horizon(df, horizon):
     return to_return
 
 
+# should't assume ci
 def return_error_domain(ds):
     we_er_min = ds.we_er_min
     we_er_max = ds.we_er_max
     sn_er_min = ds.sn_er_min
     sn_er_max = ds.sn_er_max
-    to_return = ds['ci'].sel(
-        west_east=slice(we_er_min, we_er_max),
-        south_north=slice(sn_er_min, sn_er_max))
+    we_slice = slice(we_er_min, we_er_max)
+    sn_slice = slice(sn_er_min, sn_er_max)
+    to_return = ds.sel(
+        west_east=we_slice,
+        south_north=sn_slice,
+        west_east_stag=we_slice,
+        south_north_stag=sn_slice)
     return to_return
 
 
