@@ -43,11 +43,18 @@ def return_error_domain(ds):
     sn_er_max = ds.sn_er_max
     we_slice = slice(we_er_min, we_er_max)
     sn_slice = slice(sn_er_min, sn_er_max)
-    to_return = ds.sel(
-        west_east=we_slice,
-        south_north=sn_slice,
-        west_east_stag=we_slice,
-        south_north_stag=sn_slice)
+    test = ('west_east_stag' in ds.coords.variables and
+            'south_north_stag' in ds.coords.variables)
+    if test:
+        to_return = ds.sel(
+            west_east=we_slice,
+            south_north=sn_slice,
+            west_east_stag=we_slice,
+            south_north_stag=sn_slice)
+    else:
+        to_return = ds.sel(
+            west_east=we_slice,
+            south_north=sn_slice)
     return to_return
 
 
@@ -74,10 +81,15 @@ def return_average_error(truth, full_day, horizon):
     return rmse
 
 
-def return_spread(ds, horizon):
-    spread = return_horizon(ds, horizon)
-    spread = return_ens_var(ds)
-    spread = spread.mean(dim=['south_north', 'west_east'])
+def return_spread(da, horizon):
+    spread = return_horizon(da, horizon)
+    spread = return_ens_var(da)
+    if da.name == 'ci':
+        spread = spread.mean(dim=['south_north', 'west_east'])
+    elif da.name == 'U':
+        spread = spread.mean(dim=['south_north', 'west_east_stag'])
+    elif da.name == 'V':
+        spread = spread.mean(dim=['south_north_stag', 'west_east'])
     spread = np.sqrt(spread)
     spread = spread.to_pandas()
     return spread
@@ -92,6 +104,7 @@ def error_compare(year, month, day, runs):
     for run in runs:
         full_day = return_day(year, month, day, run)
         full_day = add_crop_attributes(full_day)
+        full_day = full_day['ci']
         full_day = return_error_domain(full_day)
         full_day = return_ens_mean(full_day)
         fore15 = return_average_error(truth, full_day, 15)
