@@ -51,7 +51,7 @@ def return_ens_mean(ds):
 
 
 def return_ens_var(ds):
-    return ds.var(dim='ensemble_number')
+    return ds.var(dim='ensemble_number', keep_attrs=True)
 
 
 def add_crop_attributes(ds):
@@ -67,6 +67,15 @@ def return_average_error(truth, full_day, horizon):
     rmse = np.sqrt(rmse.mean(dim=['south_north', 'west_east']))
     rmse = rmse.to_pandas()
     return rmse
+
+
+def return_spread(ds, horizon):
+    spread = return_horizon(ds, horizon)
+    spread = return_ens_var(ds)
+    spread = spread.mean(dim=['south_north', 'west_east'])
+    spread = np.sqrt(spread)
+    spread = spread.to_pandas()
+    return spread
 
 
 def error_compare(year, month, day, runs):
@@ -95,12 +104,23 @@ def error_spread_compare(year, month, day, runs):
     truth = add_crop_attributes(truth)
     truth = return_error_domain(truth)
     error_dfs = []
-    var_wind = []
-    var_ci = []
+    spread_wind = []
+    spread_ci = []
     for run in runs:
         full_day = return_day(year, month, day, run)
         full_day = add_crop_attributes(full_day)
         full_day = return_error_domain(full_day)
+        u_spread = return_spread(full_day['U'], 15)
+        v_spread = return_spread(full_day['V'], 15)
+        spread_wind.append(pd.concat([u_spread, v_spread],
+                                     axis=1, keys=['U', 'V']))
+        ci_spread_15 = return_spread(full_day['ci'], 15)
+        ci_spread_30 = return_spread(full_day['ci'], 30)
+        ci_spread_45 = return_spread(full_day['ci'], 45)
+        ci_spread_60 = return_spread(full_day['ci'], 60)
+        spread_ci.append(pd.concat([ci_spread_15, ci_spread_30,
+                                    ci_spread_45, ci_spread_60],
+                                   axis=1, keys=[15, 30, 45, 60]))
         full_day = return_ens_mean(full_day)
         fore15 = return_average_error(truth, full_day, 15)
         fore30 = return_average_error(truth, full_day, 30)
@@ -108,4 +128,4 @@ def error_spread_compare(year, month, day, runs):
         fore60 = return_average_error(truth, full_day, 60)
         error_dfs.append(pd.concat([fore15, fore30, fore45, fore60],
                                    axis=1, keys=[15, 30, 45, 60]))
-    return error_dfs
+    return error_dfs, spread_ci, spread_wind
