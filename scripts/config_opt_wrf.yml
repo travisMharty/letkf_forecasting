@@ -52,8 +52,8 @@ sat2wind:
   grid_size: 20
   name: 'sat2wind'
 wrf:
-  sig: 0.5
-  infl: 1
+  sig: 2
+  infl: 2
   loc: 4
   grid_size: 5
   name: 'wrf'
