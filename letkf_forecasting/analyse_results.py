@@ -98,6 +98,7 @@ def return_spread(da, horizon):
 def error_compare(year, month, day, runs):
     truth = xr.open_dataset(
         f'/home2/travis/data/{year:04}/{month:02}/{day:02}/data.nc')
+    truth = truth['ci']
     truth = add_crop_attributes(truth)
     truth = return_error_domain(truth)
     error_dfs = []
@@ -119,6 +120,7 @@ def error_compare(year, month, day, runs):
 def error_spread_compare(year, month, day, runs):
     truth = xr.open_dataset(
         f'/home2/travis/data/{year:04}/{month:02}/{day:02}/data.nc')
+    truth = truth['ci']
     truth = add_crop_attributes(truth)
     truth = return_error_domain(truth)
     error_dfs = []
@@ -139,6 +141,7 @@ def error_spread_compare(year, month, day, runs):
         spread_ci.append(pd.concat([ci_spread_15, ci_spread_30,
                                     ci_spread_45, ci_spread_60],
                                    axis=1, keys=[15, 30, 45, 60]))
+        full_day = full_day['ci']
         full_day = return_ens_mean(full_day)
         fore15 = return_average_error(truth, full_day, 15)
         fore30 = return_average_error(truth, full_day, 30)
