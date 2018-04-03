@@ -83,7 +83,7 @@ def return_average_error(truth, full_day, horizon):
 
 def return_spread(da, horizon):
     spread = return_horizon(da, horizon)
-    spread = return_ens_var(da)
+    spread = return_ens_var(spread)
     if da.name == 'ci':
         spread = spread.mean(dim=['south_north', 'west_east'])
     elif da.name == 'U':
@@ -130,8 +130,8 @@ def error_spread_compare(year, month, day, runs):
         full_day = return_day(year, month, day, run)
         full_day = add_crop_attributes(full_day)
         full_day = return_error_domain(full_day)
-        u_spread = return_spread(full_day['U'], 15)
-        v_spread = return_spread(full_day['V'], 15)
+        u_spread = return_spread(full_day['U'], 0)
+        v_spread = return_spread(full_day['V'], 0)
         spread_wind.append(pd.concat([u_spread, v_spread],
                                      axis=1, keys=['U', 'V']))
         ci_spread_15 = return_spread(full_day['ci'], 15)
