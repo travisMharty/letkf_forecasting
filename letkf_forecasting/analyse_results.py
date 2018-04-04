@@ -81,6 +81,14 @@ def return_average_error(truth, full_day, horizon):
     return rmse
 
 
+def return_sd(full_day, horizon):
+    sd = return_horizon(full_day, horizon)
+    sd = sd.var(dim=['south_north', 'west_east'])
+    sd = np.sqrt(sd)
+    sd = sd.to_pandas()
+    return sd
+
+
 def return_spread(da, horizon):
     spread = return_horizon(da, horizon)
     spread = return_ens_var(spread)
@@ -150,3 +158,46 @@ def error_spread_compare(year, month, day, runs):
         error_dfs.append(pd.concat([fore15, fore30, fore45, fore60],
                                    axis=1, keys=[15, 30, 45, 60]))
     return error_dfs, spread_ci, spread_wind
+
+
+def error_stats(year, month, day, runs):
+    truth = xr.open_dataset(
+        f'/home2/travis/data/{year:04}/{month:02}/{day:02}/data.nc')
+    truth = truth['ci']
+    truth = add_crop_attributes(truth)
+    truth = return_error_domain(truth)
+    error_dfs = []
+    mean_sd_dfs = []
+    spread_wind = []
+    spread_ci = []
+    for run in runs:
+        full_day = return_day(year, month, day, run)
+        full_day = add_crop_attributes(full_day)
+        full_day = return_error_domain(full_day)
+        u_spread = return_spread(full_day['U'], 0)
+        v_spread = return_spread(full_day['V'], 0)
+        spread_wind.append(pd.concat([u_spread, v_spread],
+                                     axis=1, keys=['U', 'V']))
+        ci_spread_15 = return_spread(full_day['ci'], 15)
+        ci_spread_30 = return_spread(full_day['ci'], 30)
+        ci_spread_45 = return_spread(full_day['ci'], 45)
+        ci_spread_60 = return_spread(full_day['ci'], 60)
+        spread_ci.append(pd.concat([ci_spread_15, ci_spread_30,
+                                    ci_spread_45, ci_spread_60],
+                                   axis=1, keys=[15, 30, 45, 60]))
+        full_day = full_day['ci']
+        full_day = return_ens_mean(full_day)
+        fore15 = return_average_error(truth, full_day, 15)
+        fore30 = return_average_error(truth, full_day, 30)
+        fore45 = return_average_error(truth, full_day, 45)
+        fore60 = return_average_error(truth, full_day, 60)
+        error_dfs.append(pd.concat([fore15, fore30, fore45, fore60],
+                                   axis=1, keys=[15, 30, 45, 60]))
+        fore15_sd = return_sd(full_day, 15)
+        fore30_sd = return_sd(full_day, 30)
+        fore45_sd = return_sd(full_day, 45)
+        fore60_sd = return_sd(full_day, 60)
+        mean_sd_dfs.append(pd.concat([fore15_sd, fore30_sd,
+                                      fore45_sd, fore60_sd],
+                                     axis=1, keys=[15, 30, 45, 60]))
+    return error_dfs, spread_ci, mean_sd_dfs, spread_wind

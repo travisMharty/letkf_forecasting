@@ -129,7 +129,6 @@ def advect_5min_ensemble(
 
 def advect_5min_single(
         ensemble, dt, dx, dy, T_steps, U_shape, V_shape, domain_shape):
-    ens_size = ensemble.shape[1]
     U_size = U_shape[0]*U_shape[1]
     V_size = V_shape[0]*V_shape[1]
     wind_size = U_size + V_size
@@ -139,10 +138,10 @@ def advect_5min_single(
     CI_fields = 1 - CI_fields
     U = ensemble[:U_size].reshape(U_shape[0], U_shape[1])
     V = ensemble[U_size: V_size + U_size].reshape(
-        ens_size, V_shape[0], V_shape[1])
-    CI_fields = advect_5min(CI_fields, dt, U, dx, V, dy)
-
-    ensemble = np.concatenate([U, V, CI_fields])[:, None]
+        V_shape[0], V_shape[1])
+    CI_fields = advect_5min(CI_fields, dt, U, dx, V, dy, T_steps)
+    CI_fields = 1 - CI_fields
+    ensemble = np.concatenate([U.ravel(), V.ravel(), CI_fields.ravel()])
     return ensemble
 
 
