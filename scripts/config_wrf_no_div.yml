@@ -16,6 +16,7 @@ flags:
   assim_sat2wind: 0
   assim_wrf: 0
   wrf_mean: 0
+  opt_flow: 0
   name: 'flag'
 
 advect_params:
@@ -27,7 +28,7 @@ advect_params:
 
 ens_params:
   ens_num: 1
-  winds_sigma: (None, None)
+  winds_sigma: !!python/tuple [None, None]
   ci_sigma: None
 
 pert_params:

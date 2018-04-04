@@ -16,6 +16,7 @@ flags:
   assim_sat2wind: 0
   assim_wrf: 0
   wrf_mean: 0
+  opt_flow: 0
   name: 'flag'
 
 advect_params:
