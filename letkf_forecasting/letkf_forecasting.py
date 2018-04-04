@@ -191,7 +191,7 @@ def forecast_setup(*, data_file_path, date, io, advect_params, ens_params,
         pert_params=pert_params, flags=flags, sat2sat=sat2sat,
         sat2wind=sat2wind, wrf=wrf, opt_flow=opt_flow)
     coords = read_coords(data_file_path=data_file_path,
-                         advect_params=advect_params)
+                         advect_params=advect_params, flags=flags)
     sys_vars = calc_system_variables(
         coords=coords, advect_params=advect_params, flags=flags,
         pert_params=pert_params)
@@ -251,11 +251,11 @@ def forecast(*, ensemble, flags, coords, time_index, sat_time,
                     sys_vars.U_crop_shape, sys_vars.V_crop_shape,
                     sys_vars.ci_crop_shape, assim_vars.client)
             else:
-                ensemble = advect_5min_single(
-                    ensemble, dt, sys_vars.dx, sys_vars.dy,
+                ensemble[:, 0] = advect_5min_single(
+                    ensemble[:, 0], dt, sys_vars.dx, sys_vars.dy,
                     T_steps,
                     sys_vars.U_crop_shape, sys_vars.V_crop_shape,
-                    sys_vars.ci_crop_shape, assim_vars.client)
+                    sys_vars.ci_crop_shape)
             if flags['perturbation']:
                 ensemble[sys_vars.wind_size:] = perturb_irradiance(
                     ensemble[sys_vars.wind_size:], sys_vars.ci_crop_shape,
@@ -327,7 +327,6 @@ def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
                     ens_params, flags):
     wind_time = return_wind_time(sat_time=sat_time, coords=coords)
     if sat_time == wind_time:
-        logging.debug('Assim WRF')
         U, V = return_single_time(data_file_path, coords.wind_times,
                                   wind_time,
                                   [coords.sn_slice, coords.sn_stag_slice],
@@ -335,6 +334,7 @@ def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
                                   ['U', 'V'])
         div_wrf_flag = True
         if flags['assim_wrf']:
+            logging.debug('Assim WRF')
             R_inverse = 1/wrf['sig']**2
             ensemble[:sys_vars.U_crop_size] = assimilate_wrf(
                 ensemble=ensemble[:sys_vars.U_crop_size],
@@ -359,20 +359,26 @@ def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
                 assimilation_positions_2d=assim_vars.assim_pos_2d_V_wrf,
                 full_positions_2d=assim_vars.full_pos_2d_V_wrf)
         else:
-            random_nums = np.random.normal(
-                loc=0,
-                scale=ens_params['winds_sigma'][0],
-                size=ens_params['ens_num'])
-            ensemble[:sys_vars.U_crop_size] = (U.ravel()[:, None]
-                                               + random_nums[None, :])
-            random_nums = np.random.normal(
-                loc=0,
-                scale=ens_params['winds_sigma'][1],
-                size=ens_params['ens_num'])
-            ensemble[sys_vars.U_crop_size:
-                     sys_vars.wind_size] = (
-                         V.ravel()[:, None]
-                         + random_nums[None, :])
+            logging.debug('replace WRF')
+            if ensemble.shape[1] > 1:
+                random_nums = np.random.normal(
+                    loc=0,
+                    scale=ens_params['winds_sigma'][0],
+                    size=ens_params['ens_num'])
+                ensemble[:sys_vars.U_crop_size] = (U.ravel()[:, None]
+                                                   + random_nums[None, :])
+                random_nums = np.random.normal(
+                    loc=0,
+                    scale=ens_params['winds_sigma'][1],
+                    size=ens_params['ens_num'])
+                ensemble[sys_vars.U_crop_size:
+                         sys_vars.wind_size] = (
+                             V.ravel()[:, None]
+                             + random_nums[None, :])
+            else:
+                ensemble[:sys_vars.U_crop_size] = U.ravel()[:, None]
+                ensemble[sys_vars.U_crop_size:
+                         sys_vars.wind_size] = V.ravel()[:, None]
     else:
         div_wrf_flag = False
     return ensemble, div_wrf_flag
@@ -450,10 +456,22 @@ def maybe_assim_opt_flow(*, ensemble, data_file_path, sat_time, time_index,
                      inflation=opt_flow['infl'],
                      localization=opt_flow['loc'],
                      x=x_temp.ravel(), y=y_temp.ravel())
+        to_return = (ensemble, div_opt_flow_flag, u_opt_flow, v_opt_flow,
+                     u_opt_flow_flat_pos, v_opt_flow_flat_pos)
+    elif flags['opt_flow']:
+        div_opt_flow_flag = True
+        U, V = return_single_time(data_file_path, coords.sat_times_all,
+                                  sat_time,
+                                  [coords.sn_slice, coords.sn_stag_slice],
+                                  [coords.we_stag_slice, coords.we_slice],
+                                  ['U_opt_flow', 'V_opt_flow'])
+        time_step = (sat_time - )
+        ensemble[:sys_vars.U_crop_size] = U.ravel()[:, None]
+        ensemble[sys_vars.U_crop_size:
+                 sys_vars.wind_size] = V.ravel()[:, None]
     else:
         div_opt_flow_flag = False
-    to_return = (ensemble, div_opt_flow_flag, u_opt_flow, v_opt_flow,
-                 u_opt_flow_flat_pos, v_opt_flow_flat_pos)
+    to_return = (ensemble, div_opt_flow_flag)
     return to_return
 
 
