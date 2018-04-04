@@ -171,6 +171,7 @@ def error_stats(year, month, day, runs):
     spread_wind = []
     spread_ci = []
     for run in runs:
+        print(run)
         full_day = return_day(year, month, day, run)
         full_day = add_crop_attributes(full_day)
         full_day = return_error_domain(full_day)
