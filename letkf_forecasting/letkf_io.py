@@ -130,7 +130,7 @@ def calc_time_range(*, sat_times, advect_params):
     return sat_times, sat_times_all
 
 
-def read_coords(*, data_file_path, advect_params):
+def read_coords(*, data_file_path, advect_params, flags):
     with Dataset(data_file_path, mode='r') as store:
         sat_times = store.variables['time']
         sat_times = num2date(sat_times[:], sat_times.units)
@@ -160,6 +160,9 @@ def read_coords(*, data_file_path, advect_params):
     sn_stag_crop = sn[sn_stag_slice]
     sat_times, sat_times_all = calc_time_range(sat_times=sat_times,
                                                advect_params=advect_params)
+    # don't have optical flow for first timestep
+    if flags['opt_flow']:
+        sat_times = sat_times[1:]
     Coords = namedtuple('coords', ['we', 'sn', 'we_crop', 'sn_crop',
                                    'we_stag_crop', 'sn_stag_crop',
                                    'sat_times', 'sat_times_all', 'wind_times',
