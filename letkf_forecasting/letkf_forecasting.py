@@ -358,7 +358,7 @@ def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
                 assimilation_positions=assim_vars.assim_pos_V_wrf,
                 assimilation_positions_2d=assim_vars.assim_pos_2d_V_wrf,
                 full_positions_2d=assim_vars.full_pos_2d_V_wrf)
-        else:
+        elif not flags['opt_flow']:
             logging.debug('replace WRF')
             if ensemble.shape[1] > 1:
                 random_nums = np.random.normal(
@@ -465,10 +465,12 @@ def maybe_assim_opt_flow(*, ensemble, data_file_path, sat_time, time_index,
                                   [coords.sn_slice, coords.sn_stag_slice],
                                   [coords.we_stag_slice, coords.we_slice],
                                   ['U_opt_flow', 'V_opt_flow'])
-        time_step = (sat_time - )
-        ensemble[:sys_vars.U_crop_size] = U.ravel()[:, None]
+        time_step = (sat_time - coords.sat_times[time_index - 1]).seconds()
+        ensemble[:sys_vars.U_crop_size] = (
+            U.ravel()[:, None]*(250/time_step))
         ensemble[sys_vars.U_crop_size:
-                 sys_vars.wind_size] = V.ravel()[:, None]
+                 sys_vars.wind_size] = (
+                     V.ravel()[:, None]*(250/time_step))
     else:
         div_opt_flow_flag = False
     to_return = (ensemble, div_opt_flow_flag)
