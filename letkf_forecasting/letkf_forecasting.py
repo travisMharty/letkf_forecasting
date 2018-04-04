@@ -465,7 +465,7 @@ def maybe_assim_opt_flow(*, ensemble, data_file_path, sat_time, time_index,
                                   [coords.sn_slice, coords.sn_stag_slice],
                                   [coords.we_stag_slice, coords.we_slice],
                                   ['U_opt_flow', 'V_opt_flow'])
-        time_step = (sat_time - coords.sat_times[time_index - 1]).seconds()
+        time_step = (sat_time - coords.sat_times[time_index - 1]).seconds
         ensemble[:sys_vars.U_crop_size] = (
             U.ravel()[:, None]*(250/time_step))
         ensemble[sys_vars.U_crop_size:
