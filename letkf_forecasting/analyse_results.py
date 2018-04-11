@@ -6,28 +6,6 @@ import pandas as pd
 import letkf_forecasting.letkf_io as io
 
 
-def return_day(year, month, day, run_name):
-    path = os.path.expanduser('~')
-    path = os.path.join(
-        path,
-        f'results/{year:04}/{month:02}/{day:02}/' + run_name)
-    paths = glob.glob(path + '*')
-    paths.sort()
-    path = paths[-1]
-    path = os.path.join(path, '*.nc')
-    full_day = xr.open_mfdataset(path,
-                                 preprocess=add_horizon,
-                                 decode_cf=False)
-    full_day.horizon.attrs['units'] = 'minutes'
-    full_day = xr.decode_cf(full_day)
-    return full_day
-
-
-def add_horizon(ds):
-    ds.coords['horizon'] = (ds.time - ds.time[0])/60
-    return ds
-
-
 def return_horizon(df, horizon):
     if type(horizon) != np.timedelta64:
         horizon = np.timedelta64(horizon, 'm')
@@ -112,7 +90,7 @@ def error_compare(year, month, day, runs):
     truth = return_error_domain(truth)
     error_dfs = []
     for run in runs:
-        full_day = return_day(year, month, day, run)
+        full_day = io.return_day(year, month, day, run)
         full_day = add_crop_attributes(full_day)
         full_day = full_day['ci']
         full_day = return_error_domain(full_day)
@@ -136,7 +114,7 @@ def error_spread_compare(year, month, day, runs):
     spread_wind = []
     spread_ci = []
     for run in runs:
-        full_day = return_day(year, month, day, run)
+        full_day = io.return_day(year, month, day, run)
         full_day = add_crop_attributes(full_day)
         full_day = return_error_domain(full_day)
         u_spread = return_spread(full_day['U'], 0)
@@ -173,7 +151,7 @@ def error_stats(year, month, day, runs):
     spread_ci = []
     for run in runs:
         print(run)
-        full_day = return_day(year, month, day, run)
+        full_day = io.return_day(year, month, day, run)
         full_day = add_crop_attributes(full_day)
         full_day = return_error_domain(full_day)
         u_spread = return_spread(full_day['U'], 0)
@@ -211,3 +189,14 @@ def generate_plots(year, month, day, run_name):
     truth = truth['ci']
     truth = add_crop_attributes(truth)
     plot_folder = io.return_results_folder(year, month, day, run_name)
+    plot_folder = os.join(plot_folder, 'plots/')
+    if not os.path.exists(plot_folder):
+        os.makedirs(plot_folder)
+    full_day = io.return_day(year, month, day, run_name)
+    fore15 = return_horizon(full_day, 15)
+    fore30 = return_horizon(full_day, 30)
+    fore45 = return_horizon(full_day, 45)
+    fore60 = return_horizon(full_day, 60)
+    for forecast in [fore15, fore30, fore45, fore60]:
+        for time in forecast.time:
+            return None
