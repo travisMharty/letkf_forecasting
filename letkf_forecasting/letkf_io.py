@@ -190,3 +190,14 @@ def return_single_time(data_file_path, times, time,
                 index_num, sn_slice, we_slice]
             to_return.append(temp)
     return to_return
+
+
+def return_results_folder(year, month, day, run_name):
+    path = os.path.expanduser('~')
+    path = os.path.join(
+        path,
+        f'results/{year:04}/{month:02}/{day:02}/' + run_name)
+    paths = glob.glob(path + '*')
+    paths.sort()
+    path = paths[-1]
+    return path
