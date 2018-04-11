@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import glob
 from netCDF4 import Dataset, date2num, num2date
+import xarray as xr
 
 
 def create_folder(year, month, day, run_name):
@@ -201,3 +202,25 @@ def return_results_folder(year, month, day, run_name):
     paths.sort()
     path = paths[-1]
     return path
+
+
+def add_horizon(ds):
+    ds.coords['horizon'] = (ds.time - ds.time[0])/60
+    return ds
+
+
+def return_day(year, month, day, run_name):
+    path = os.path.expanduser('~')
+    path = os.path.join(
+        path,
+        f'results/{year:04}/{month:02}/{day:02}/' + run_name)
+    paths = glob.glob(path + '*')
+    paths.sort()
+    path = paths[-1]
+    path = os.path.join(path, '*.nc')
+    full_day = xr.open_mfdataset(path,
+                                 preprocess=add_horizon,
+                                 decode_cf=False)
+    full_day.horizon.attrs['units'] = 'minutes'
+    full_day = xr.decode_cf(full_day)
+    return full_day
