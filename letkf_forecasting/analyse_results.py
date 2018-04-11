@@ -202,3 +202,22 @@ def error_stats(year, month, day, runs):
                                       fore45_sd, fore60_sd],
                                      axis=1, keys=[15, 30, 45, 60]))
     return error_dfs, spread_ci, mean_sd_dfs, spread_wind
+
+
+def return_results_folder(year, month, day, run_name):
+    path = os.path.expanduser('~')
+    path = os.path.join(
+        path,
+        f'results/{year:04}/{month:02}/{day:02}/' + run_name)
+    paths = glob.glob(path + '*')
+    paths.sort()
+    path = paths[-1]
+    return path
+
+
+def generate_plots(year, month, day, run_name):
+    truth = xr.open_dataset(
+        f'/home2/travis/data/{year:04}/{month:02}/{day:02}/data.nc')
+    truth = truth['ci']
+    truth = add_crop_attributes(truth)
+    plot_folder = return_results_folder(year, month, day, run_name)
