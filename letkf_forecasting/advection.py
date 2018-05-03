@@ -2,6 +2,7 @@ import numpy as np
 import scipy as sp
 import numexpr as ne
 import fenics as fe
+import logging
 
 
 def time_deriv_3(q, dt, u, dx, v, dy):
@@ -181,7 +182,6 @@ def remove_divergence(V, u, v, sigma):
     grad_phi = np.gradient(phi, 1, 1)
     u_corrected = u + grad_phi[1]
     v_corrected = v + grad_phi[0]
-    sigma = 2
     u_corrected = sp.ndimage.filters.gaussian_filter(u_corrected, sigma=sigma)
     v_corrected = sp.ndimage.filters.gaussian_filter(v_corrected, sigma=sigma)
     return u_corrected, v_corrected
@@ -215,6 +215,7 @@ def remove_divergence_ensemble(
     V_size = V_crop_shape[0]*V_crop_shape[1]
     ens_size = wind_ensemble.shape[1]
     for ens_num in range(ens_size):
+        logging.debug('Removing Divergence from ensemble # %s', ens_num)
         temp_u = wind_ensemble[:U_size, ens_num].reshape(U_crop_shape)
         temp_u = .5*(temp_u[:, :-1] + temp_u[:, 1:])
         temp_v = wind_ensemble[U_size:U_size + V_size,

@@ -162,3 +162,37 @@ def perturb_irradiance_new(ensemble, domain_shape, edge_weight, pert_mean,
         (cor_sd*sample + cor_mean)*cloud_target[:, None])
     ensemble = ensemble.clip(min=ensemble.min(), max=1)
     return ensemble
+
+
+def generate_random_winds(
+         rf_vectors, rf_eig, sigma, Ne, shape, dx):
+    stream = np.random.randn(rf_eig.size, Ne)
+    stream = rf_vectors.dot(
+        np.sqrt(rf_eig[:, None])*stream)
+    stream = stream.reshape(shape[0], shape[1], Ne)
+    grad = np.array(np.gradient(stream, dx, axis=(0, 1),))
+    U = grad[0]*sigma
+    V = -grad[1]*sigma
+    temp1 = np.pad(U, ((0, 0), (0, 1), (0, 0)), mode='edge')
+    temp2 = np.pad(U, ((0, 0), (1, 0), (0, 0)), mode='edge')
+    U = .5*(temp1 + temp2)
+    temp1 = np.pad(V, ((0, 1), (0, 0), (0, 0)), mode='edge')
+    temp2 = np.pad(V, ((1, 0), (0, 0), (0, 0)), mode='edge')
+    V = .5*(temp1 + temp2)
+    return U, V
+
+
+def perturb_winds(ensemble, sys_vars, pert_params):
+    ens_size = ensemble.shape[1]
+    dx = sys_vars.dx/1000       # want dx in km not m
+    U, V = generate_random_winds(sys_vars.rf_vectors_wind,
+                                 sys_vars.rf_eig_wind,
+                                 pert_params['pert_sigma_wind'],
+                                 ens_size,
+                                 sys_vars.ci_crop_shape,
+                                 dx)
+    ensemble[:sys_vars.U_crop_size] += U.reshape(
+        sys_vars.U_crop_size, ens_size)
+    ensemble[sys_vars.U_crop_size: sys_vars.wind_size] += V.reshape(
+        sys_vars.V_crop_size, ens_size)
+    return ensemble

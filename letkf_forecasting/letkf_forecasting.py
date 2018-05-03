@@ -4,6 +4,7 @@ import numpy as np
 from distributed import Client
 import pandas as pd
 import fenics as fe
+import scipy as sp
 from netCDF4 import Dataset, num2date
 
 from letkf_forecasting.optical_flow import optical_flow
@@ -16,6 +17,7 @@ from letkf_forecasting.letkf_io import (
 from letkf_forecasting.random_functions import (
     perturb_irradiance,
     eig_2d_covariance,
+    perturb_winds,
 )
 from letkf_forecasting.advection import (
     advect_5min_ensemble,
@@ -102,6 +104,17 @@ def calc_system_variables(*, coords, advect_params, flags, pert_params):
         sys_vars['rf_eig'] = rf_eig
         sys_vars['rf_vectors'] = rf_vectors
         sys_vars['rf_approx_var'] = rf_approx_var
+    if flags['perturb_winds']:
+        rf_eig, rf_vectors = eig_2d_covariance(
+            coords.we_crop, coords.sn_crop,
+            Lx=pert_params['Lx_wind'],
+            Ly=pert_params['Ly_wind'], tol=pert_params['tol_wind'])
+        rf_approx_var = (
+            rf_vectors * rf_eig[None, :] * rf_vectors).sum(-1).mean()
+        rf_eig = rf_eig*pert_params['Lx_wind']**2
+        sys_vars['rf_eig_wind'] = rf_eig
+        sys_vars['rf_vectors_wind'] = rf_vectors
+        sys_vars['rf_approx_var_wind'] = rf_approx_var
     sys_vars = dict2nt(sys_vars, 'sys_vars')
     return sys_vars
 
@@ -127,7 +140,6 @@ def calc_assim_variables(*, sys_vars, advect_params, flags, sat2sat, sat2wind,
         assim_vars['assim_pos_2d_sat2wind'] = assim_pos_2d_sat2wind
         assim_vars['full_pos_2d_sat2wind'] = full_pos_2d_sat2wind
         # Check if these are needed
-    if flags['assim_sat2wind']:
         assim_pos_U, assim_pos_2d_U, full_pos_2d_U = (
             assimilation_position_generator(sys_vars.U_crop_shape,
                                             sat2wind['grid_size']))
@@ -174,6 +186,7 @@ def return_ensemble(*, data_file_path, ens_params, coords, flags):
                               [coords.sn_slice, coords.sn_stag_slice],
                               [coords.we_stag_slice, coords.we_slice],
                               ['U', 'V'])
+    U, V = smooth_winds(U, V)
     if flags['assim']:
         ensemble = ensemble_creator(
             q, U, V, CI_sigma=ens_params['ci_sigma'],
@@ -211,13 +224,12 @@ def forecast_setup(*, data_file_path, date, io, advect_params, ens_params,
 def preprocess(*, ensemble, flags, remove_div_flag, coords, sys_vars):
     if remove_div_flag and flags['div']:
         logging.debug('remove divergence')
-        remove_div_flag = False
         ensemble[:sys_vars.wind_size] = remove_divergence_ensemble(
             FunctionSpace=sys_vars.FunctionSpace_wind,
             wind_ensemble=ensemble[:sys_vars.wind_size],
             U_crop_shape=sys_vars.U_crop_shape,
             V_crop_shape=sys_vars.V_crop_shape, sigma=4)
-    return ensemble, remove_div_flag
+    return ensemble
 
 
 def forecast(*, ensemble, flags, coords, time_index, sat_time,
@@ -233,6 +245,7 @@ def forecast(*, ensemble, flags, coords, time_index, sat_time,
     else:
         num_of_advect = 0
         background = None
+    logging.debug(f'15min steps to background: {num_of_advect}')
     ensemble_array = ensemble.copy()[None, :, :]
     cx = abs(ensemble[:sys_vars.U_crop_size]).max()
     cy = abs(ensemble[sys_vars.U_crop_size:
@@ -244,6 +257,10 @@ def forecast(*, ensemble, flags, coords, time_index, sat_time,
     for m in range(sys_vars.num_of_horizons):
         logging.info(str(pd.Timedelta('15min')*(m + 1)))
         for n in range(3):
+            if flags['perturb_winds']:
+                ensemble[:sys_vars.wind_size] = perturb_winds(
+                    ensemble[:sys_vars.wind_size], sys_vars, pert_params)
+
             if flags['assim']:
                 ensemble = advect_5min_ensemble(
                     ensemble, dt, sys_vars.dx, sys_vars.dy,
@@ -256,6 +273,8 @@ def forecast(*, ensemble, flags, coords, time_index, sat_time,
                     T_steps,
                     sys_vars.U_crop_shape, sys_vars.V_crop_shape,
                     sys_vars.ci_crop_shape)
+            ensemble[sys_vars.wind_size:] = (ensemble[sys_vars.wind_size:]
+                                             .clip(min=0, max=1))
             if flags['perturbation']:
                 ensemble[sys_vars.wind_size:] = perturb_irradiance(
                     ensemble[sys_vars.wind_size:], sys_vars.ci_crop_shape,
@@ -267,7 +286,7 @@ def forecast(*, ensemble, flags, coords, time_index, sat_time,
         ensemble_array = np.concatenate(
             [ensemble_array, ensemble[None, :, :]],
             axis=0)
-        if num_of_advect == m:
+        if num_of_advect == (m + 1):
             background = ensemble.copy()
     return ensemble_array, save_times, background
 
@@ -316,10 +335,10 @@ def maybe_assim_sat2wind(*, ensemble, data_file_path, sat_time,
             assimilation_positions=assim_vars.assim_pos_sat2wind,
             assimilation_positions_2d=assim_vars.assim_pos_2d_sat2wind,
             full_positions_2d=assim_vars.full_pos_2d_sat2wind)
-        div_wrf_flag = True
+        div_sat2wind_flag = True
     else:
-        div_wrf_flag = False
-    return ensemble, div_wrf_flag
+        div_sat2wind_flag = False
+    return ensemble, div_sat2wind_flag
 
 
 def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
@@ -332,6 +351,7 @@ def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
                                   [coords.sn_slice, coords.sn_stag_slice],
                                   [coords.we_stag_slice, coords.we_slice],
                                   ['U', 'V'])
+        U, V = smooth_winds(U, V)
         div_wrf_flag = True
         if flags['assim_wrf']:
             logging.debug('Assim WRF')
@@ -383,6 +403,11 @@ def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
         div_wrf_flag = False
     return ensemble, div_wrf_flag
 
+
+def smooth_winds(U, V):
+    U = sp.ndimage.filters.gaussian_filter(U, sigma=60)
+    V = sp.ndimage.filters.gaussian_filter(V, sigma=60)
+    return U, V
 
 def return_opt_flow(*, coords, time_index, sat_time, data_file_path, sys_vars):
     # retreive OPT_FLOW vectors
@@ -487,7 +512,7 @@ def forecast_system(*, data_file_path, results_file_path,
         sat2sat=sat2sat, sat2wind=sat2wind, wrf=wrf,
         opt_flow=opt_flow)
     remove_div_flag = True
-    ensemble, remove_div_flag = preprocess(
+    ensemble = preprocess(
         ensemble=ensemble, flags=flags,
         remove_div_flag=remove_div_flag,
         coords=coords, sys_vars=sys_vars)
@@ -521,16 +546,15 @@ def forecast_system(*, data_file_path, results_file_path,
             assim_vars=assim_vars, wrf=wrf,
             ens_params=ens_params,
             flags=flags)
-        returned = maybe_assim_opt_flow(
+        ensemble, div_opt_flow_flag = maybe_assim_opt_flow(
             ensemble=ensemble, data_file_path=data_file_path,
             sat_time=sat_time, time_index=time_index,
             coords=coords, sys_vars=sys_vars,
             flags=flags, opt_flow=opt_flow)
-        ensemble, div_opt_flow_flag = returned[:2]
         remove_div_flag = (div_sat2wind_flag
                            or div_wrf_flag
                            or div_opt_flow_flag)
-        ensemble, remove_div_flag = preprocess(
+        ensemble = preprocess(
             ensemble=ensemble, flags=flags,
             remove_div_flag=remove_div_flag,
             coords=coords, sys_vars=sys_vars)

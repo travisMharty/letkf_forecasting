@@ -204,6 +204,22 @@ def return_results_folder(year, month, day, run_name):
     return path
 
 
+def find_run_folder(folder_path):
+    if os.path.exists(folder_path):
+        return folder_path
+    else:
+        folder_path = find_latest_run(folder_path)
+        return folder_path
+
+
+def find_latest_run(folder_path):
+    folder_path = folder_path + '_???'
+    folder_paths = glob.glob(folder_path)
+    folder_paths.sort()
+    folder_path = folder_paths[-1]
+    return folder_path
+
+
 def add_horizon(ds):
     ds.coords['horizon'] = (ds.time - ds.time[0])/60
     return ds
@@ -214,9 +230,7 @@ def return_day(year, month, day, run_name):
     path = os.path.join(
         path,
         f'results/{year:04}/{month:02}/{day:02}/' + run_name)
-    paths = glob.glob(path + '*')
-    paths.sort()
-    path = paths[-1]
+    path = find_run_folder(path)
     path = os.path.join(path, '*.nc')
     full_day = xr.open_mfdataset(path,
                                  preprocess=add_horizon,
