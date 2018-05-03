@@ -70,21 +70,18 @@ def return_rmse_one_day(truth, full_day):
 
 
 def return_bias(truth, full_day):
-    t_mean = truth.mean(dim=['south_north', 'west_east'])
-    f_mean = full_day
-    f_mean = f_mean.mean(dim=['south_north', 'west_east'])
-    bias = f_mean - t_mean
+    bias = truth - full_day
+    bias = bias.mean(dim=['south_north', 'west_east'])
     bias = bias.to_pandas()
     return bias
 
 
 def return_bias_one_day(truth, full_day):
     bias_df = pd.DataFrame(columns=['bias'])
-    t_mean = truth.mean(dim=['south_north', 'west_east', 'time'])
     for horizon in [15, 30, 45, 60]:
-        f_mean = return_horizon(full_day, horizon)
-        f_mean = f_mean.mean(dim=['south_north', 'west_east', 'time'])
-        bias = f_mean - t_mean
+        bias = return_horizon(full_day, horizon)
+        bias = bias - truth
+        bias = bias.mean(dim=['south_north', 'west_east', 'time'])
         bias = bias.item()
         bias_df.loc[horizon] = bias
     return bias_df
