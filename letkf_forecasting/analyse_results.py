@@ -123,7 +123,7 @@ def return_sd(truth, full_day):
 
 def return_sd_one_day(truth, full_day):
     sd_df = pd.DataFrame(columns=['sd'])
-    sd_truth_df = pd.DataFrame(columns=-['true_sd'])
+    sd_truth_df = pd.DataFrame(columns=['true_sd'])
     for horizon in [15, 30, 45, 60]:
         sd = return_horizon(full_day, horizon)
         times = np.intersect1d(
