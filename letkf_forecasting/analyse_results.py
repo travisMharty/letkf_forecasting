@@ -121,14 +121,23 @@ def return_sd(truth, full_day):
     return sd
 
 
-def return_sd_one_day(full_day):
+def return_sd_one_day(truth, full_day):
     sd_df = pd.DataFrame(columns=['sd'])
+    sd_truth_df = pd.DataFrame(columns=-['true_sd'])
     for horizon in [15, 30, 45, 60]:
         sd = return_horizon(full_day, horizon)
+        times = np.intersect1d(
+            truth.time.to_pandas(),
+            sd.time.to_pandas())
+        sd = sd.sel(time=times)
+        sd_truth = truth.sel(time=times)
         sd = sd.var(dim=['south_north', 'west_east', 'time'])
         sd = np.sqrt(sd).item()
         sd_df.loc[horizon] = sd
-    return sd_df
+        sd_truth = sd_truth.var(dim=['south_north', 'west_east', 'time'])
+        sd_truth = np.sqrt(sd_truth).item()
+        sd_truth_df.loc[horizon] = sd_truth
+    return sd_df, sd_truth_df
 
 
 def return_spread(truth, da):
@@ -257,18 +266,15 @@ def error_stats_one_day(year, month, day, runs):
     truth = truth['ci']
     truth = add_crop_attributes(truth)
     truth = return_error_domain(truth)
-    # rmse_dfs = []
-    # mean_sd_dfs = []
-    # spread_wind = []
-    # spread_ci = []
     to_return = []
-    truth_sd = np.sqrt(truth.var()).item()
+    # truth_sd = np.sqrt(truth.var()).item()
     for run in runs:
         print(run)
-        adict = {'name': run, 'truth_sd': truth_sd}
+        # adict = {'name': run, 'truth_sd': truth_sd}
+        adict = {'name': run}
         if run == 'persistence':
             adict = return_persistence_dict_one_day(
-                adict, truth, truth_sd, [15, 30, 45, 60])
+                adict, truth, [15, 30, 45, 60])
             to_return.append(adict)
             continue
         full_day = io.return_day(year, month, day, run)
@@ -278,12 +284,13 @@ def error_stats_one_day(year, month, day, runs):
         full_day = return_ens_mean(full_day)
 
         rmse = return_rmse_one_day(truth, full_day)
-        forecast_sd = return_sd_one_day(full_day)
+        forecast_sd, truth_sd = return_sd_one_day(truth, full_day)
         bias = return_bias_one_day(truth, full_day)
         corr = return_correlation_one_day(truth, full_day)
 
         adict['rmse'] = rmse
         adict['forecast_sd'] = forecast_sd
+        adict['truth_sd'] = truth_sd
         adict['bias'] = bias
         adict['correlation'] = corr
 
@@ -291,9 +298,10 @@ def error_stats_one_day(year, month, day, runs):
     return to_return
 
 
-def return_persistence_dict_one_day(adict, truth, truth_sd, horizons):
+def return_persistence_dict_one_day(adict, truth, horizons):
     rmse_df = pd.DataFrame(columns=['rmse'])
     sd_df = pd.DataFrame(columns=['sd'])
+    sd_truth_df = pd.DataFrame(columns=['true_sd'])
     bias_df = pd.DataFrame(columns=['bias'])
     corr_df = pd.DataFrame(columns=['correlation'])
     for horizon in horizons:
@@ -306,10 +314,18 @@ def return_persistence_dict_one_day(adict, truth, truth_sd, horizons):
         rmse = np.sqrt(rmse)
         rmse_df.loc[horizon] = rmse
 
-        sd = forecast.var(
+        sd_times = np.intersect1d(
+            truth.time.to_pandas(),
+            forecast.time.to_pandas())
+        sd = forecast.sel(time=sd_times).var(
             dim=['south_north', 'west_east', 'time']).item()
         sd = np.sqrt(sd)
         sd_df.loc[horizon] = sd
+
+        sd_truth = truth.sel(time=sd_times).var(
+            dim=['south_north', 'west_east', 'time']).item()
+        sd_truth = np.sqrt(sd_truth)
+        sd_truth_df.loc[horizon] = sd_truth
 
         t_mean = truth.mean(
             dim=['south_north', 'west_east', 'time']).item()
