@@ -220,10 +220,6 @@ def error_stats(year, month, day, runs):
     truth = truth['ci']
     truth = add_crop_attributes(truth)
     truth = return_error_domain(truth)
-    # rmse_dfs = []
-    # mean_sd_dfs = []
-    # spread_wind = []
-    # spread_ci = []
     to_return = []
     truth_sd = np.sqrt(truth.var(dim=['south_north', 'west_east']))
     truth_sd = truth_sd.to_pandas()
@@ -233,77 +229,21 @@ def error_stats(year, month, day, runs):
         full_day = io.return_day(year, month, day, run)
         full_day = add_crop_attributes(full_day)
         full_day = return_error_domain(full_day)
-
-        # u_spread_0 = return_spread(full_day['U'], 0)
-        # u_spread_15 = return_spread(full_day['U'], 15)
-        # u_spread_30 = return_spread(full_day['U'], 30)
-        # u_spread_45 = return_spread(full_day['U'], 45)
-        # u_spread_60 = return_spread(full_day['U'], 60)
-        # u_spread = pd.concat([u_spread_0, u_spread_15, u_spread_30,
-        #                       u_spread_45, u_spread_60],
-        #                      axis=1, keys=[0, 15, 30, 45, 60])
         adict['u_spread'] = return_stat_df(
             truth, full_day['U'], return_spread)
-
-        # v_spread_0 = return_spread(full_day['V'], 0)
-        # v_spread_15 = return_spread(full_day['V'], 15)
-        # v_spread_30 = return_spread(full_day['V'], 30)
-        # v_spread_45 = return_spread(full_day['V'], 45)
-        # v_spread_60 = return_spread(full_day['V'], 60)
-        # v_spread = pd.concat([v_spread_0, v_spread_15, v_spread_30,
-        #                       v_spread_45, v_spread_60],
-        #                      axis=1, keys=[0, 15, 30, 45, 60])
         adict['v_spread'] = return_stat_df(
             truth, full_day['V'], return_spread)
-
-        # ci_spread_15 = return_spread(full_day['ci'], 15)
-        # ci_spread_30 = return_spread(full_day['ci'], 30)
-        # ci_spread_45 = return_spread(full_day['ci'], 45)
-        # ci_spread_60 = return_spread(full_day['ci'], 60)
-        # spread_ci = pd.concat([ci_spread_15, ci_spread_30,
-        #                        ci_spread_45, ci_spread_60],
-        #                       axis=1, keys=[15, 30, 45, 60])
         adict['spread_ci'] = return_stat_df(
             truth, full_day['ci'], return_spread)
 
         full_day = full_day['ci']
         full_day = return_ens_mean(full_day)
-        # fore15 = return_rmse(truth, full_day, 15)
-        # fore30 = return_rmse(truth, full_day, 30)
-        # fore45 = return_rmse(truth, full_day, 45)
-        # fore60 = return_rmse(truth, full_day, 60)
-        # rmse = pd.concat([fore15, fore30, fore45, fore60],
-        #                  axis=1, keys=[15, 30, 45, 60])
         adict['rmse'] = return_stat_df(
             truth, full_day, return_rmse)
-
-        # fore15_sd = return_sd(full_day, 15)
-        # fore30_sd = return_sd(full_day, 30)
-        # fore45_sd = return_sd(full_day, 45)
-        # fore60_sd = return_sd(full_day, 60)
-        # forecast_sd = pd.concat([fore15_sd, fore30_sd,
-        #                          fore45_sd, fore60_sd],
-        #                         axis=1, keys=[15, 30, 45, 60])
         adict['forecast_sd'] = return_stat_df(
             truth, full_day, return_sd)
-
-        # fore15_bias = return_bias(truth, full_day, 15)
-        # fore30_bias = return_bias(truth, full_day, 30)
-        # fore45_bias = return_bias(truth, full_day, 45)
-        # fore60_bias = return_bias(truth, full_day, 60)
-        # bias = pd.concat([fore15_bias, fore30_bias,
-        #                   fore45_bias, fore60_bias],
-        #                  axis=1, keys=[15, 30, 45, 60])
         adict['bias'] = return_stat_df(
             truth, full_day, return_bias)
-
-        # corr15 = return_correlation(truth, full_day, 15)
-        # corr30 = return_correlation(truth, full_day, 30)
-        # corr45 = return_correlation(truth, full_day, 45)
-        # corr60 = return_correlation(truth, full_day, 60)
-        # corr = pd.concat([corr15, corr30,
-        #                   corr45, corr60],
-        #                  axis=1, keys=[15, 30, 45, 60])
         adict['correlation'] = return_stat_df(
             truth, full_day, return_correlation)
 
