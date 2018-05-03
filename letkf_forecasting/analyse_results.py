@@ -340,6 +340,7 @@ def return_persistence_dict_one_day(adict, truth, horizons):
         corr_df.loc[horizon] = corr
     adict['rmse'] = rmse_df
     adict['forecast_sd'] = sd_df
+    adict['truth_sd'] = sd_truth_df
     adict['bias'] = bias_df
     adict['correlation'] = corr_df
     return adict
