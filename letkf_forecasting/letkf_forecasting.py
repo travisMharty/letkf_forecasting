@@ -184,11 +184,27 @@ def return_ensemble(*, data_file_path, ens_params, coords, flags):
     q = return_single_time(data_file_path, coords.sat_times_all,
                            sat_time, [coords.sn_slice],
                            [coords.we_slice], ['ci'])[0]
-    U, V = return_single_time(data_file_path, coords.wind_times, wind_time,
-                              [coords.sn_slice, coords.sn_stag_slice],
-                              [coords.we_stag_slice, coords.we_slice],
-                              ['U', 'V'])
-    U, V = smooth_winds(U, V)
+    if flags['radiosonde']:
+        station = 'TUS'
+        df = WyomingUpperAir.request_data(sat_time.date(), station)
+        T = df['temperature'].values * units(df.units['temperature'])
+        Td = df['dewpoint'].values * units(df.units['dewpoint'])
+        u_wind = df['u_wind'].values * units(df.units['u_wind'])
+        u_wind = u_wind.to(units.meter/units.second)
+        v_wind = df['v_wind'].values * units(df.units['v_wind'])
+        v_wind = v_wind.to(units.meter/units.second)
+        rh = thermo.relative_humidity_from_dewpoint(T, Td)
+        max_arg = np.argmax(rh)
+        u_size = coords.we_stag_crop.size * coords.sn_crop.size
+        v_size = coords.we_crop.size * coords.sn_stag_crop.size
+        U = np.ones(u_size)*u_wind[max_arg]
+        V = np.ones(v_size)*v_wind[max_arg]
+    else:
+        U, V = return_single_time(data_file_path, coords.wind_times, wind_time,
+                                  [coords.sn_slice, coords.sn_stag_slice],
+                                  [coords.we_stag_slice, coords.we_slice],
+                                  ['U', 'V'])
+        U, V = smooth_winds(U, V)
     if flags['assim']:
         ensemble = ensemble_creator(
             q, U, V, CI_sigma=ens_params['ci_sigma'],
@@ -347,7 +363,7 @@ def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
                     coords, sys_vars, assim_vars, wrf,
                     ens_params, flags):
     wind_time = return_wind_time(sat_time=sat_time, coords=coords)
-    if sat_time == wind_time:
+    if sat_time == wind_time and not flags['radiosonde']:
         U, V = return_single_time(data_file_path, coords.wind_times,
                                   wind_time,
                                   [coords.sn_slice, coords.sn_stag_slice],
@@ -380,20 +396,6 @@ def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
                 assimilation_positions=assim_vars.assim_pos_V_wrf,
                 assimilation_positions_2d=assim_vars.assim_pos_2d_V_wrf,
                 full_positions_2d=assim_vars.full_pos_2d_V_wrf)
-        elif flags['radiosonde']:
-            station = 'TUS'
-            df = WyomingUpperAir.request_data(sat_time, station)
-            T = df['temperature'].values * units(df.units['temperature'])
-            Td = df['dewpoint'].values * units(df.units['dewpoint'])
-            u_wind = df['u_wind'].values * units(df.units['u_wind'])
-            u_wind = u_wind.to(units.meter/units.second)
-            v_wind = df['v_wind'].values * units(df.units['v_wind'])
-            v_wind = v_wind.to(units.meter/units.second)
-            rh = thermo.relative_humidity_from_dewpoint(T, Td)
-            max_arg = np.argmax(rh)
-            ensemble[:sys_vars.U_crop_size] = u_wind[max_arg]
-            ensemble[sys_vars.U_crop_size:
-                     sys_vars.wind_size] = v_wind[max_arg]
         elif not flags['opt_flow']:
             logging.debug('replace WRF')
             if ensemble.shape[1] > 1:
@@ -424,6 +426,7 @@ def smooth_winds(U, V):
     U = sp.ndimage.filters.gaussian_filter(U, sigma=60)
     V = sp.ndimage.filters.gaussian_filter(V, sigma=60)
     return U, V
+
 
 def return_opt_flow(*, coords, time_index, sat_time, data_file_path, sys_vars):
     # retreive OPT_FLOW vectors
