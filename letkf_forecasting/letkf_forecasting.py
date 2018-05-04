@@ -6,7 +6,9 @@ import pandas as pd
 import fenics as fe
 import scipy as sp
 from netCDF4 import Dataset, num2date
-
+from metpy.units import units
+import metpy.calc.thermo as thermo
+from siphon.simplewebservice.wyoming import WyomingUpperAir
 from letkf_forecasting.optical_flow import optical_flow
 from letkf_forecasting.letkf_io import (
     return_single_time,
@@ -38,7 +40,7 @@ from letkf_forecasting.assimilation import (
 
 
 def set_up_param_dict(*, date, io, flags, advect_params, ens_params,
-                     pert_params, sat2sat, sat2wind, wrf, opt_flow):
+                      pert_params, sat2sat, sat2wind, wrf, opt_flow):
     param_dict = date.copy()
     param_dict.update(io)
     param_dict.update(advect_params)
@@ -378,6 +380,20 @@ def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
                 assimilation_positions=assim_vars.assim_pos_V_wrf,
                 assimilation_positions_2d=assim_vars.assim_pos_2d_V_wrf,
                 full_positions_2d=assim_vars.full_pos_2d_V_wrf)
+        elif flags['radiosonde']:
+            station = 'TUS'
+            df = WyomingUpperAir.request_data(sat_time, station)
+            T = df['temperature'].values * units(df.units['temperature'])
+            Td = df['dewpoint'].values * units(df.units['dewpoint'])
+            u_wind = df['u_wind'].values * units(df.units['u_wind'])
+            u_wind = u_wind.to(units.meter/units.second)
+            v_wind = df['v_wind'].values * units(df.units['v_wind'])
+            v_wind = v_wind.to(units.meter/units.second)
+            rh = thermo.relative_humidity_from_dewpoint(T, Td)
+            max_arg = np.argmax(rh)
+            ensemble[:sys_vars.U_crop_size] = u_wind[max_arg]
+            ensemble[sys_vars.U_crop_size:
+                     sys_vars.wind_size] = v_wind[max_arg]
         elif not flags['opt_flow']:
             logging.debug('replace WRF')
             if ensemble.shape[1] > 1:
