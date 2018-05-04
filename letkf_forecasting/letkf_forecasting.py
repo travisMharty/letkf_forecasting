@@ -1,4 +1,5 @@
 import logging
+import os
 from collections import namedtuple
 import numpy as np
 from distributed import Client
@@ -504,7 +505,9 @@ def maybe_assim_opt_flow(*, ensemble, data_file_path, sat_time, time_index,
                      u_opt_flow_flat_pos, v_opt_flow_flat_pos)
     elif flags['opt_flow']:
         div_opt_flow_flag = True
-        U, V = return_single_time(data_file_path, coords.sat_times_all,
+        opt_flow_folder = os.path.split(data_file_path)[0]
+        opt_flow_file = os.path.join(opt_flow_folder, 'data_opt_flow.nc')
+        U, V = return_single_time(opt_flow_file, coords.sat_times_all,
                                   sat_time,
                                   [coords.sn_slice, coords.sn_stag_slice],
                                   [coords.we_stag_slice, coords.we_slice],
