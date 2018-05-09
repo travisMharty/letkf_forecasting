@@ -5,7 +5,7 @@ month=5
 day=29
 # declare -a config_list=("ow_1.yml" "ow_2.yml" "ow_3.yml" "ow_4.yml" "ow_5.yml")
 # declare -a config_list=("ow_10.yml" "ow_11.yml" "ow_12.yml" "ow_13.yml")
-declare -a config_list=("ow_15_sig_5.yml" "ow_15_sig_6.yml" "ow_15_sig_7.yml")
+declare -a config_list=("ow_15_wp2.yml" "ow_15_wp3.yml" "ow_15_wp4.yml")
 
 for config in "${config_list[@]}"
 do

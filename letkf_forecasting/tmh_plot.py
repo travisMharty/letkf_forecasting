@@ -285,7 +285,7 @@ def ensemble_stamps(
     try:
         j
     except Exception:
-        j=-1
+        j =-1
     im = ax[0, j + 1].pcolormesh(
         ensemble.mean(axis=1).reshape(domain_shape),
         cmap=cmap,
