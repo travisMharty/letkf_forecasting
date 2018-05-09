@@ -206,6 +206,9 @@ def return_ensemble(*, data_file_path, ens_params, coords, flags):
                                   [coords.we_stag_slice, coords.we_slice],
                                   ['U', 'V'])
         U, V = smooth_winds(U, V)
+        if flags['wrf_mean']:
+            U = np.ones_like(U)*U.mean()
+            V = np.ones_like(V)*V.mean()
     if flags['assim']:
         ensemble = ensemble_creator(
             q, U, V, CI_sigma=ens_params['ci_sigma'],
@@ -371,6 +374,9 @@ def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
                                   [coords.we_stag_slice, coords.we_slice],
                                   ['U', 'V'])
         U, V = smooth_winds(U, V)
+        if flags['wrf_mean']:
+            U = np.ones_like(U)*U.mean()
+            V = np.ones_like(V)*V.mean()
         div_wrf_flag = True
         if flags['assim_wrf']:
             logging.debug('Assim WRF')
