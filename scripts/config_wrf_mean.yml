@@ -17,6 +17,8 @@ flags:
   assim_wrf: 0
   wrf_mean: 1
   opt_flow: 0
+  perturb_winds: 0
+  radiosonde: 0
   name: 'flag'
 
 advect_params:
@@ -32,12 +34,18 @@ ens_params:
   ci_sigma: None
 
 pert_params:
-  Lx: 5
-  Ly: 5
-  tol: 0.005
-  pert_sigma: 0.15/3
-  pert_mean: 0
-  edge_weight: 1
+  Lx: None
+  Ly: None
+  tol: None
+  pert_sigma: None
+  pert_mean: None
+  edge_weight: None
+
+  Lx_wind: None
+  Ly_wind: None
+  tol_wind: None
+  pert_sigma_wind: None
+  pert_mean_wind: None
 
 # assimilation_params
 sat2sat:
