@@ -32,18 +32,7 @@ def interp_sat(times, dx, sat_path):
         data = f(x_fine, y_fine).ravel()
         temp = pd.DataFrame(data=data[None, :], index=[this_time])
         ci_fine = ci_fine.append(temp)
-
-
-    # suffix = '_' + str(sat_times[0].month) + '_' + str(sat_times[0].day)
-    # save_path = save_path + 'for' + suffix + '/'
-    # if not os.path.exists(save_path):
-    #     os.mkdir(save_path)
-    # save_path = save_path + '{var}'
-    # print(save_path)
-    # csi_fine.to_hdf(save_path.format(var='csi.h5'), 'csi')
-    # np.save(save_path.format(var='x'), x_fine)
-    # np.save(save_path.format(var='y'), y_fine)
-    # np.save(save_path.format(var='domain_shape'), fine_shape)
+    return ci_fine, x_fine, y_fine, fine_shape
 
 
 def interp_sat_old(cloudy_times, clear_times, dx, save_path):
