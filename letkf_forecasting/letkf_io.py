@@ -239,3 +239,76 @@ def return_day(year, month, day, run_name):
     full_day.horizon.attrs['units'] = 'minutes'
     full_day = xr.decode_cf(full_day)
     return full_day
+
+
+def save_newly_created_data(results_file_path, interpolated_ci,
+                            interpolated_wrf):
+    sat_shape = interpolated_ci['fine_shape']
+    U_shape = interpolated_wrf['U_shape']
+    V_shape = interpolated_wrf['V_shape']
+    x = interpolated_ci['x_fine'].reshape(sat_shape)[0, :]
+    y = interpolated_ci['y_fine'].reshape(sat_shape)[:, 0]
+    ci = interpolated_ci['ci']
+    time = ci.index.tz_convert(None).to_pydatetime()
+    time = num2date(time, 'seconds since 1970-1-1')
+    ci = ci.values.reshape(
+        [time.size, sat_shape[0], sat_shape[1]])
+    U = interpolated_wrf['U']
+    V = interpolated_wrf['V']
+    time_wind = U.index.tz_convert(None).to_pydatetime()
+    time_wind = num2date(time_wind, 'seconds since 1970-1-1')
+    U = U.values.reshape(time_wind.size, U_shape[0], U_shape[1])
+    V = V.values.reshape(time_wind.size, V_shape[0], V_shape[1])
+    dx = (x[1] - x[0])
+    x_stag = np.concatenate([x - dx/2, [x[-1] + dx/2]])
+    dy = (y[1] - y[0])
+    y_stag = np.concatenate([y - dy/2, [y[-1] + dy/2]])
+
+    with Dataset(results_file_path, 'w') as store:
+        store.createDimension('west_east', size=x.size)
+        store.createDimension('south_north', size=y.size)
+        store.createDimension('we_stag', size=x_stag.size)
+        store.createDimension('sn_stag', size=y_stag.size)
+        store.createDimension('time', size=time.size)
+        store.createDimension('time_wind', size=time_wind.size)
+        wenc = store.createVariable(
+            'west_east', 'f8', ('west_east',), zlib=True)
+        snnc = store.createVariable(
+            'south_north', 'f8', ('south_north',), zlib=True)
+        we_stagnc = store.createVariable(
+            'we_stag', 'f8', ('we_stag',), zlib=True)
+        sn_stagnc = store.createVariable(
+            'sn_stag', 'f8', ('sn_stag',), zlib=True)
+        timenc = store.createVariable('time', 'f8', ('time',), zlib=True)
+        time_windnc = store.createVariable(
+            'time_wind', 'f8', ('time_wind',), zlib=True)
+        cinc = store.createVariable(
+            'ci', 'f8', ('time', 'south_north', 'west_east',), zlib=True)
+        Unc = store.createVariable(
+            'U', 'f8', ('time_wind', 'south_north', 'we_stag',), zlib=True)
+        Vnc = store.createVariable(
+            'V', 'f8', ('time_wind', 'sn_stag', 'west_east',), zlib=True)
+        wenc[:] = x
+        snnc[:] = y
+        we_stagnc[:] = x_stag
+        sn_stagnc[:] = y_stag
+        timenc[:] = time
+        time_windnc[:] = time_wind
+        cinc[:] = ci
+        Unc[:] = U
+        Vnc[:] = V
+        timenc.units = 'seconds since 1970-1-1'
+        time_windnc.units = 'seconds since 1970-1-1'
+        # # should move this into forecast_system with calculation
+        # cinc.we_min_crop = west_east_range[0]
+        # cinc.we_max_crop = west_east_range[-1]
+        # cinc.sn_min_crop = south_north_range[0]
+        # cinc.sn_max_crop = south_north_range[-1]
+        # Unc.we_min_crop = west_east_range_stag[0]
+        # Unc.we_max_crop = west_east_range_stag[-1]
+        # Unc.sn_min_crop = south_north_range[0]
+        # Unc.sn_max_crop = south_north_range[-1]
+        # Vnc.we_min_crop = west_east_range[0]
+        # Vnc.we_max_crop = west_east_range[-1]
+        # Vnc.sn_min_crop = south_north_range_stag[0]
+        # Vnc.sn_max_crop = south_north_range_stag[-1]
