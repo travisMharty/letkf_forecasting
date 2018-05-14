@@ -16,9 +16,7 @@ def main():
     solar_noon = pd.Timestamp('12:30:00')
     step = pd.Timestamp('3h')
     parser = argparse.ArgumentParser(
-        description='Run forecast_system using provided configuration file.')
-    parser.add_argument('data_folder', type=str,
-                        help='The path to the satellite data folder.')
+        description='Create needed data given a date.')
     parser.add_argument('-y', '--year', type=int,
                         help='The year you wish to run.')
     parser.add_argument('-m', '--month', type=int,
@@ -32,8 +30,7 @@ def main():
     day = args.day
     # Create path to save results
     home = os.path.expanduser('~')
-    results_file_path = os.path.join(home,
-                                     'data',
+    results_file_path = os.path.join('/a2/uaren/travis/letkf_data/',
                                      f'{year:04}',
                                      f'{month:02}',
                                      f'{day:02}',
@@ -43,7 +40,7 @@ def main():
                             f'{month:02}',
                             f'{day:02}',
                             '/solar_3/wrfsolar_d02_hourly.nc')
-    data_file_path = args.data_folder
+    data_file_path = os.path.join(home, '/data/satellite_data/')
 
     solar_noon = solar_noon.replace(year=year, month=month, day=day)
     start = solar_noon - step
@@ -57,30 +54,26 @@ def main():
     time_range_ci = pd.date_range(start_ci, end_ci, freq='15min')
     time_range_ci = time_range_ci.tz_localize('MST')
 
-    # logging.basicConfig(
-    #     filename=os.path.join(data_file_path)letkf.log',  # noqa
-    #     filemode='w', level=logging.DEBUG)
+    log_path = os.path.join(
+        os.path.split(results_file_path)[0], 'data_creation.log')
+    logging.basicConfig(
+        filename=log_path,
+        filemode='w', level=logging.DEBUG)
     logging.info('Started')
-    returned = interpolate_data.interp_sat(
+    logging.info('Start to interpolate satellite data.')
+    interpolated_ci = interpolate_data.interp_sat(
         time_range_ci, dx, data_file_path)
-    ci = returned['ci']
-    x = returned['x']
-    y = returned['y']
-    ci_shape = returned['ci_shape']
-    x_coarse = returned['x_coarse']
-    y_coarse = returned['y_coarse']
-    coarse_shape = returned['coarse_shape']
 
-    returned = get_wrf_data.main(time_range_wrf, wrf_path)
-    U = returned['U']
-    V = returned['V']
-    bottom_top = returned['bottom_top']
-    wind_lats = returned['wind_lats']
-    wind_lons = returned['wind_lons']
-    U_shape = returned['U_shape']
-    V_shape = returned['V_shape']
+    logging.info('Retrieve WRF data.')
+    raw_winds = get_wrf_data.main(time_range_wrf, wrf_path)
 
-    returned = interpolate_data.interp_wind()
+    logging.info('Interpolate WRF data.')
+    interpolated_wrf = interpolate_data.interp_wind(
+        interpolated_ci, raw_winds)
+
+    logging.info('Saving Data.')
+    letkf_io.save_data(results_file_path, interpolated_ci,
+                       interpolated_wrf)
 
     time1 = time_py.time()
     print('It took: ' + str((time1 - time0)/60))
