@@ -33,6 +33,7 @@ def interp_sat(times, dx, sat_path):
         temp = pd.DataFrame(data=data[None, :], index=[this_time])
         ci_fine = ci_fine.append(temp)
 
+
     # suffix = '_' + str(sat_times[0].month) + '_' + str(sat_times[0].day)
     # save_path = save_path + 'for' + suffix + '/'
     # if not os.path.exists(save_path):
