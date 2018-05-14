@@ -65,7 +65,8 @@ def main():
         time_range_ci, dx, data_file_path)
 
     logging.info('Retrieve WRF data.')
-    raw_winds = get_wrf_data.main(time_range_wrf, wrf_path)
+    raw_winds = get_wrf_data.main(time_range_wrf, wrf_path,
+                                  interpolated_ci)
 
     logging.info('Interpolate WRF data.')
     interpolated_wrf = interpolate_data.interp_wind(
