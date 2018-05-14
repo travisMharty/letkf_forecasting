@@ -97,5 +97,7 @@ def main(time_range, wrf_path, save_path):
     wind_lons = dataset['XLONG'].values.ravel()
     U_shape = dataset['U'].isel(Time=0, bottom_top=0).shape
     V_shape = dataset['V'].isel(Time=0, bottom_top=0).shape
-
-    return U, V, bottom_top, wind_lats, wind_lons, U_shape, V_shape
+    to_return = {'U': U, 'V': V, 'bottom_top': bottom_top,
+                 'wind_lats': wind_lats, 'wind_lons': wind_lons,
+                 'U_shape': U_shape, 'V_shape': V_shape}
+    return to_return
