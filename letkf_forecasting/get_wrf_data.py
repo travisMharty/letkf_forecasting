@@ -39,7 +39,7 @@ def dewpoint_calc(qvapor, pressure):
     return tdew
 
 
-def main(time_range, wrf_path, save_path):
+def main(time_range, wrf_path):
     '''
     time_range: pd.DatetimeIndex
     file_path: location of wrf dataset
