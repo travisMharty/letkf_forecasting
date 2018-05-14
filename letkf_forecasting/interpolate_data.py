@@ -32,7 +32,9 @@ def interp_sat(times, dx, sat_path):
         data = f(x_fine, y_fine).ravel()
         temp = pd.DataFrame(data=data[None, :], index=[this_time])
         ci_fine = ci_fine.append(temp)
-    return ci_fine, x_fine, y_fine, fine_shape
+    to_return = {'ci_fine': ci_fine, 'x_fine': x_fine,
+                 'y_fine': y_fine, 'fine_shape': fine_shape}
+    return to_return
 
 
 def interp_sat_old(cloudy_times, clear_times, dx, save_path):
