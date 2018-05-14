@@ -5,7 +5,47 @@ import scipy.interpolate as interpolate
 import letkf_forecasting.prepare_sat_data as prep
 
 
-def interp_sat(cloudy_times, clear_times, dx, save_path):
+def interp_sat(times, dx, sat_path):
+    sat_shape = np.load(sat_path + 'domain_shape.npy')
+    sat_x = np.load(sat_path + 'x.npy')
+    sat_y = np.load(sat_path + 'y.npy')
+    cloudiness_index = pd.read_hdf(sat_path + 'cloudiness_index.h5')
+    cloudiness_index.index = cloudiness_index.index.tz_convert('MST')
+    ci = cloudiness_index.ix[times].dropna()
+
+    data = ci.iloc[0].values.reshape(sat_shape)
+    xi = sat_x.reshape(sat_shape)[0, :]
+    yi = sat_y.reshape(sat_shape)[:, 0]
+    f = interpolate.interp2d(xi, yi, data, kind='linear')
+
+    x_fine = np.arange(sat_x[0], sat_x[-1] + dx, dx)
+    y_fine = np.arange(sat_y[0], sat_y[-1] + dx, dx)
+    fine_shape = (y_fine.size, x_fine.size)
+    sat_times = ci.index
+    data = f(x_fine, y_fine).ravel()
+    ci_fine = pd.DataFrame(data=data[None, :], index=[sat_times[0]])
+
+    for t in np.arange(sat_times.size - 1) + 1:
+        this_time = sat_times[t]
+        data = ci.loc[this_time].values.reshape(sat_shape)
+        f = interpolate.interp2d(xi, yi, data, kind='linear')
+        data = f(x_fine, y_fine).ravel()
+        temp = pd.DataFrame(data=data[None, :], index=[this_time])
+        ci_fine = ci_fine.append(temp)
+
+    # suffix = '_' + str(sat_times[0].month) + '_' + str(sat_times[0].day)
+    # save_path = save_path + 'for' + suffix + '/'
+    # if not os.path.exists(save_path):
+    #     os.mkdir(save_path)
+    # save_path = save_path + '{var}'
+    # print(save_path)
+    # csi_fine.to_hdf(save_path.format(var='csi.h5'), 'csi')
+    # np.save(save_path.format(var='x'), x_fine)
+    # np.save(save_path.format(var='y'), y_fine)
+    # np.save(save_path.format(var='domain_shape'), fine_shape)
+
+
+def interp_sat_old(cloudy_times, clear_times, dx, save_path):
     sat_shape = np.load(save_path + 'domain_shape.npy')
     sat_x = np.load(save_path + 'x.npy')
     sat_y = np.load(save_path + 'y.npy')
