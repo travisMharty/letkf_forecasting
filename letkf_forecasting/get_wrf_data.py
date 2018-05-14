@@ -51,7 +51,8 @@ def main(time_range, wrf_path, save_path):
     start_time = time_range[0]
     end_time = time_range[-1]
     times_int = dataset.Time.values
-    times_int = times_int[(data_times >= start_time) & (data_times <= end_time)]
+    times_int = times_int[(data_times >= start_time)
+                          & (data_times <= end_time)]
     data_times = data_times[times_int]
     num_of_times = times_int.size
     dataset = dataset.sel(Time=times_int)
