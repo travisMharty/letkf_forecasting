@@ -135,11 +135,14 @@ def midday(data, loc, max_zenith):
 
 
 def get_cloudiness_index(pixel, lats, lons, elevation):
+    # based on suny_ghi in input_data.py by Tony Lorenzo
+    # https://github.com/alorenzo175/satellite_irradiance_optimal_interpolation/blob/master/satoi/input_data.py
+    # pressure is in pascals, should be mb for solar_position
     pressure = pv.atmosphere.alt2pres(elevation)
     app_zenith = None
     for time in pixel.index:
         temp = pv.spa.solar_position(time.value/10**9, lats, lons, elevation,
-                                     pressure, 12, 67.0, 0.)
+                                     pressure/100, 12, 67.0, 0.)
         if app_zenith is None:
             app_zenith = pd.DataFrame({time: temp[0]})
         else:
@@ -153,7 +156,7 @@ def get_cloudiness_index(pixel, lats, lons, elevation):
     lower_bound = []
     for c in norpix.columns:
         upper_bound.append(norpix[c].nlargest(20).mean())
-        lower_bound.append(norpix[c].nsmallest(20).mean())
+        lower_bound.append(norpix[c].nsmallest(40).mean())
     low = pd.Series(lower_bound)
     up = pd.Series(upper_bound)
 
