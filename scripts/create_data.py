@@ -7,6 +7,7 @@ import pandas as pd
 import letkf_forecasting.letkf_forecasting as lf
 import letkf_forecasting.letkf_io as letkf_io
 import letkf_forecasting.interpolate_data as interpolate_data
+import letkf_forecasting.get_wrf_data as get_wrf_data
 
 
 def main():
@@ -37,6 +38,11 @@ def main():
                                      f'{month:02}',
                                      f'{day:02}',
                                      'data.nc')
+    wrf_path = os.path.join('/a2/uaren/',
+                            f'{year:04}',
+                            f'{month:02}',
+                            f'{day:02}',
+                            '/solar_3/wrfsolar_d02_hourly.nc')
     data_file_path = args.data_folder
 
     solar_noon = solar_noon.replace(year=year, month=month, day=day)
@@ -61,8 +67,11 @@ def main():
     x = returned['x']
     y = returned['y']
     ci_shape = returned['ci_shape']
+    x_coarse = returned['x_coarse']
+    y_coarse = returned['y_coarse']
+    coarse_shape = returned['coarse_shape']
 
-    retuned = gwd.main(time_ragne_wrf, wrf_path)
+    returned = get_wrf_data.main(time_range_wrf, wrf_path)
     U = returned['U']
     V = returned['V']
     bottom_top = returned['bottom_top']
@@ -70,6 +79,8 @@ def main():
     wind_lons = returned['wind_lons']
     U_shape = returned['U_shape']
     V_shape = returned['V_shape']
+
+    returned = interpolate_data.interp_wind()
 
     time1 = time_py.time()
     print('It took: ' + str((time1 - time0)/60))
