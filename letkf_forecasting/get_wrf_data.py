@@ -39,12 +39,43 @@ def dewpoint_calc(qvapor, pressure):
     return tdew
 
 
-def main(time_range, wrf_path):
+def main(time_range, wrf_path, interpolated_ci):
     '''
     time_range: pd.DatetimeIndex
     file_path: location of wrf dataset
     '''
+    sat_x = interpolated_ci['x_coarse'].ravel()
+    sat_y = interpolated_ci['y_coarse'].ravel()
+    sat_lat, sat_lon = lcc_to_sphere(sat_x, sat_y)
+    lat_min = sat_lat.min()
+    lat_max = sat_lat.max()
+    lon_min = sat_lat.min()
+    lat_max = sat_lat.max()
+
     dataset = xr.open_dataset(wrf_path)
+    wrf_lat = dataset.XLAT[:, 0]
+    wrf_lon = dataset.XLONG[0, :]
+    we_min = np.searchsorted(wrf_lon, lon_min, side='left')
+    we_max = np.searchsorted(wrf_lon, lon_max, side='left')
+    if we_max == wrf_lon.size:
+        we_slice = slice(we_min, we_max)
+    else:
+        we_slice - slice(we_min, we_max + 1)
+    we_stag_slice = slice(we_min, we_slice.stop + 1)
+
+    sn_min = np.searchsorted(wrf_lat, lat_min, side='left')
+    sn_max = np.searchsorted(wrf_lat, lat_max, side='left')
+    if sn_max == wrf_lat.size:
+        sn_slice = slice(sn_min, sn_max)
+    else:
+        sn_slice = slice(sn_min, sn_max + 1)
+    sn_stag_slice = slice(sn_min, sn_slice.stop + 1)
+
+    dataset = dataset.sel(west_east=we_slice,
+                          south_north=sn_slice,
+                          west_east_stag=we_stag_slice,
+                          south_north_stag=sn_stag_slice)
+
     data_times = dataset['Times'].to_pandas().apply(
         lambda x: pd.to_datetime(x.decode("utf-8").replace('_', ' ')))
     data_times = pd.Index(data_times).tz_localize('UTC').tz_convert('MST')
