@@ -39,34 +39,27 @@ def interp_sat(times, dx, sat_path):
     return to_return
 
 
-def interp_wind(U, V, save_path, date):
-    suffix = '_' + str(date.month) + '_' + str(date.day)
-    x_coarse = np.load(save_path + 'x.npy')
-    y_coarse = np.load(save_path + 'y.npy')
-    coarse_shape = np.load(save_path + 'domain_shape.npy')
-    load_path = (save_path + '{var_name}' + '{extension}')
-    x_fine = np.load(load_path.format(var_name='x_fine', extension='.npy'))
-    y_fine = np.load(load_path.format(var_name='y_fine', extension='.npy'))
+def interp_wind(interpolated_ci, raw_winds):
+    x_coarse = interpolated_ci['x_coarse']
+    y_coarse = interpolated_ci['y_coarse']
+    coarse_shape = interpolated_ci['coarse_shape']
+    x_fine = interpolated_ci['x_fine']
+    y_fine = interpolated_ci['y_fine']
     dx = x_fine[1] - x_fine[0]
-    fine_shape = np.load(
-        load_path.format(var_name='fine_shape', extension='.npy'))
+    fine_shape = interpolated_ci['fine_shape']
 
-    load_path = (save_path + 'for' + suffix + '/raw_winds/{var}')
-    U = pd.read_hdf(load_path.format(var='U.h5'))
-    V = pd.read_hdf(load_path.format(var='V.h5'))
-
-    ## delete after addressing bug
-    U.index = U.index.tz_convert('MST')
-    V.index = V.index.tz_convert('MST')
-    ## delete after addressing bug
-
-    U_shape = np.load(load_path.format(var='U_shape.npy'))
-    V_shape = np.load(load_path.format(var='V_shape.npy'))
-    wind_lats = np.load(
-        load_path.format(var='wind_lats.npy'))
-    wind_lons = np.load(
-        load_path.format(var='wind_lons.npy'))
+    U = raw_winds['U']
+    V = raw_winds['V']
+    U_shape = raw_winds['U_shape']
+    V_shape = raw_winds['V_shape']
+    wind_lats = raw_winds['wind_lats']
+    wind_lons = raw_winds['wind_lons']
     wind_times = U.index
+
+    # ## delete after addressing bug
+    # U.index = U.index.tz_convert('MST')
+    # V.index = V.index.tz_convert('MST')
+    # ## delete after addressing bug
 
     wind_x, wind_y = prep.sphere_to_lcc(wind_lats, wind_lons)
     wind_x = wind_x.reshape([U_shape[0], V_shape[1]])
@@ -152,8 +145,6 @@ def interp_wind(U, V, save_path, date):
         temp = pd.DataFrame(data=fine_data[None, :], index=[this_time])
         V_fine = V_fine.append(temp)
 
-    save_path = save_path + 'for' + suffix + '/' + '{var}'
-    U_fine.to_hdf(save_path.format(var='U.h5'), 'U')
-    V_fine.to_hdf(save_path.format(var='V.h5'), 'V')
-    np.save(save_path.format(var='U_shape'), U_fine_shape)
-    np.save(save_path.format(var='V_shape'), V_fine_shape)
+    to_return = {'U_fine': U_fine, 'V_fine': V_fine,
+                 'U_fine_shape': U_fine, 'V_fine_shape'}
+    return to_return
