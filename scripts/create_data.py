@@ -29,7 +29,7 @@ def main():
     day = args.day
     # Create path to save results
     home = os.path.expanduser('~')
-    results_file_path = os.path.join('/a2/uaren/travis/letkf_data/',
+    results_file_path = os.path.join('/a2/uaren/travis/data/',
                                      f'{year:04}',
                                      f'{month:02}',
                                      f'{day:02}')
