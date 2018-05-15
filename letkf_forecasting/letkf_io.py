@@ -250,13 +250,13 @@ def save_newly_created_data(results_file_path, interpolated_ci,
     y = interpolated_ci['y_fine']
     ci = interpolated_ci['ci_fine']
     time = ci.index.tz_convert(None).to_pydatetime()
-    time = num2date(time, 'seconds since 1970-1-1')
+    time = date2num(time, 'seconds since 1970-1-1')
     ci = ci.values.reshape(
         [time.size, sat_shape[0], sat_shape[1]])
     U = interpolated_wrf['U_fine']
     V = interpolated_wrf['V_fine']
     time_wind = U.index.tz_convert(None).to_pydatetime()
-    time_wind = num2date(time_wind, 'seconds since 1970-1-1')
+    time_wind = date2num(time_wind, 'seconds since 1970-1-1')
     U = U.values.reshape(time_wind.size, U_shape[0], U_shape[1])
     V = V.values.reshape(time_wind.size, V_shape[0], V_shape[1])
     dx = (x[1] - x[0])
