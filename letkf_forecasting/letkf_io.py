@@ -135,7 +135,7 @@ def calc_time_range(*, sat_times, advect_params):
 
 
 def calc_crop(*, U, V, advect_params):
-    horizon = pd.Timestamp(advect_params['max_horizon'])
+    horizon = pd.Timedelta(advect_params['max_horizon'])
     horizon = horizon.seconds
     U_min = U.min()
     U_max = U.max()
