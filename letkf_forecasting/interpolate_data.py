@@ -99,8 +99,8 @@ def interp_wind(interpolated_ci, raw_winds):
     V_interp_positions = np.stack(
         [V_x_coarse.ravel(), V_y_coarse.ravel()], axis=1)
 
-    y_fine = y_fine.reshape(fine_shape)[:, 0]
-    x_fine = x_fine.reshape(fine_shape)[0, :]
+    y_fine = y_fine
+    x_fine = x_fine
     U_x_fine = np.concatenate([x_fine - dx/2,
                                [x_fine[-1] + dx/2]], axis=0)
     V_y_fine = np.concatenate([y_fine - dx/2,
@@ -146,5 +146,5 @@ def interp_wind(interpolated_ci, raw_winds):
         V_fine = V_fine.append(temp)
 
     to_return = {'U_fine': U_fine, 'V_fine': V_fine,
-                 'U_fine_shape': U_fine, 'V_fine_shape'}
+                 'U_fine_shape': U_fine_shape, 'V_fine_shape': V_fine_shape}
     return to_return
