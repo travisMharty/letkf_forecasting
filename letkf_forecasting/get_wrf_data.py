@@ -2,6 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 import xarray as xr
+import letkf_forecasting.prepare_sat_data as prep
 
 
 def rh_calc(temps, pressure, qvapor):
@@ -46,11 +47,11 @@ def main(time_range, wrf_path, interpolated_ci):
     '''
     sat_x = interpolated_ci['x_coarse'].ravel()
     sat_y = interpolated_ci['y_coarse'].ravel()
-    sat_lat, sat_lon = lcc_to_sphere(sat_x, sat_y)
+    sat_lat, sat_lon = prep.lcc_to_sphere(sat_x, sat_y)
     lat_min = sat_lat.min()
     lat_max = sat_lat.max()
-    lon_min = sat_lat.min()
-    lat_max = sat_lat.max()
+    lon_min = sat_lon.min()
+    lon_max = sat_lon.max()
 
     dataset = xr.open_dataset(wrf_path)
     wrf_lat = dataset.XLAT[:, 0]
@@ -60,7 +61,7 @@ def main(time_range, wrf_path, interpolated_ci):
     if we_max == wrf_lon.size:
         we_slice = slice(we_min, we_max)
     else:
-        we_slice - slice(we_min, we_max + 1)
+        we_slice = slice(we_min, we_max + 1)
     we_stag_slice = slice(we_min, we_slice.stop + 1)
 
     sn_min = np.searchsorted(wrf_lat, lat_min, side='left')
