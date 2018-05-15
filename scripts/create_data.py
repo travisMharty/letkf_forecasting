@@ -14,7 +14,7 @@ def main():
     time0 = time_py.time()
     dx = 0.25
     solar_noon = pd.Timestamp('12:30:00')
-    step = pd.Timestamp('3h')
+    step = pd.Timedelta('3h')
     parser = argparse.ArgumentParser(
         description='Create needed data given a date.')
     parser.add_argument('-y', '--year', type=int,
@@ -33,14 +33,18 @@ def main():
     results_file_path = os.path.join('/a2/uaren/travis/letkf_data/',
                                      f'{year:04}',
                                      f'{month:02}',
-                                     f'{day:02}',
+                                     f'{day:02}')
+    if not os.path.exists(results_file_path):
+        os.makedirs(results_file_path)
+    results_file_path = os.path.join(results_file_path,
                                      'data.nc')
     wrf_path = os.path.join('/a2/uaren/',
                             f'{year:04}',
                             f'{month:02}',
                             f'{day:02}',
-                            '/solar_3/wrfsolar_d02_hourly.nc')
-    data_file_path = os.path.join(home, '/data/satellite_data/')
+                            'solar_3/wrfsolar_d02_hourly.nc')
+
+    data_file_path = os.path.join(home, 'data/satellite_data/')
 
     solar_noon = solar_noon.replace(year=year, month=month, day=day)
     start = solar_noon - step
@@ -61,6 +65,7 @@ def main():
         filemode='w', level=logging.DEBUG)
     logging.info('Started')
     logging.info('Start to interpolate satellite data.')
+
     interpolated_ci = interpolate_data.interp_sat(
         time_range_ci, dx, data_file_path)
 
