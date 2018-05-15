@@ -34,14 +34,15 @@ def main():
                                                date['month'],
                                                date['day'],
                                                cfg['io']['run_name'])
-    home = os.path.expanduser('~')
+    home = '/a2/uaren/travis/'
     data_file_path = cfg['io']['data_file_path'].format(
         home=home, year=date['year'],
         month=date['month'], day=date['day'])
     time0 = time_py.time()
 
+    log_path = os.path.join(results_file_path, 'forecast.log')
     logging.basicConfig(
-        filename='/home2/travis/python_code/letkf_forecasting_other_things/logs/letkf.log',  # noqa
+        filename=log_path,
         filemode='w', level=logging.DEBUG)
     logging.info('Started')
 
