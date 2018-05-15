@@ -263,7 +263,8 @@ def save_newly_created_data(results_file_path, interpolated_ci,
     x_stag = np.concatenate([x - dx/2, [x[-1] + dx/2]])
     dy = (y[1] - y[0])
     y_stag = np.concatenate([y - dy/2, [y[-1] + dy/2]])
-
+    # if not os.path.exists(results_file_path):
+    #     os.makedirs(results_file_path)
     with Dataset(results_file_path, 'w') as store:
         store.createDimension('west_east', size=x.size)
         store.createDimension('south_north', size=y.size)
