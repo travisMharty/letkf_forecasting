@@ -134,6 +134,54 @@ def calc_time_range(*, sat_times, advect_params):
     return sat_times, sat_times_all
 
 
+def calc_crop(*, U, V, advect_params):
+    horizon = pd.Timestamp(advect_params['max_horizon'])
+    horizon = horizon.seconds
+    U_min = U.min()
+    U_max = U.max()
+    V_min = V.min()
+    V_max = V.max()
+    if U_max > 0:
+        left = int(U_max*horizon/250) + 12
+    else:
+        left = 40
+    if U_min < 0:
+        right = int(abs(U_min)*horizon/250) + 12
+    else:
+        right = 40
+    if V_max > 0:
+        down = int(V_max*horizon/250) + 12
+    else:
+        down = 40
+    if V_min < 0:
+        up = int(abs(V_min)*horizon/250) + 12
+    else:
+        up = 40
+    # based on sensor locations
+    we_min = 640
+    we_max = 800
+    sn_min = 600
+    sn_max = 824
+
+    we_min_crop = we_min - left
+    we_max_crop = we_max + right
+    sn_min_crop = sn_min - down
+    sn_max_crop = sn_max + up
+    we_stag_min_crop = we_min_crop
+    we_stag_max_crop = we_max_crop + 1
+    sn_stag_min_crop = sn_min_crop
+    sn_stag_max_crop = sn_max_crop + 1
+    to_return = {'we_min_crop': we_min_crop,
+                 'we_max_crop': we_max_crop,
+                 'sn_min_crop': sn_min_crop,
+                 'sn_max_crop': sn_max_crop,
+                 'we_stag_min_crop': we_stag_min_crop,
+                 'we_stag_max_crop': we_stag_max_crop,
+                 'sn_stag_min_crop': sn_stag_min_crop,
+                 'sn_stag_max_crop': sn_stag_max_crop}
+    return to_return
+
+
 def read_coords(*, data_file_path, advect_params, flags):
     with Dataset(data_file_path, mode='r') as store:
         sat_times = store.variables['time']
@@ -142,22 +190,22 @@ def read_coords(*, data_file_path, advect_params, flags):
             sat_times).tz_localize('UTC')
         we = store.variables['west_east'][:]
         sn = store.variables['south_north'][:]
-        we_min_crop = store.variables['ci'].we_min_crop
-        we_max_crop = store.variables['ci'].we_max_crop
-        sn_min_crop = store.variables['ci'].sn_min_crop
-        sn_max_crop = store.variables['ci'].sn_max_crop
+        U = store.variables['U'][:]
+        V = store.variables['V'][:]
         wind_times = store.variables['time_wind']
         wind_times = num2date(wind_times[:], wind_times.units)
         wind_times = pd.DatetimeIndex(
             wind_times).tz_localize('UTC')
-        we_stag_min_crop = store.variables['U'].we_min_crop
-        we_stag_max_crop = store.variables['U'].we_max_crop
-        sn_stag_min_crop = store.variables['V'].sn_min_crop
-        sn_stag_max_crop = store.variables['V'].sn_max_crop
-    we_slice = slice(we_min_crop, we_max_crop)
-    sn_slice = slice(sn_min_crop, sn_max_crop)
-    we_stag_slice = slice(we_stag_min_crop, we_stag_max_crop)
-    sn_stag_slice = slice(sn_stag_min_crop, sn_stag_max_crop)
+    crops = calc_crop(U=U, V=V,
+                      advect_params=advect_params)
+    we_slice = slice(crops['we_min_crop'],
+                     crops['we_max_crop'] + 1)
+    sn_slice = slice(crops['sn_min_crop'],
+                     crops['sn_max_crop'] + 1)
+    we_stag_slice = slice(crops['we_stag_min_crop'],
+                          crops['we_stag_max_crop'] + 1)
+    sn_stag_slice = slice(crops['sn_stag_min_crop'],
+                          crops['sn_stag_max_crop'] + 1)
     we_crop = we[we_slice]
     sn_crop = sn[sn_slice]
     we_stag_crop = we[we_stag_slice]
