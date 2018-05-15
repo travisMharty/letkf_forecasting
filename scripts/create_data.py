@@ -78,8 +78,8 @@ def main():
         interpolated_ci, raw_winds)
 
     logging.info('Saving Data.')
-    letkf_io.save_data(results_file_path, interpolated_ci,
-                       interpolated_wrf)
+    letkf_io.save_newly_created_data(results_file_path, interpolated_ci,
+                                     interpolated_wrf)
 
     time1 = time_py.time()
     print('It took: ' + str((time1 - time0)/60))
