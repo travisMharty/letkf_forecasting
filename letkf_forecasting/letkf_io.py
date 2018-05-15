@@ -10,9 +10,11 @@ import xarray as xr
 def create_folder(year, month, day, run_name):
     home = os.path.expanduser('~')
     run_num = 0
-    file_path_r = (f'{home}/results/{year:04}'
-                   f'/{month:02}/{day:02}/' +
-                   run_name + '_000')
+    file_path_r = os.path.join('/a2/uaren/travis/results/',
+                               f'{year:04}',
+                               f'{month:02}',
+                               f'{day:02}',
+                               run_name + '_000')
     if not os.path.exists(file_path_r):
         os.makedirs(file_path_r)
     else:
