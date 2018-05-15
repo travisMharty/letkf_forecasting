@@ -244,17 +244,17 @@ def return_day(year, month, day, run_name):
 def save_newly_created_data(results_file_path, interpolated_ci,
                             interpolated_wrf):
     sat_shape = interpolated_ci['fine_shape']
-    U_shape = interpolated_wrf['U_shape']
-    V_shape = interpolated_wrf['V_shape']
-    x = interpolated_ci['x_fine'].reshape(sat_shape)[0, :]
-    y = interpolated_ci['y_fine'].reshape(sat_shape)[:, 0]
-    ci = interpolated_ci['ci']
+    U_shape = interpolated_wrf['U_fine_shape']
+    V_shape = interpolated_wrf['V_fine_shape']
+    x = interpolated_ci['x_fine']
+    y = interpolated_ci['y_fine']
+    ci = interpolated_ci['ci_fine']
     time = ci.index.tz_convert(None).to_pydatetime()
     time = num2date(time, 'seconds since 1970-1-1')
     ci = ci.values.reshape(
         [time.size, sat_shape[0], sat_shape[1]])
-    U = interpolated_wrf['U']
-    V = interpolated_wrf['V']
+    U = interpolated_wrf['U_fine']
+    V = interpolated_wrf['V_fine']
     time_wind = U.index.tz_convert(None).to_pydatetime()
     time_wind = num2date(time_wind, 'seconds since 1970-1-1')
     U = U.values.reshape(time_wind.size, U_shape[0], U_shape[1])
