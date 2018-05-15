@@ -1,9 +1,7 @@
-import os
-import glob
 import xarray as xr
 import numpy as np
 import pandas as pd
-import letkf_forecasting.letkf_io as io
+import letkf_forecasting.letkf_io as letkf_io
 
 
 def return_horizon(df, horizon):
@@ -161,7 +159,7 @@ def error_compare(year, month, day, runs):
     truth = return_error_domain(truth)
     error_dfs = []
     for run in runs:
-        full_day = io.return_day(year, month, day, run)
+        full_day = letkf_io.return_day(year, month, day, run)
         full_day = add_crop_attributes(full_day)
         full_day = full_day['ci']
         full_day = return_error_domain(full_day)
@@ -185,7 +183,7 @@ def error_spread_compare(year, month, day, runs):
     spread_wind = []
     spread_ci = []
     for run in runs:
-        full_day = io.return_day(year, month, day, run)
+        full_day = letkf_io.return_day(year, month, day, run)
         full_day = add_crop_attributes(full_day)
         full_day = return_error_domain(full_day)
         u_spread = return_spread(full_day['U'], 0)
@@ -235,7 +233,7 @@ def error_stats(year, month, day, runs):
     for run in runs:
         print(run)
         adict = {'name': run, 'truth_sd': truth_sd}
-        full_day = io.return_day(year, month, day, run)
+        full_day = letkf_io.return_day(year, month, day, run)
         full_day = add_crop_attributes(full_day)
         full_day = return_error_domain(full_day)
         adict['u_spread'] = return_stat_df(
@@ -277,7 +275,7 @@ def error_stats_one_day(year, month, day, runs):
                 adict, truth, [15, 30, 45, 60])
             to_return.append(adict)
             continue
-        full_day = io.return_day(year, month, day, run)
+        full_day = letkf_io.return_day(year, month, day, run)
         full_day = add_crop_attributes(full_day)
         full_day = return_error_domain(full_day)
         full_day = full_day['ci']
@@ -375,7 +373,7 @@ def error_stats_many_days(dates, runs):
                 adict, truth, [15, 30, 45, 60])
             to_return.append(adict)
             continue
-        all_days = io.return_many_days(dates, run)
+        all_days = letkf_io.return_many_days(dates, run)
         all_days = all_days['ci']
         all_days = return_ens_mean(all_days)
 
