@@ -42,14 +42,6 @@ def return_ens_var(ds):
     return ds.var(dim='ensemble_number', keep_attrs=True)
 
 
-def add_crop_attributes(ds):
-    ds.attrs['we_er_min'] = 240
-    ds.attrs['we_er_max'] = 280
-    ds.attrs['sn_er_min'] = 32
-    ds.attrs['sn_er_max'] = 88
-    return ds
-
-
 def return_rmse(truth, full_day):
     rmse = (full_day - truth)**2
     rmse = np.sqrt(rmse.mean(dim=['south_north', 'west_east']))
@@ -155,12 +147,12 @@ def error_compare(year, month, day, runs):
     truth = xr.open_dataset(
         f'/home2/travis/data/{year:04}/{month:02}/{day:02}/data.nc')
     truth = truth['ci']
-    truth = add_crop_attributes(truth)
+    truth = letkf_io.add_crop_attributes(truth)
     truth = return_error_domain(truth)
     error_dfs = []
     for run in runs:
         full_day = letkf_io.return_day(year, month, day, run)
-        full_day = add_crop_attributes(full_day)
+        full_day = letkf_io.add_crop_attributes(full_day)
         full_day = full_day['ci']
         full_day = return_error_domain(full_day)
         full_day = return_ens_mean(full_day)
@@ -177,14 +169,14 @@ def error_spread_compare(year, month, day, runs):
     truth = xr.open_dataset(
         f'/home2/travis/data/{year:04}/{month:02}/{day:02}/data.nc')
     truth = truth['ci']
-    truth = add_crop_attributes(truth)
+    truth = letkf_io.add_crop_attributes(truth)
     truth = return_error_domain(truth)
     error_dfs = []
     spread_wind = []
     spread_ci = []
     for run in runs:
         full_day = letkf_io.return_day(year, month, day, run)
-        full_day = add_crop_attributes(full_day)
+        full_day = letkf_io.add_crop_attributes(full_day)
         full_day = return_error_domain(full_day)
         u_spread = return_spread(full_day['U'], 0)
         v_spread = return_spread(full_day['V'], 0)
@@ -225,7 +217,7 @@ def error_stats(year, month, day, runs):
     truth = xr.open_dataset(
         f'/home2/travis/data/{year:04}/{month:02}/{day:02}/data.nc')
     truth = truth['ci']
-    truth = add_crop_attributes(truth)
+    truth = letkf_io.add_crop_attributes(truth)
     truth = return_error_domain(truth)
     to_return = []
     truth_sd = np.sqrt(truth.var(dim=['south_north', 'west_east']))
@@ -234,7 +226,7 @@ def error_stats(year, month, day, runs):
         print(run)
         adict = {'name': run, 'truth_sd': truth_sd}
         full_day = letkf_io.return_day(year, month, day, run)
-        full_day = add_crop_attributes(full_day)
+        full_day = letkf_io.add_crop_attributes(full_day)
         full_day = return_error_domain(full_day)
         adict['u_spread'] = return_stat_df(
             truth, full_day['U'], return_spread)
@@ -262,7 +254,7 @@ def error_stats_one_day(year, month, day, runs):
     truth = xr.open_dataset(
         f'/home2/travis/data/{year:04}/{month:02}/{day:02}/data.nc')
     truth = truth['ci']
-    truth = add_crop_attributes(truth)
+    truth = letkf_io.add_crop_attributes(truth)
     truth = return_error_domain(truth)
     to_return = []
     # truth_sd = np.sqrt(truth.var()).item()
@@ -276,7 +268,7 @@ def error_stats_one_day(year, month, day, runs):
             to_return.append(adict)
             continue
         full_day = letkf_io.return_day(year, month, day, run)
-        full_day = add_crop_attributes(full_day)
+        full_day = letkf_io.add_crop_attributes(full_day)
         full_day = return_error_domain(full_day)
         full_day = full_day['ci']
         full_day = return_ens_mean(full_day)
@@ -360,7 +352,7 @@ def error_stats_many_days(dates, runs):
     truth_files = return_truth_files(dates)
     truth = xr.open_mfdataset(truth_files)
     truth = truth['ci']
-    truth = add_crop_attributes(truth)
+    truth = letkf_io.add_crop_attributes(truth)
     truth = return_error_domain(truth)
     to_return = []
     # truth_sd = np.sqrt(truth.var()).item()

@@ -5,7 +5,6 @@ import pandas as pd
 import glob
 from netCDF4 import Dataset, date2num, num2date
 import xarray as xr
-import letkf_forecasting.analyse_results as analyse_results
 
 
 def create_folder(year, month, day, run_name):
@@ -291,10 +290,18 @@ def return_day(year, month, day, run_name):
     return full_day
 
 
+def add_crop_attributes(ds):
+    ds.attrs['we_er_min'] = 240
+    ds.attrs['we_er_max'] = 280
+    ds.attrs['sn_er_min'] = 32
+    ds.attrs['sn_er_max'] = 88
+    return ds
+
+
 def preprocess_for_many_days(ds):
     # This automatically crops the domain to the error domain.
     # This is needed so that all the different days can be concatenated.
-    ds = analyse_results.add_crop_attributes(ds)
+    ds = add_crop_attributes(ds)
     ds = ds.sel(
         west_east=slice(ds.we_er_min, ds.we_er_max),
         south_north=slice(ds.sn_er_min, ds.sn_er_max),
