@@ -5,10 +5,10 @@ import pandas as pd
 import glob
 from netCDF4 import Dataset, date2num, num2date
 import xarray as xr
+import letkf_forecasting.analyse_results as analyse_results
 
 
 def create_folder(year, month, day, run_name):
-    home = os.path.expanduser('~')
     run_num = 0
     file_path_r = os.path.join('/a2/uaren/travis/results/',
                                f'{year:04}',
@@ -289,6 +289,45 @@ def return_day(year, month, day, run_name):
     full_day.horizon.attrs['units'] = 'minutes'
     full_day = xr.decode_cf(full_day)
     return full_day
+
+
+def preprocess_for_many_days(ds):
+    # This automatically crops the domain to the error domain.
+    # This is needed so that all the different days can be concatenated.
+    ds = analyse_results.add_crop_attributes(ds)
+    ds = ds.sel(
+        west_east=slice(ds.we_er_min, ds.we_er_max),
+        south_north=slice(ds.sn_er_min, ds.sn_er_max),
+        west_east_stag=slice(ds.we_er_min, ds.we_er_max),
+        south_north_stag=slice(ds.sn_er_min, ds.sn_er_max))
+    ds.coords['horizon'] = (ds.time - ds.time[0])/60
+    return ds
+
+
+def return_many_days_files(dates, run):
+    files = []
+    for date in dates:
+        year = date.year
+        month = date.month
+        day = date.day
+        folder = ('/a2/uaren/travis/results/' +
+                  f'{year:04}/{month:02}/{day:02}/{run}')
+        folder = find_run_folder(folder)
+        these_files = os.path.join(folder, '*.nc')
+        these_files = glob.glob(these_files)
+        files += these_files
+    return files
+
+
+def return_many_days(dates, run):
+    files = return_many_days_files(dates, run)
+    all_days = xr.open_mfdataset(
+        files,
+        preprocess=preprocess_for_many_days,
+        decode_cf=False)
+    all_days.horizon.attrs['units'] = 'minutes'
+    all_days = xr.decode_cf(all_days)
+    return all_days
 
 
 def save_newly_created_data(results_file_path, interpolated_ci,

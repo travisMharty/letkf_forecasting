@@ -273,7 +273,7 @@ def error_stats_one_day(year, month, day, runs):
         # adict = {'name': run, 'truth_sd': truth_sd}
         adict = {'name': run}
         if run == 'persistence':
-            adict = return_persistence_dict_one_day(
+            adict = return_persistence_dict(
                 adict, truth, [15, 30, 45, 60])
             to_return.append(adict)
             continue
@@ -298,7 +298,7 @@ def error_stats_one_day(year, month, day, runs):
     return to_return
 
 
-def return_persistence_dict_one_day(adict, truth, horizons):
+def return_persistence_dict(adict, truth, horizons):
     rmse_df = pd.DataFrame(columns=['rmse'])
     sd_df = pd.DataFrame(columns=['sd'])
     sd_truth_df = pd.DataFrame(columns=['true_sd'])
@@ -346,20 +346,49 @@ def return_persistence_dict_one_day(adict, truth, horizons):
     return adict
 
 
-def generate_plots(year, month, day, run_name):
-    truth = xr.open_dataset(
-        f'/home2/travis/data/{year:04}/{month:02}/{day:02}/data.nc')
+def return_truth_files(dates):
+    files = []
+    for date in dates:
+        year = date.year
+        month = date.month
+        day = date.day
+        file = ('/a2/uaren/travis/data/' +
+                f'{year:04}/{month:02}/{day:02}/data.nc')
+        files += file
+    return files
+
+
+def error_stats_many_days(dates, runs):
+    truth_files = return_truth_files(dates)
+    truth = xr.open_mfdataset(truth_files)
     truth = truth['ci']
     truth = add_crop_attributes(truth)
-    plot_folder = io.return_results_folder(year, month, day, run_name)
-    plot_folder = os.join(plot_folder, 'plots/')
-    if not os.path.exists(plot_folder):
-        os.makedirs(plot_folder)
-    full_day = io.return_day(year, month, day, run_name)
-    fore15 = return_horizon(full_day, 15)
-    fore30 = return_horizon(full_day, 30)
-    fore45 = return_horizon(full_day, 45)
-    fore60 = return_horizon(full_day, 60)
-    for forecast in [fore15, fore30, fore45, fore60]:
-        for time in forecast.time:
-            return None
+    truth = return_error_domain(truth)
+    to_return = []
+    # truth_sd = np.sqrt(truth.var()).item()
+    for run in runs:
+        print(run)
+        # adict = {'name': run, 'truth_sd': truth_sd}
+        adict = {'name': run}
+        if run == 'persistence':
+            adict = return_persistence_dict(
+                adict, truth, [15, 30, 45, 60])
+            to_return.append(adict)
+            continue
+        all_days = io.return_many_days(dates, run)
+        all_days = all_days['ci']
+        all_days = return_ens_mean(all_days)
+
+        rmse = return_rmse_one_day(truth, all_days)
+        forecast_sd, truth_sd = return_sd_one_day(truth, all_days)
+        bias = return_bias_one_day(truth, all_days)
+        corr = return_correlation_one_day(truth, all_days)
+
+        adict['rmse'] = rmse
+        adict['forecast_sd'] = forecast_sd
+        adict['truth_sd'] = truth_sd
+        adict['bias'] = bias
+        adict['correlation'] = corr
+
+        to_return.append(adict)
+    return to_return
