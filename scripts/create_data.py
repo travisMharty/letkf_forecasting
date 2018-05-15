@@ -1,10 +1,9 @@
 import argparse
-import yaml
 import os
 import logging
+import importlib
 import time as time_py
 import pandas as pd
-import letkf_forecasting.letkf_forecasting as lf
 import letkf_forecasting.letkf_io as letkf_io
 import letkf_forecasting.interpolate_data as interpolate_data
 import letkf_forecasting.get_wrf_data as get_wrf_data
@@ -38,6 +37,13 @@ def main():
         os.makedirs(results_file_path)
     results_file_path = os.path.join(results_file_path,
                                      'data.nc')
+    log_path = os.path.join(
+        os.path.split(results_file_path)[0], 'data_creation.log')
+    logging.shutdown()
+    importlib.reload(logging)
+    logging.basicConfig(
+        filename=log_path,
+        filemode='w', level=logging.DEBUG)
     wrf_path = os.path.join('/a2/uaren/',
                             f'{year:04}',
                             f'{month:02}',
@@ -58,14 +64,8 @@ def main():
     time_range_ci = pd.date_range(start_ci, end_ci, freq='15min')
     time_range_ci = time_range_ci.tz_localize('MST')
 
-    log_path = os.path.join(
-        os.path.split(results_file_path)[0], 'data_creation.log')
-    logging.basicConfig(
-        filename=log_path,
-        filemode='w', level=logging.DEBUG)
     logging.info('Started')
     logging.info('Start to interpolate satellite data.')
-
     interpolated_ci = interpolate_data.interp_sat(
         time_range_ci, dx, data_file_path)
 
