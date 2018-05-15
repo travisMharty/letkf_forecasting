@@ -352,7 +352,7 @@ def return_truth_files(dates):
         day = date.day
         file = ('/a2/uaren/travis/data/' +
                 f'{year:04}/{month:02}/{day:02}/data.nc')
-        files += file
+        files += [file]
     return files
 
 
