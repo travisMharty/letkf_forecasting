@@ -110,7 +110,7 @@ def advect_5min_ensemble(
 
         CI_fields = ensemble[wind_size:].copy()
         CI_fields = CI_fields.T
-        CI_fields = 1 - CI_fields
+        # CI_fields = 1 - CI_fields
         us = ensemble[:U_size].T.reshape(ens_size, U_shape[0], U_shape[1])
         vs = ensemble[U_size: V_size + U_size].T.reshape(
             ens_size, V_shape[0], V_shape[1])
@@ -122,7 +122,7 @@ def advect_5min_ensemble(
                              CI_fields, us, vs)
         temp = client.gather(futures)
         temp = np.stack(temp, axis=1)
-        temp = 1 - temp
+        # temp = 1 - temp
         ensemble[wind_size:] = temp
         client.restart()
         return ensemble
@@ -136,12 +136,12 @@ def advect_5min_single(
 
     CI_fields = ensemble[wind_size:].copy()
     CI_fields = CI_fields.reshape(domain_shape)
-    CI_fields = 1 - CI_fields
+    # CI_fields = 1 - CI_fields
     U = ensemble[:U_size].reshape(U_shape[0], U_shape[1])
     V = ensemble[U_size: V_size + U_size].reshape(
         V_shape[0], V_shape[1])
     CI_fields = advect_5min(CI_fields, dt, U, dx, V, dy, T_steps)
-    CI_fields = 1 - CI_fields
+    # CI_fields = 1 - CI_fields
     ensemble = np.concatenate([U.ravel(), V.ravel(), CI_fields.ravel()])
     return ensemble
 
