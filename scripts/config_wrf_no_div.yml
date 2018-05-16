@@ -41,6 +41,12 @@ pert_params:
   pert_mean: None
   edge_weight: None
 
+  Lx_wind: null
+  Ly_wind: null
+  tol_wind: null
+  pert_sigma_wind: null
+  pert_mean_wind: null
+
 # assimilation_params
 sat2sat:
   sig: None
