@@ -1,0 +1,73 @@
+date:
+  year: None
+  month: None
+  day: None
+
+io:
+  data_file_path: '{home}/data/{year:04}/{month:02}/{day:02}/data.nc'
+  run_name: 'radiosonde'
+
+flags:
+  assim: 0
+  perturbation: 0
+  div: 0
+  assim_opt_flow: 0
+  assim_sat2sat: 0
+  assim_sat2wind: 0
+  assim_wrf: 0
+  wrf_mean: 0
+  opt_flow: 0
+  perturb_winds: 0
+  radiosonde: 1
+  name: 'flag'
+
+advect_params:
+  start_time: 0
+  end_time: 0
+  C_max: 0.7
+  max_horizon: '1hour'
+  client_address: '127.0.0.1:8786'
+
+ens_params:
+  ens_num: 1
+  winds_sigma: None
+  ci_sigma: None
+
+pert_params:
+  Lx: None
+  Ly: None
+  tol: None
+  pert_sigma: None
+  pert_mean: None
+  edge_weight: None
+
+  Lx_wind: None
+  Ly_wind: None
+  tol_wind: None
+  pert_sigma_wind: None
+  pert_mean_wind: None
+
+# assimilation_params
+sat2sat:
+  sig: None
+  loc: None
+  infl: None
+  grid_size: None
+  name: 'sat2sat'
+sat2wind:
+  sig: None
+  loc: None
+  infl: None
+  grid_size: None
+  name: 'sat2wind'
+wrf:
+  sig: None
+  infl: None
+  loc: None
+  grid_size: None
+  name: 'wrf'
+opt_flow:
+  sig: None
+  loc: None
+  infl: None
+  name: 'opt_flow'
