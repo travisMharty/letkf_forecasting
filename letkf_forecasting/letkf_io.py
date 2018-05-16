@@ -277,6 +277,7 @@ def add_horizon(ds):
 
 def return_day(year, month, day, run_name):
     path = os.path.expanduser('~')
+    path = '/a2/uaren/travis/'
     path = os.path.join(
         path,
         f'results/{year:04}/{month:02}/{day:02}/' + run_name)
