@@ -3,7 +3,7 @@
 year=2014
 declare -a month_day=("4 9" "4 15" "4 18" "5 6" "5 9" "5 29" "6 11" "6 12")
 # declare -a month_day=("6 11" "6 12")
-
+# need to rerun ow_15 and ow_15_wp3 for 4 9
 for md in "${month_day[@]}"
 do
     date=($md)
