@@ -216,9 +216,8 @@ def return_stat_df(truth, full_day, stat_function):
 
 def error_stats(year, month, day, runs, base_folder):
     truth = os.path.join(base_folder,
-                         f'/data/{year:04}/{month:02}/{day:02}/data.nc')
-    # truth = xr.open_dataset(
-    #     f'{base_folder}/data/{year:04}/{month:02}/{day:02}/data.nc')
+                         f'data/{year:04}/{month:02}/{day:02}/data.nc')
+    truth = xr.open_dataset(truth)
     truth = truth['ci']
     truth = letkf_io.add_crop_attributes(truth)
     truth = return_error_domain(truth)
@@ -255,9 +254,8 @@ def error_stats(year, month, day, runs, base_folder):
 
 def error_stats_one_day(year, month, day, runs, base_folder):
     truth = os.path.join(base_folder,
-                         f'/data/{year:04}/{month:02}/{day:02}/data.nc')
-    # truth = xr.open_dataset(
-    #     f'{base_folder}/data/{year:04}/{month:02}/{day:02}/data.nc')
+                         f'data/{year:04}/{month:02}/{day:02}/data.nc')
+    truth = xr.open_dataset(truth)
     truth = truth['ci']
     truth = letkf_io.add_crop_attributes(truth)
     truth = return_error_domain(truth)
@@ -341,22 +339,8 @@ def return_persistence_dict(adict, truth, horizons):
     return adict
 
 
-def return_truth_files(dates, base_folder):
-    files = []
-    for date in dates:
-        year = date.year
-        month = date.month
-        day = date.day
-        file = os.path.join(base_folder,
-                            f'/data/{year:04}/{month:02}/{day:02}/data.nc')
-        files += [file]
-    return files
-
-
 def error_stats_many_days(dates, runs, base_folder):
-    truth_files = return_truth_files(dates, base_folder)
-    truth = xr.open_mfdataset(truth_files)
-    truth = truth['ci']
+    truth = letkf_io.return_many_truths(dates, base_folder)
     truth = letkf_io.add_crop_attributes(truth)
     truth = return_error_domain(truth)
     to_return = []

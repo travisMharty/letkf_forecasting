@@ -321,7 +321,7 @@ def return_many_days_files(dates, run, base_folder):
         day = date.day
         folder = os.path.join(
             base_folder,
-            f'/results/{year:04}/{month:02}/{day:02}/{run}')
+            f'results/{year:04}/{month:02}/{day:02}/{run}')
         folder = find_run_folder(folder)
         these_files = os.path.join(folder, '*.nc')
         these_files = glob.glob(these_files)
@@ -338,6 +338,29 @@ def return_many_days(dates, run, base_folder):
     all_days.horizon.attrs['units'] = 'minutes'
     all_days = xr.decode_cf(all_days)
     return all_days
+
+
+def return_truth_files(dates, base_folder):
+    files = []
+    for date in dates:
+        year = date.year
+        month = date.month
+        day = date.day
+        file = os.path.join(base_folder,
+                            f'data/{year:04}/{month:02}/{day:02}/data.nc')
+        files += [file]
+    return files
+
+
+def preprocess_many_truths(ds):
+    ds = ds['ci'].to_dataset()
+    return ds
+
+
+def return_many_truths(dates, base_folder):
+    truth_files = return_truth_files(dates, base_folder)
+    truth = xr.open_mfdataset(truth_files, preprocess_many_truths)
+    return truth
 
 
 def save_newly_created_data(results_file_path, interpolated_ci,
