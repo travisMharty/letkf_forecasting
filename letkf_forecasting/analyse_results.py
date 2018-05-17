@@ -55,7 +55,7 @@ def return_rmse_one_day(truth, full_day):
     for horizon in [15, 30, 45, 60]:
         rmse = (return_horizon(full_day, horizon) - truth)**2
         rmse = np.sqrt(rmse.mean(
-            dim=['south_north', 'west_east', 'time']).item())
+            dim=['south_north', 'west_east', 'time']).values.item())
         rmse_df.loc[horizon] = rmse
     return rmse_df
 
@@ -73,7 +73,7 @@ def return_bias_one_day(truth, full_day):
         bias = return_horizon(full_day, horizon)
         bias = bias - truth
         bias = bias.mean(dim=['south_north', 'west_east', 'time'])
-        bias = bias.item()
+        bias = bias.values.item()
         bias_df.loc[horizon] = bias
     return bias_df
 
@@ -123,10 +123,10 @@ def return_sd_one_day(truth, full_day):
         sd = sd.sel(time=times)
         sd_truth = truth.sel(time=times)
         sd = sd.var(dim=['south_north', 'west_east', 'time'])
-        sd = np.sqrt(sd).item()
+        sd = np.sqrt(sd.values.item())
         sd_df.loc[horizon] = sd
         sd_truth = sd_truth.var(dim=['south_north', 'west_east', 'time'])
-        sd_truth = np.sqrt(sd_truth).item()
+        sd_truth = np.sqrt(sd_truth.values.item())
         sd_truth_df.loc[horizon] = sd_truth
     return sd_df, sd_truth_df
 
@@ -303,7 +303,7 @@ def return_persistence_dict(adict, truth, horizons):
 
         rmse = (forecast - truth)**2
         rmse = rmse.mean(
-            dim=['south_north', 'west_east', 'time']).item()
+            dim=['south_north', 'west_east', 'time']).values.item()
         rmse = np.sqrt(rmse)
         rmse_df.loc[horizon] = rmse
 
@@ -311,19 +311,19 @@ def return_persistence_dict(adict, truth, horizons):
             truth.time.to_pandas(),
             forecast.time.to_pandas())
         sd = forecast.sel(time=sd_times).var(
-            dim=['south_north', 'west_east', 'time']).item()
+            dim=['south_north', 'west_east', 'time']).values.item()
         sd = np.sqrt(sd)
         sd_df.loc[horizon] = sd
 
         sd_truth = truth.sel(time=sd_times).var(
-            dim=['south_north', 'west_east', 'time']).item()
+            dim=['south_north', 'west_east', 'time']).values.item()
         sd_truth = np.sqrt(sd_truth)
         sd_truth_df.loc[horizon] = sd_truth
 
         t_mean = truth.mean(
-            dim=['south_north', 'west_east', 'time']).item()
+            dim=['south_north', 'west_east', 'time']).values.item()
         f_mean = forecast.mean(
-            dim=['south_north', 'west_east', 'time']).item()
+            dim=['south_north', 'west_east', 'time']).values.item()
         bias = f_mean - t_mean
         bias_df.loc[horizon] = bias
 
@@ -341,6 +341,7 @@ def return_persistence_dict(adict, truth, horizons):
 
 def error_stats_many_days(dates, runs, base_folder):
     truth = letkf_io.return_many_truths(dates, base_folder)
+    truth = truth['ci']
     truth = letkf_io.add_crop_attributes(truth)
     truth = return_error_domain(truth)
     to_return = []

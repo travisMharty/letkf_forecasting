@@ -283,7 +283,6 @@ def return_day(year, month, day, run_name, base_folder):
         f'results/{year:04}/{month:02}/{day:02}/' + run_name)
     path = find_run_folder(path)
     path = os.path.join(path, '*.nc')
-    print(path)
     full_day = xr.open_mfdataset(path,
                                  preprocess=add_horizon,
                                  decode_cf=False)
@@ -359,7 +358,7 @@ def preprocess_many_truths(ds):
 
 def return_many_truths(dates, base_folder):
     truth_files = return_truth_files(dates, base_folder)
-    truth = xr.open_mfdataset(truth_files, preprocess_many_truths)
+    truth = xr.open_mfdataset(truth_files, preprocess=preprocess_many_truths)
     return truth
 
 
