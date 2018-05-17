@@ -243,15 +243,16 @@ def return_single_time(data_file_path, times, time,
     return to_return
 
 
-def return_results_folder(year, month, day, run_name):
-    path = os.path.expanduser('~')
-    path = os.path.join(
-        path,
-        f'results/{year:04}/{month:02}/{day:02}/' + run_name)
-    paths = glob.glob(path + '*')
-    paths.sort()
-    path = paths[-1]
-    return path
+# def return_results_folder(year, month, day, run_name):
+#     # path = os.path.expanduser('~')
+#     path = '/a2/uaren/travis/'
+#     path = os.path.join(
+#         path,
+#         f'results/{year:04}/{month:02}/{day:02}/' + run_name)
+#     paths = glob.glob(path + '*')
+#     paths.sort()
+#     path = paths[-1]
+#     return path
 
 
 def find_run_folder(folder_path):
@@ -275,14 +276,14 @@ def add_horizon(ds):
     return ds
 
 
-def return_day(year, month, day, run_name):
-    path = os.path.expanduser('~')
-    path = '/a2/uaren/travis/'
+def return_day(year, month, day, run_name, base_folder):
+    path = base_folder
     path = os.path.join(
         path,
         f'results/{year:04}/{month:02}/{day:02}/' + run_name)
     path = find_run_folder(path)
     path = os.path.join(path, '*.nc')
+    print(path)
     full_day = xr.open_mfdataset(path,
                                  preprocess=add_horizon,
                                  decode_cf=False)
@@ -312,14 +313,15 @@ def preprocess_for_many_days(ds):
     return ds
 
 
-def return_many_days_files(dates, run):
+def return_many_days_files(dates, run, base_folder):
     files = []
     for date in dates:
         year = date.year
         month = date.month
         day = date.day
-        folder = ('/a2/uaren/travis/results/' +
-                  f'{year:04}/{month:02}/{day:02}/{run}')
+        folder = os.path.join(
+            base_folder,
+            f'/results/{year:04}/{month:02}/{day:02}/{run}')
         folder = find_run_folder(folder)
         these_files = os.path.join(folder, '*.nc')
         these_files = glob.glob(these_files)
@@ -327,8 +329,8 @@ def return_many_days_files(dates, run):
     return files
 
 
-def return_many_days(dates, run):
-    files = return_many_days_files(dates, run)
+def return_many_days(dates, run, base_folder):
+    files = return_many_days_files(dates, run, base_folder)
     all_days = xr.open_mfdataset(
         files,
         preprocess=preprocess_for_many_days,
