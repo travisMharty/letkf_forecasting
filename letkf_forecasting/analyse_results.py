@@ -320,12 +320,9 @@ def return_persistence_dict(adict, truth, horizons):
         sd_truth = np.sqrt(sd_truth)
         sd_truth_df.loc[horizon] = sd_truth
 
-        t_mean = truth.mean(
+        bias = forecast - truth
+        bias_df.loc[horizon] = bias.mean(
             dim=['south_north', 'west_east', 'time']).values.item()
-        f_mean = forecast.mean(
-            dim=['south_north', 'west_east', 'time']).values.item()
-        bias = f_mean - t_mean
-        bias_df.loc[horizon] = bias
 
         truth_df = truth.to_dataframe(name='ci')
         fore_df = forecast.to_dataframe(name='ci')
