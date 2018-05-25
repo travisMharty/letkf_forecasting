@@ -35,7 +35,7 @@ def main():
                                                cfg['date']['day'],
                                                cfg['io']['run_name'])
     yaml_file_path = os.path.join(
-        results_file_path, 'config_' + cfg['io']['run_name'])
+        results_file_path, 'config_' + cfg['io']['run_name'] + '.yml')
     cfg['version'] = __version__
     with open(yaml_file_path, 'w') as ymlfile:
         yaml.dump(cfg, ymlfile, default_flow_style=False)
