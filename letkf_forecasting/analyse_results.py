@@ -3,6 +3,8 @@ import xarray as xr
 import numpy as np
 import pandas as pd
 import letkf_forecasting.letkf_io as letkf_io
+import properscoring as ps
+import sklearn.calibration as skcal
 
 
 def return_horizon(df, horizon):
