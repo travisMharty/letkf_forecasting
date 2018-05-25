@@ -10,6 +10,7 @@ from netCDF4 import Dataset, num2date
 from metpy.units import units
 import metpy.calc.thermo as thermo
 from siphon.simplewebservice.wyoming import WyomingUpperAir
+from letkf_forecasting import __version__
 from letkf_forecasting.optical_flow import optical_flow
 from letkf_forecasting.letkf_io import (
     return_single_time,
@@ -55,6 +56,7 @@ def set_up_param_dict(*, date, io, flags, advect_params, ens_params,
         for k in keys:
             temp[name + k] = temp.pop(k)
         param_dict.update(temp)
+    param_dict['git_version'] = __version__
     return param_dict
 
 
