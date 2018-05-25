@@ -34,6 +34,11 @@ def main():
                                                cfg['date']['month'],
                                                cfg['date']['day'],
                                                cfg['io']['run_name'])
+    yaml_file_path = os.path.join(
+        results_file_path, 'config_' + cfg['io']['run_name'])
+    cfg['version'] = __version__
+    with open(yaml_file_path, 'w') as ymlfile:
+        yaml.dump(cfg, ymlfile, default_flow_style=False)
     home = '/a2/uaren/travis/'
     data_file_path = cfg['io']['data_file_path'].format(
         home=home, year=cfg['date']['year'],
@@ -57,11 +62,6 @@ def main():
     time1 = time_py.time()
     print('It took: ' + str((time1 - time0)/60))
     logging.info('It took: ' + str((time1 - time0)/60))
-
-    yaml_file_path = os.path.join(
-        results_file_path, 'config_' + cfg['io']['run_name'])
-    with open(yaml_file_path, 'w') as ymlfile:
-        yaml.dump(cfg, ymlfile, default_flow_style=False)
 
 if __name__ == '__main__':
     main()
