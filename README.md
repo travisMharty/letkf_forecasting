@@ -1,4 +1,48 @@
 # letkf_forecasting
+There are currently 5 scripts in this package:
+1. create_data.py
+1. run_create_data.sh
+1. run_forecast_system.py
+1. run_many_config.sh
+1. run_many_days.sh
+
+The script create_data.py reads satellite data from:
+/home2/travis/data/satellite_data/cloudiness_index.h5
+and
+/a2/uaren/2014/*/*/solar_3/wrfsolar_d02_hourly.nc
+and saves interpolated data to:
+/a2/uaren/travis/data/2014/*/*/data.nc
+
+The script run_create_data.sh is used to run several dates through
+create_data.py.
+
+The script run_forecast_system.py is used to run the forecast_system function
+in letkf_forecasting.py. This script must be called with an argument which
+is the path to a yaml configuration file such as config_example.py. The
+conifig file must importantly point to the location of 2d wind fields and
+satellite images for the day to be forecasted. Optionally,
+run_forecast_system.py can also include the year, month, and day so that the
+dates in the configuration file will be ignored and the provided date will be
+used instead.
+
+The script run_many_config.sh is used to run many different configuration files
+on the same date.
+
+The script run_many_days.sh is used to run many different dates on the same
+configuration files.
+
+There are currently 5 configuration files in this package:
+1. config_opt_flow.yml
+1. config_opt_wrf.yml
+1. config_radio.yml
+1. config_wrf_mean.yml
+1. config_wrf_no_div.yml
+1. config_wrf.yml
+
+Theses configuration files include the values of many different parameters
+including flags which determine which (if any) assimilations take place,
+the locations to read data from, and the values of parameters for assimilation
+and perturbation.
 
 There are currently 12 modules in this package:
 1. advection.py
@@ -19,15 +63,6 @@ eliminate duplicate code. The modules get_wrf_data.py, interpolate_data.py, and
 prepare_sat_data.py require rewriting and need to be combined with code in
 notebooks. This will be needed before a large statistical analysis.
 optical_flow.py could also use some refactoring to increase readability.
-
-The script run_forecast_system.py must be called with an argument which
-is the path to a yaml configuration file such as config_example.py. The
-conifig file must importantly point to the location of 2d wind fields and
-satellite images for the day to be forecasted. Optionally,
-run_forecast_system.py can also include the year, month, and day so that the
-dates in the configuration file will be ignored and the provided date will be
-used instead. There is also a bash file badly named run_bash.sh which can be
-called to run several different days in unison.
 
 The module advection.py contains functions required for the advection scheme.
 This includes the functions for removing divergence since these functions fit
