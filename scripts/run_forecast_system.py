@@ -5,6 +5,7 @@ import logging
 import time as time_py
 import letkf_forecasting.letkf_forecasting as lf
 import letkf_forecasting.letkf_io as letkf_io
+from letkf_forecasting import __version__
 
 
 def main():
@@ -22,22 +23,21 @@ def main():
 
     with open(args.file_path, 'r') as ymlfile:
         cfg = yaml.load(ymlfile)
-    date = cfg['date']
     if args.year is not None:
-        date['year'] = args.year
+        cfg['date']['year'] = args.year
     if args.month is not None:
-        date['month'] = args.month
+        cfg['date']['month'] = args.month
     if args.day is not None:
-        date['day'] = args.day
+        cfg['date']['day'] = args.day
     # Create path to save results
-    results_file_path = letkf_io.create_folder(date['year'],
-                                               date['month'],
-                                               date['day'],
+    results_file_path = letkf_io.create_folder(cfg['date']['year'],
+                                               cfg['date']['month'],
+                                               cfg['date']['day'],
                                                cfg['io']['run_name'])
     home = '/a2/uaren/travis/'
     data_file_path = cfg['io']['data_file_path'].format(
-        home=home, year=date['year'],
-        month=date['month'], day=date['day'])
+        home=home, year=cfg['date']['year'],
+        month=cfg['date']['month'], day=cfg['date']['day'])
     time0 = time_py.time()
 
     log_path = os.path.join(results_file_path, 'forecast.log')
@@ -58,6 +58,10 @@ def main():
     print('It took: ' + str((time1 - time0)/60))
     logging.info('It took: ' + str((time1 - time0)/60))
 
+    yaml_file_path = os.path.join(
+        results_file_path, 'config_' + cfg['io']['run_name'])
+    with open(yaml_file_path, 'w') as ymlfile:
+        yaml.dump(cfg, ymlfile, default_flow_style=False)
 
 if __name__ == '__main__':
     main()
