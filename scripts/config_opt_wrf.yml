@@ -9,14 +9,14 @@ io:
 
 flags:
   assim: 1
-  perturbation: 1
+  perturbation: 0
   div: 1
   assim_opt_flow: 1
   assim_sat2sat: 0
   assim_sat2wind: 0
   assim_wrf: 1
   wrf_mean: 0
-  opt_flow: 1
+  opt_flow: 0
   perturb_winds: 0
   radiosonde: 0
   name: 'flag'
@@ -34,12 +34,12 @@ ens_params:
   ci_sigma: 0.2
 
 pert_params:
-  Lx: 5
-  Ly: 5
-  tol: 0.005
-  pert_sigma: 0.02
-  pert_mean: 0
-  edge_weight: 2
+  Lx: None
+  Ly: None
+  tol: None
+  pert_sigma: None
+  pert_mean: None
+  edge_weight: None
 
   Lx_wind: None
   Ly_wind: None
@@ -61,13 +61,13 @@ sat2wind:
   grid_size: 20
   name: 'sat2wind'
 wrf:
-  sig: 2
-  infl: 2
-  loc: 4
+  sig: 8
+  infl: 5
+  loc: 5
   grid_size: 5
   name: 'wrf'
 opt_flow:
-  sig: 1
+  sig: .5
   loc: 20  # in km not grid spaces
-  infl: 2.5
+  infl: 2
   name: 'opt_flow'
