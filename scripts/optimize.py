@@ -4,7 +4,7 @@ import os
 import logging
 import time as time_py
 import letkf_forecasting.letkf_forecasting as lf
-import letkf_forecasting.letkf_io as letkf_io
+import letkf_forecasting.analyse_results as analyse_results
 from letkf_forecasting import __version__
 import numpy as np
 
@@ -22,24 +22,24 @@ def main():
                         help='The day you wish to run.')
     args = parser.parse_args()
 
-    with open(args.file_path, 'r') as ymlfile:
-        cfg = yaml.load(ymlfile)
-    if args.year is not None:
-        cfg['date']['year'] = args.year
-    if args.month is not None:
-        cfg['date']['month'] = args.month
-    if args.day is not None:
-        cfg['date']['day'] = args.day
     wrf_length_array = np.array([5, 20, 40])
     of_length_array = np.array([5, 20, 40])
-    wrf_inflation_array = np.array([1, 1.5, 2, 5])
-    of_inflation_array = np.array([1, 1.5, 2, 5])
+    wrf_inflation_array = np.array([1.5, 2, 5])
+    of_inflation_array = np.array([1.5, 2, 5])
     sig_pw = 0
     l_pw = 0
     for l_w in wrf_length_array:
         for i_w in wrf_inflation_array:
             for l_of in of_length_array:
                 for i_of in of_inflation_array:
+                    with open(args.file_path, 'r') as ymlfile:
+                        cfg = yaml.load(ymlfile)
+                    if args.year is not None:
+                        cfg['date']['year'] = args.year
+                    if args.month is not None:
+                        cfg['date']['month'] = args.month
+                    if args.day is not None:
+                        cfg['date']['day'] = args.day
                     i_w_str = str(i_w).replace('.', 'p')
                     i_of_str = str(i_of).replace('.', 'p')
                     sig_pw_str = str(sig_pw).replace('.', 'p')
