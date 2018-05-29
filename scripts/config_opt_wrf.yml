@@ -62,12 +62,12 @@ sat2wind:
   name: 'sat2wind'
 wrf:
   sig: 8
-  infl: 5
-  loc: 5 # in km not grid spaces
+  infl: None
+  loc: None # in km not grid spaces
   grid_size: 5
   name: 'wrf'
 opt_flow:
   sig: 1
-  loc: 20  # in km not grid spaces
-  infl: 2
+  loc: None  # in km not grid spaces
+  infl: None
   name: 'opt_flow'
