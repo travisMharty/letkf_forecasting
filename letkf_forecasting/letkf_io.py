@@ -280,7 +280,7 @@ def return_day(year, month, day, run_name, base_folder):
     path = base_folder
     path = os.path.join(
         path,
-        f'results/{year:04}/{month:02}/{day:02}/' + run_name)
+        f'{year:04}/{month:02}/{day:02}/' + run_name)
     path = find_run_folder(path)
     path = os.path.join(path, '*.nc')
     full_day = xr.open_mfdataset(path,
