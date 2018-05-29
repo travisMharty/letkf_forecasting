@@ -63,7 +63,7 @@ sat2wind:
 wrf:
   sig: 8
   infl: 5
-  loc: 5
+  loc: 5 # in km not grid spaces
   grid_size: 5
   name: 'wrf'
 opt_flow:
