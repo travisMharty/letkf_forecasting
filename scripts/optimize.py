@@ -2,6 +2,7 @@ import argparse
 import yaml
 import os
 import logging
+import importlib
 import time as time_py
 import letkf_forecasting.letkf_forecasting as lf
 import letkf_forecasting.analyse_results as analyse_results
@@ -22,10 +23,11 @@ def main():
                         help='The day you wish to run.')
     args = parser.parse_args()
 
-    wrf_length_array = np.array([5, 20, 40])
-    of_length_array = np.array([5, 20, 40])
-    wrf_inflation_array = np.array([1.5, 2, 5])
-    of_inflation_array = np.array([1.5, 2, 5])
+    # wrf_length_array = np.array([4, 10])
+    wrf_length_array = np.array([10])
+    of_length_array = np.array([4, 20])
+    wrf_inflation_array = np.array([1.5, 5])
+    of_inflation_array = np.array([1.5, 5])
     sig_pw = 0
     l_pw = 0
     for l_w in wrf_length_array:
@@ -83,6 +85,8 @@ def main():
 
                     log_path = os.path.join(results_folder_path,
                                             'forecast.log')
+                    logging.shutdown()
+                    importlib.reload(logging)
                     logging.basicConfig(
                         filename=log_path,
                         filemode='w', level=logging.DEBUG)
@@ -99,8 +103,8 @@ def main():
                             sat2wind=cfg['sat2wind'],
                             wrf=cfg['wrf'],
                             opt_flow=cfg['opt_flow'])
-                    except:
-                        logging.info('forecast_system failed')
+                    except Exception:
+                        logging.exception('forecast_system failed')
                     logging.info('Ended')
                     time1 = time_py.time()
                     print('It took: ' + str((time1 - time0)/60))
