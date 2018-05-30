@@ -1,7 +1,7 @@
 date:
-  year: None
-  month: None
-  day: None
+  year: null
+  month: null
+  day: null
 
 io:
   data_file_path: '{home}/data/{year:04}/{month:02}/{day:02}/data.nc'
@@ -26,48 +26,47 @@ advect_params:
   end_time: 0
   C_max: 0.7
   max_horizon: '1hour'
-  client_address: '127.0.0.1:8786'
 
 ens_params:
   ens_num: 1
-  winds_sigma: !!python/tuple [None, None]
-  ci_sigma: None
+  winds_sigma: !!python/tuple [null, null]
+  ci_sigma: null
 
 pert_params:
-  Lx: None
-  Ly: None
-  tol: None
-  pert_sigma: None
-  pert_mean: None
-  edge_weight: None
+  Lx: null
+  Ly: null
+  tol: null
+  pert_sigma: null
+  pert_mean: null
+  edge_weight: null
 
-  Lx_wind: None
-  Ly_wind: None
-  tol_wind: None
-  pert_sigma_wind: None
-  pert_mean_wind: None
+  Lx_wind: null
+  Ly_wind: null
+  tol_wind: null
+  pert_sigma_wind: null
+  pert_mean_wind: null
 
 # assimilation_params
 sat2sat:
-  sig: None
-  loc: None
-  infl: None
-  grid_size: None
+  sig: null
+  loc: null
+  infl: null
+  grid_size: null
   name: 'sat2sat'
 sat2wind:
-  sig: None
-  loc: None
-  infl: None
-  grid_size: None
+  sig: null
+  loc: null
+  infl: null
+  grid_size: null
   name: 'sat2wind'
 wrf:
-  sig: None
-  infl: None
-  loc: None
-  grid_size: None
+  sig: null
+  infl: null
+  loc: null
+  grid_size: null
   name: 'wrf'
 opt_flow:
-  sig: None
-  loc: None  # in km not grid spaces
-  infl: None
+  sig: null
+  loc: null  # in km not grid spaces
+  infl: null
   name: 'opt_flow'

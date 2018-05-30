@@ -1,7 +1,7 @@
 date:
-  year: None
-  month: None
-  day: None
+  year: null
+  month: null
+  day: null
 
 io:
   data_file_path: '{home}/data/{year:04}/{month:02}/{day:02}/data.nc'
@@ -26,7 +26,6 @@ advect_params:
   end_time: 0
   C_max: 0.7
   max_horizon: '1hour'
-  client_address: '127.0.0.1:8786'
 
 ens_params:
   ens_num: 20
@@ -41,11 +40,11 @@ pert_params:
   pert_mean: 0
   edge_weight: 0
 
-  Lx_wind: None
-  Ly_wind: None
-  tol_wind: None
-  pert_sigma_wind: None
-  pert_mean_wind: None
+  Lx_wind: null
+  Ly_wind: null
+  tol_wind: null
+  pert_sigma_wind: null
+  pert_mean_wind: null
 
 # assimilation_params
 sat2sat:
@@ -62,12 +61,12 @@ sat2wind:
   name: 'sat2wind'
 wrf:
   sig: 8
-  infl: None
-  loc: None # in km not grid spaces
+  infl: null
+  loc: null # in km not grid spaces
   grid_size: 5
   name: 'wrf'
 opt_flow:
   sig: 1
-  loc: None  # in km not grid spaces
-  infl: None
+  loc: null  # in km not grid spaces
+  infl: null
   name: 'opt_flow'

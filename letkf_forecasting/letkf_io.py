@@ -43,6 +43,8 @@ def save_netcdf(file_path_r, U, V, ci, param_dict, we_crop, sn_crop,
         for k, v in param_dict.items():
             if v is not None:
                 setattr(store, k, v)
+            else:
+                setattr(store, k, 'None')
         store.createDimension('west_east', size=we_crop.size)
         store.createDimension('south_north', size=sn_crop.size)
         store.createDimension('west_east_stag', size=we_stag_crop.size)
