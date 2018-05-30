@@ -216,7 +216,7 @@ def return_stat_df(truth, full_day, stat_function):
     return stats
 
 
-def error_stats(year, month, day, runs, base_folder):
+def error_stats(year, month, day, runs, base_folder, optimize_folder=None):
     truth = os.path.join(base_folder,
                          f'data/{year:04}/{month:02}/{day:02}/data.nc')
     truth = xr.open_dataset(truth)
@@ -229,7 +229,8 @@ def error_stats(year, month, day, runs, base_folder):
     for run in runs:
         print(run)
         adict = {'name': run, 'truth_sd': truth_sd}
-        full_day = letkf_io.return_day(year, month, day, run, base_folder)
+        full_day = letkf_io.return_day(year, month, day, run, base_folder,
+                                       optimize_folder)
         full_day = letkf_io.add_crop_attributes(full_day)
         full_day = return_error_domain(full_day)
         adict['u_spread'] = return_stat_df(
