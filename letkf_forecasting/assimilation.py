@@ -546,8 +546,6 @@ def assimilate_wrf(ensemble, observations,
     ens_size = ensemble.shape[1]
     kal_count = 0
     W_interp = np.zeros([assimilation_positions.size, ens_size**2])
-    # convert from grid space to km (assumes grid space is .25km)
-    localization_length_wind *= 4
     for interp_position in assimilation_positions:
         # for the irradiance portion of the ensemble
         local_positions = assimilation_accessories.nearest_positions(

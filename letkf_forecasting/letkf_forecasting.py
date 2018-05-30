@@ -383,13 +383,15 @@ def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
         if flags['assim_wrf']:
             logging.debug('Assim WRF')
             R_inverse = 1/wrf['sig']**2
+            localization_length_wind = int(round(
+                wrf['loc'] / (coords.we[1] - coords.we[0])))
             ensemble[:sys_vars.U_crop_size] = assimilate_wrf(
                 ensemble=ensemble[:sys_vars.U_crop_size],
                 observations=U.ravel(),
                 R_inverse=R_inverse,
                 wind_inflation=wrf['infl'],
                 wind_shape=sys_vars.U_crop_shape,
-                localization_length_wind=wrf['loc'],
+                localization_length_wind=localization_length_wind,
                 assimilation_positions=assim_vars.assim_pos_U_wrf,
                 assimilation_positions_2d=assim_vars.assim_pos_2d_U_wrf,
                 full_positions_2d=assim_vars.full_pos_2d_U_wrf)
@@ -401,7 +403,7 @@ def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
                 R_inverse=R_inverse,
                 wind_inflation=wrf['infl'],
                 wind_shape=sys_vars.V_crop_shape,
-                localization_length_wind=wrf['loc'],
+                localization_length_wind=localization_length_wind,
                 assimilation_positions=assim_vars.assim_pos_V_wrf,
                 assimilation_positions_2d=assim_vars.assim_pos_2d_V_wrf,
                 full_positions_2d=assim_vars.full_pos_2d_V_wrf)
