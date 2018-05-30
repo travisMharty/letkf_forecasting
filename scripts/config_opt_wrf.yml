@@ -26,6 +26,7 @@ advect_params:
   end_time: 0
   C_max: 0.7
   max_horizon: '1hour'
+  workers: 20
 
 ens_params:
   ens_num: 20
