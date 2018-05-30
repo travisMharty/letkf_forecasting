@@ -24,10 +24,10 @@ def main():
     args = parser.parse_args()
 
     # wrf_length_array = np.array([4, 10])
-    wrf_length_array = np.array([10])
+    wrf_length_array = np.array([4, 10])
     of_length_array = np.array([4, 20])
     wrf_inflation_array = np.array([1.5, 5])
-    of_inflation_array = np.array([1.5, 5])
+    of_inflation_array = np.array([1.5, 2])
     sig_pw = 0
     l_pw = 0
     for l_w in wrf_length_array:
