@@ -2,6 +2,7 @@ import argparse
 import yaml
 import os
 import logging
+import multiprocessing
 import time as time_py
 import letkf_forecasting.letkf_forecasting as lf
 import letkf_forecasting.letkf_io as letkf_io
@@ -19,6 +20,10 @@ def main():
                         help='The month you wish to run.')
     parser.add_argument('-d', '--day', type=int,
                         help='The day you wish to run.')
+    parser.add_argument('--home', help='base directory for data and results',
+                        default='/a2/uaren/travis/')
+    parser.add_argument('--workers', help='Number of advection workers',
+                        default=20, type=int)
     args = parser.parse_args()
 
     with open(args.file_path, 'r') as ymlfile:
@@ -30,26 +35,35 @@ def main():
     if args.day is not None:
         cfg['date']['day'] = args.day
     # Create path to save results
-    results_file_path = letkf_io.create_folder(cfg['date']['year'],
-                                               cfg['date']['month'],
-                                               cfg['date']['day'],
-                                               cfg['io']['run_name'])
+    results_file_path = letkf_io.create_folder(
+        os.path.join(args.home, 'results'), cfg['date']['year'],
+        cfg['date']['month'], cfg['date']['day'],
+        cfg['io']['run_name'])
     yaml_file_path = os.path.join(
         results_file_path, 'config_' + cfg['io']['run_name'] + '.yml')
     cfg['version'] = __version__
     with open(yaml_file_path, 'w') as ymlfile:
         yaml.dump(cfg, ymlfile, default_flow_style=False)
-    home = '/a2/uaren/travis/'
     data_file_path = cfg['io']['data_file_path'].format(
-        home=home, year=cfg['date']['year'],
+        home=args.home, year=cfg['date']['year'],
         month=cfg['date']['month'], day=cfg['date']['day'])
     time0 = time_py.time()
 
     log_path = os.path.join(results_file_path, 'forecast.log')
     logging.basicConfig(
         filename=log_path,
+        format='%(asctime)s %(levelname)s %(name)s %(message)s',
         filemode='w', level=logging.DEBUG)
     logging.info('Started')
+
+    # use less memory than fork
+    try:
+        multiprocessing.set_start_method('forkserver')
+    except RuntimeError:
+        pass
+    workers = (cfg['advect_params']['workers']
+               if 'workers' in cfg['advect_params']
+               else args.workers)
 
     lf.forecast_system(
         data_file_path=data_file_path, results_file_path=results_file_path,
@@ -57,11 +71,12 @@ def main():
         advect_params=cfg['advect_params'],
         ens_params=cfg['ens_params'], pert_params=cfg['pert_params'],
         sat2sat=cfg['sat2sat'], sat2wind=cfg['sat2wind'], wrf=cfg['wrf'],
-        opt_flow=cfg['opt_flow'])
+        opt_flow=cfg['opt_flow'], workers=workers)
     logging.info('Ended')
     time1 = time_py.time()
     print('It took: ' + str((time1 - time0)/60))
     logging.info('It took: ' + str((time1 - time0)/60))
+
 
 if __name__ == '__main__':
     main()

@@ -3,6 +3,8 @@ import scipy as sp
 import numexpr as ne
 import fenics as fe
 import logging
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 
 
 def time_deriv_3(q, dt, u, dx, v, dy):
@@ -91,22 +93,24 @@ def advect_5min(q, dt, U, dx, V, dy, T_steps):
     return q
 
 
+def time_deriv_3_loop(CI_field, U, V, domain_shape, T_steps, dt, dx, dy):
+    CI_field = CI_field.reshape(domain_shape)
+    for t in range(T_steps):
+        CI_field = time_deriv_3(np.ascontiguousarray(CI_field), dt,
+                                np.ascontiguousarray(U), dx,
+                                np.ascontiguousarray(V), dy)
+    return CI_field.ravel()
+
+
 def advect_5min_ensemble(
-        ensemble, dt, dx, dy, T_steps, U_shape, V_shape, domain_shape, client):
+        ensemble, dt, dx, dy, T_steps, U_shape, V_shape, domain_shape,
+        workers):
 
         """Check back later"""
         ens_size = ensemble.shape[1]
         U_size = U_shape[0]*U_shape[1]
         V_size = V_shape[0]*V_shape[1]
         wind_size = U_size + V_size
-
-        def time_deriv_3_loop(CI_field, U, V):
-            CI_field = CI_field.reshape(domain_shape)
-            for t in range(T_steps):
-                CI_field = time_deriv_3(CI_field, dt,
-                                        U, dx,
-                                        V, dy)
-            return CI_field.ravel()
 
         CI_fields = ensemble[wind_size:].copy()
         CI_fields = CI_fields.T
@@ -115,16 +119,21 @@ def advect_5min_ensemble(
         vs = ensemble[U_size: V_size + U_size].T.reshape(
             ens_size, V_shape[0], V_shape[1])
 
+        func = partial(time_deriv_3_loop, domain_shape=domain_shape,
+                       T_steps=T_steps,
+                       dt=dt, dx=dx, dy=dy)
         # us = ndimage.uniform_filter(us, (0, 20, 20))
         # vs = ndimage.uniform_filter(vs, (0, 20, 20))
+        logging.debug('Running 5min ensemble advection')
 
-        futures = client.map(time_deriv_3_loop,
-                             CI_fields, us, vs)
-        temp = client.gather(futures)
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            futures = executor.map(func,
+                                   CI_fields, us, vs)
+            temp = list(futures)
         temp = np.stack(temp, axis=1)
         # temp = 1 - temp
         ensemble[wind_size:] = temp
-        client.restart()
+        logging.debug('Done with advection')
         return ensemble
 
 

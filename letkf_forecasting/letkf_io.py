@@ -7,9 +7,8 @@ from netCDF4 import Dataset, date2num, num2date
 import xarray as xr
 
 
-def create_folder(year, month, day, run_name):
-    run_num = 0
-    file_path_r = os.path.join('/a2/uaren/travis/results/',
+def create_folder(results_base_path, year, month, day, run_name):
+    file_path_r = os.path.join(results_base_path,
                                f'{year:04}',
                                f'{month:02}',
                                f'{day:02}',

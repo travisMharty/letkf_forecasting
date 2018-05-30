@@ -2,7 +2,6 @@ import logging
 import os
 from collections import namedtuple
 import numpy as np
-from distributed import Client
 import pandas as pd
 import fenics as fe
 import scipy as sp
@@ -126,8 +125,7 @@ def calc_system_variables(*, coords, advect_params, flags, pert_params):
 
 def calc_assim_variables(*, sys_vars, advect_params, flags, sat2sat, sat2wind,
                          wrf):
-    client = Client(advect_params['client_address'])
-    assim_vars = {'client': client}
+    assim_vars = {}
     if flags['assim_sat2sat']:
         assim_pos, assim_pos_2d, full_pos_2d = (
             assimilation_position_generator(sys_vars.ci_crop_shape,
@@ -218,6 +216,10 @@ def return_ensemble(*, data_file_path, ens_params, coords, flags):
             ens_size=ens_params['ens_num'])
     else:
         ensemble = np.concatenate([U.ravel(), V.ravel(), q.ravel()])[:, None]
+    # make sure arrays are not masked arrays, will fail if the mask is
+    # actually used when reshaping
+    shape = ensemble.shape
+    ensemble = np.ma.compressed(ensemble).reshape(shape)
     return ensemble
 
 
@@ -257,7 +259,7 @@ def preprocess(*, ensemble, flags, remove_div_flag, coords, sys_vars):
 
 
 def forecast(*, ensemble, flags, coords, time_index, sat_time,
-             sys_vars, advect_params, pert_params, assim_vars):
+             sys_vars, advect_params, pert_params, assim_vars, workers):
     save_times = pd.date_range(sat_time,
                                periods=(sys_vars.num_of_horizons + 1),
                                freq='15min')
@@ -290,7 +292,7 @@ def forecast(*, ensemble, flags, coords, time_index, sat_time,
                     ensemble, dt, sys_vars.dx, sys_vars.dy,
                     T_steps,
                     sys_vars.U_crop_shape, sys_vars.V_crop_shape,
-                    sys_vars.ci_crop_shape, assim_vars.client)
+                    sys_vars.ci_crop_shape, workers)
             else:
                 ensemble[:, 0] = advect_5min_single(
                     ensemble[:, 0], dt, sys_vars.dx, sys_vars.dy,
@@ -539,7 +541,7 @@ def maybe_assim_opt_flow(*, ensemble, data_file_path, sat_time, time_index,
 
 def forecast_system(*, data_file_path, results_file_path,
                     date, io, flags, advect_params, ens_params, pert_params,
-                    sat2sat, sat2wind, wrf, opt_flow):
+                    sat2sat, sat2wind, wrf, opt_flow, workers):
     param_dict, coords, sys_vars, assim_vars, ensemble = forecast_setup(
         data_file_path=data_file_path, date=date, io=io,
         flags=flags, advect_params=advect_params,
@@ -558,7 +560,7 @@ def forecast_system(*, data_file_path, results_file_path,
         flags=flags, coords=coords, time_index=time_index,
         sys_vars=sys_vars,
         advect_params=advect_params, pert_params=pert_params,
-        assim_vars=assim_vars)
+        assim_vars=assim_vars, workers=workers)
     save(ensemble_array=ensemble_array, coords=coords,
          ens_params=ens_params, param_dict=param_dict,
          sys_vars=sys_vars, save_times=save_times,
@@ -598,7 +600,7 @@ def forecast_system(*, data_file_path, results_file_path,
             flags=flags, coords=coords, time_index=time_index,
             sys_vars=sys_vars,
             advect_params=advect_params, pert_params=pert_params,
-            assim_vars=assim_vars)
+            assim_vars=assim_vars, workers=workers)
         save(ensemble_array=ensemble_array, coords=coords,
              ens_params=ens_params, param_dict=param_dict,
              sys_vars=sys_vars, save_times=save_times,
