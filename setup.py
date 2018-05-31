@@ -4,6 +4,7 @@ try:
     from setuptools import setup, find_packages
 except ImportError:
     raise RuntimeError('setuptools is required')
+from Cython.Build import cythonize
 
 
 import versioneer
@@ -15,7 +16,6 @@ PACKAGE = 'letkf_forecasting'
 SHORT_DESC = 'Make forecasts using the LETKF and satellite data'
 AUTHOR = 'Travis Harty'
 
-
 setup(
     name=PACKAGE,
     version=versioneer.get_version(),
@@ -24,5 +24,6 @@ setup(
     author=AUTHOR,
     packages=find_packages(),
     include_package_data=True,
-    scripts=[os.path.join('scripts', s) for s in os.listdir('scripts')]
+    scripts=[os.path.join('scripts', s) for s in os.listdir('scripts')],
+    ext_modules=cythonize('letkf_forecasting/*.pyx')
 )

@@ -99,7 +99,7 @@ def main():
                     month = cfg['date']['month']
                     day = cfg['date']['day']
                     results_folder_path = os.path.join(
-                        '/a2/uaren/travis/results_opt/',
+                        f'{args.home}/results_opt/',
                         f'{year:04}',
                         f'{month:02}',
                         f'{day:02}',
@@ -112,9 +112,8 @@ def main():
 
                     with open(yaml_file_path, 'w') as ymlfile:
                         yaml.dump(cfg, ymlfile, default_flow_style=False)
-                    home = '/a2/uaren/travis/'
                     data_file_path = cfg['io']['data_file_path'].format(
-                        home=home, year=cfg['date']['year'],
+                        home=args.home, year=cfg['date']['year'],
                         month=cfg['date']['month'], day=cfg['date']['day'])
                     time0 = time_py.time()
                     set_up_logging(results_folder_path)
@@ -146,7 +145,7 @@ def main():
                     logging.info('begin error analysis')
                     try:
                         error_analysis(cfg, results_folder_path,
-                                       home, 'results_opt')
+                                       args.home, 'results_opt')
                         logging.inlfo('error analysis ended')
                     except Exception:
                         logging.exception('error_analysis failed')

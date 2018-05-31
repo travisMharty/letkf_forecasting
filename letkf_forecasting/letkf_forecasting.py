@@ -270,7 +270,7 @@ def forecast(*, ensemble, flags, coords, time_index, sat_time,
             coords.sat_times[time_index]).seconds/(60*15))
     else:
         num_of_advect = 0
-        background = None
+    background = None
     logging.debug(f'15min steps to background: {num_of_advect}')
     ensemble_array = ensemble.copy()[None, :, :]
     cx = abs(ensemble[:sys_vars.U_crop_size]).max()

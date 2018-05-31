@@ -558,11 +558,8 @@ def assimilate_wrf(ensemble, observations,
         eig_value, eig_vector = np.linalg.eigh(
             (ens_size-1)*np.eye(ens_size)/wind_inflation +
             C.dot(local_ensemble))
-        P_tilde = eig_vector.copy()
-        W_a = eig_vector.copy()
-        for i, num in enumerate(eig_value):
-            P_tilde[:, i] *= 1/num
-            W_a[:, i] *= 1/np.sqrt(num)
+        P_tilde = eig_vector / eig_value
+        W_a = eig_vector / np.sqrt(eig_value)
         P_tilde = P_tilde.dot(eig_vector.T)
         W_a = W_a.dot(eig_vector.T)*np.sqrt(ens_size - 1)
         w_a_bar = P_tilde.dot(C.dot(local_obs - local_x_bar))

@@ -5,9 +5,11 @@ import fenics as fe
 import logging
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
+from letkf_forecasting.advect import cython_space_deriv_4, cython_time_deriv_3
+fe.set_log_level(30)
 
 
-def time_deriv_3(q, dt, u, dx, v, dy):
+def _time_deriv_3(q, dt, u, dx, v, dy):
     k = space_deriv_4(q, u, dx, v, dy)
     k = space_deriv_4(q + dt/3*k, u, dx, v, dy)
     k = space_deriv_4(q + dt/2*k, u, dx, v, dy)
@@ -15,7 +17,38 @@ def time_deriv_3(q, dt, u, dx, v, dy):
     return qout
 
 
+def _time_deriv_3_cython(q, dt, u, dx, v, dy):
+    qout = np.empty_like(q)
+    F_x = np.empty_like(v)
+    F_y = np.empty_like(u)
+    u_w = u[:, 0:2].clip(max=0)
+    u_e = u[:, -2:].clip(min=0)
+    v_n = v[-2:, :].clip(min=0)
+    v_s = v[:2, :].clip(max=0)
+    qint = np.empty_like(q)
+    cython_time_deriv_3(q, qint, u, v, qout, F_x, F_y, dx, dy, dt,
+                        u_w, u_e, v_n, v_s)
+    return qout
+
+
+time_deriv_3 = _time_deriv_3_cython
+
+
+def _space_deriv_4_cython(q, u, dx, v, dy):
+    qout = np.empty_like(q)
+    fy = np.empty_like(v)
+    fx = np.empty_like(u)
+    u_w = u[:, 0:2].clip(max=0)  # noqa
+    u_e = u[:, -2:].clip(min=0)  # noqa
+    v_n = v[-2:, :].clip(min=0)  # noqa
+    v_s = v[0:2, :].clip(max=0)  # noqa
+    cython_space_deriv_4(q, u, v, qout, fx, fy, dx, dy,
+                         u_w, u_e, v_n, v_s)
+    return qout
+
+
 def space_deriv_4(q, u, dx, v, dy):
+    ne_eval = partial(ne.evaluate, optimization='aggressive')
     qout = np.zeros_like(q)
     F_x = np.zeros_like(u)
     F_y = np.zeros_like(v)
@@ -26,24 +59,24 @@ def space_deriv_4(q, u, dx, v, dy):
     q12 = q[:, 1:-2]  # noqa
     q3 = q[:, 3:]     # noqa
     qn3 = q[:, :-3]   # noqa
-    F_x[:, 2:-2] = ne.evaluate('u22 / 12 * (7 * (q21 + q12) - (q3 + qn3))')
+    F_x[:, 2:-2] = ne_eval('u22 / 12 * (7 * (q21 + q12) - (q3 + qn3))')
 
     v22 = v[2:-2, :]            # noqa
     q21 = q[2:-1, :]            # noqa
     q12 = q[1:-2, :]            # noqan
     q3 = q[3:, :]               # noqa
     qn3 = q[:-3, :]             # noqa
-    F_y[2:-2, :] = ne.evaluate('v22 / 12 * (7 * (q21 + q12) - (q3 + qn3))')
+    F_y[2:-2, :] = ne_eval('v22 / 12 * (7 * (q21 + q12) - (q3 + qn3))')
 
     qo22 = qout[:, 2:-2]
     fx32 = F_x[:, 3:-2]         # noqa
     fx23 = F_x[:, 2:-3]         # noqa
-    qout[:, 2:-2] = ne.evaluate('qo22 - (fx32 - fx23) / dx')
+    qout[:, 2:-2] = ne_eval('qo22 - (fx32 - fx23) / dx')
 
     qo22 = qout[2:-2, :]        # noqa
     fy32 = F_y[3:-2, :]         # noqa
     fy23 = F_y[2:-3, :]         # noqa
-    qout[2:-2, :] = ne.evaluate('qo22 - (fy32 - fy23) / dy')
+    qout[2:-2, :] = ne_eval('qo22 - (fy32 - fy23) / dy')
 
     # boundary calculation
     u_w = u[:, 0:2].clip(max=0)  # noqa
@@ -54,7 +87,7 @@ def space_deriv_4(q, u, dx, v, dy):
     q02 = q[:, 0:2]
     u13 = u[:, 1:3]             # noqa
     u02 = u[:, 0:2]             # noqa
-    qout[:, 0:2] = ne.evaluate(
+    qout[:, 0:2] = ne_eval(
         'qo02 - ((u_w/dx)*(q13 - q02) + (q02/dx)*(u13 - u02))')
 
     qo2 = qout[:, -2:]
@@ -62,7 +95,7 @@ def space_deriv_4(q, u, dx, v, dy):
     q31 = q[:, -3:-1]
     u2 = u[:, -2:]              # noqa
     u31 = u[:, -3:-1]           # noqa
-    qout[:, -2:] = ne.evaluate(
+    qout[:, -2:] = ne_eval(
         'qo2 - ((u_e/dx)*(q2 - q31) + (q2/dx)*(u2 - u31))')
 
     v_n = v[-2:, :].clip(min=0)  # noqa
@@ -73,7 +106,7 @@ def space_deriv_4(q, u, dx, v, dy):
     q02 = q[0:2, :]             # noqa
     v13 = v[1:3, :]             # noqa
     v02 = v[0:2, :]             # noqa
-    qout[0:2, :] = ne.evaluate(
+    qout[0:2, :] = ne_eval(
         'qo02 - ((v_s/dx)*(q13 - q02) + (q02/dx)*(v13 - v02))')
 
     qo2 = qout[-2:, :]          # noqa
@@ -81,7 +114,7 @@ def space_deriv_4(q, u, dx, v, dy):
     q31 = q[-3:-1, :]           # noqa
     v2 = v[-2:, :]              # noqa
     v31 = v[-3:-1, :]           # noqa
-    qout[-2:, :] = ne.evaluate(
+    qout[-2:, :] = ne_eval(
         'qo2 - ((v_n/dx)*(q2 - q31) + (q2/dx)*(v2 - v31))')
     return qout
 
