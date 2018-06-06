@@ -62,3 +62,12 @@ target/
 
 # notebook that can be safely ignored
 Scratch.ipynb
+/scripts/error_analysis.py
+/scripts/old_config/config_bare.yml
+/scripts/old_config/config_no_assim_wrf.yml
+/scripts/ow_15.yml
+/scripts/ow_15_wp1.yml
+/scripts/ow_15_wp2.yml
+/scripts/ow_15_wp3.yml
+/scripts/ow_15_wp4.yml
+/scripts/*.yml
