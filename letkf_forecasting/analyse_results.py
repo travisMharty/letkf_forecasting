@@ -229,6 +229,11 @@ def error_stats(year, month, day, runs, base_folder, optimize_folder=None):
     for run in runs:
         print(run)
         adict = {'name': run, 'truth_sd': truth_sd}
+        if run == 'persistence':
+            adict = return_persistence_dict(
+                adict, truth, [15, 30, 45, 60])
+            to_return.append(adict)
+            continue
         full_day = letkf_io.return_day(year, month, day, run, base_folder,
                                        optimize_folder)
         full_day = letkf_io.add_crop_attributes(full_day)
@@ -255,6 +260,33 @@ def error_stats(year, month, day, runs, base_folder, optimize_folder=None):
     return to_return
 
 
+def return_persistence_dict(adict, truth, horizons):
+    rmse_df = []
+    sd_df = []
+    bias_df = []
+    corr_df = []
+    for horizon in horizons:
+        forecast = truth.copy()
+        forecast['time'] = forecast.time + pd.Timedelta(horizon, 'm')
+
+        rmse = return_rmse(truth, forecast)
+        rmse_df.append(rmse)
+
+        sd = return_sd(truth, forecast)
+        sd_df.append(sd)
+
+        bias = return_bias(truth, forecast)
+        bias_df.append(bias)
+
+        corr = return_correlation(truth, forecast)
+        corr_df.append(corr)
+    adict['rmse'] = pd.concat(rmse_df, axis=1, keys=horizons)
+    adict['forecast_sd'] = pd.concat(sd_df, axis=1, keys=horizons)
+    adict['bias'] = pd.concat(bias_df, axis=1, keys=horizons)
+    adict['correlation'] = pd.concat(corr_df, axis=1, keys=horizons)
+    return adict
+
+
 def error_stats_one_day(year, month, day, runs, base_folder):
     truth = os.path.join(base_folder,
                          f'data/{year:04}/{month:02}/{day:02}/data.nc')
@@ -269,7 +301,7 @@ def error_stats_one_day(year, month, day, runs, base_folder):
         # adict = {'name': run, 'truth_sd': truth_sd}
         adict = {'name': run}
         if run == 'persistence':
-            adict = return_persistence_dict(
+            adict = return_persistence_dict_one_day(
                 adict, truth, [15, 30, 45, 60])
             to_return.append(adict)
             continue
@@ -294,7 +326,7 @@ def error_stats_one_day(year, month, day, runs, base_folder):
     return to_return
 
 
-def return_persistence_dict(adict, truth, horizons):
+def return_persistence_dict_one_day(adict, truth, horizons):
     rmse_df = pd.DataFrame(columns=['rmse'])
     sd_df = pd.DataFrame(columns=['sd'])
     sd_truth_df = pd.DataFrame(columns=['true_sd'])
