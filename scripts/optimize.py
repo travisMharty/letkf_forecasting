@@ -28,6 +28,9 @@ def set_up_configuration(args, l_w, i_w, l_of, i_of, sig_pw, l_pw):
     cfg['wrf']['infl'] = i_w
     cfg['opt_flow']['loc'] = l_of
     cfg['opt_flow']['infl'] = i_of
+    cfg['pert_params']['Lx_wind'] = l_pw
+    cfg['pert_params']['Ly_wind'] = l_pw
+    cfg['pert_params']['pert_sigma_wind'] = sig_pw
     opt_str = (f'_{l_w:03}_{i_w_str}_{l_of:03}_'
                + f'{i_of_str}_{l_pw:03}_{sig_pw_str}')
     cfg['io']['run_name'] = (
@@ -81,13 +84,12 @@ def main():
                         default=20, type=int)
     args = parser.parse_args()
 
-    # wrf_length_array = np.array([4, 10])
-    wrf_length_array = np.array([4, 10])
-    of_length_array = np.array([4, 20])
+    wrf_length_array = np.array([2, 4, 10])
+    of_length_array = np.array([4, 10, 20])
     wrf_inflation_array = np.array([1.5, 4])
     of_inflation_array = np.array([1.5, 2])
-    sig_pw = 0
-    l_pw = 0
+    sig_pw = .25
+    l_pw = 50
     for l_w in wrf_length_array:
         for i_w in wrf_inflation_array:
             for l_of in of_length_array:
@@ -146,7 +148,7 @@ def main():
                     try:
                         error_analysis(cfg, results_folder_path,
                                        args.home, 'results_opt')
-                        logging.inlfo('error analysis ended')
+                        logging.info('error analysis ended')
                     except Exception:
                         logging.exception('error_analysis failed')
                     time1 = time_py.time()
