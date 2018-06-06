@@ -41,10 +41,11 @@ def save_netcdf(file_path_r, U, V, ci, param_dict, we_crop, sn_crop,
     file_path = os.path.join(file_path_r, time2name(sat_times[0]))
     with Dataset(file_path, mode='w') as store:
         for k, v in param_dict.items():
-            if v is not None:
+            try:
                 setattr(store, k, v)
-            else:
-                setattr(store, k, 'None')
+            except Exception:
+                setattr(store, k, str(v))
+
         store.createDimension('west_east', size=we_crop.size)
         store.createDimension('south_north', size=sn_crop.size)
         store.createDimension('west_east_stag', size=we_stag_crop.size)
