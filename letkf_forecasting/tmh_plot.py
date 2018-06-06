@@ -169,11 +169,10 @@ def var_plot(ensemble, domain_shape,
 
 def ensemble_stamps_cdf(
         others, other_titles, ensemble, nrows, ncols, domain_shape, adjust,
-        cmap='Blues', vmin=0, vmax=1):
+        cmap='Blues', vmin=0, vmax=1, nc=11):
     if vmin is None or vmax is None:
         vmax = ensemble.max()
         vmin = -vmax
-    nc = 11
     bounds = np.linspace(vmin, vmax, nc)
     norm = colors.BoundaryNorm(boundaries=bounds, ncolors=256)
     fraction = 0.10
@@ -340,7 +339,7 @@ def ensemble_stamps(
 
 
 def subplots(data, x, y, subplot_titles, axes_labels, sup_title=None,
-             cb_label=None, cmap='Blues', vmax=None, adjust=1):
+             cb_label=None, cmap='Blues', vmax=None, adjust=1, nc=11):
     """
     data and subplot_titles are lists of the same length
     """
@@ -352,7 +351,6 @@ def subplots(data, x, y, subplot_titles, axes_labels, sup_title=None,
         vmax = 1
     else:
         vmin = -vmax
-    nc = 11
     bounds = np.linspace(vmin, vmax, nc)
     norm = colors.BoundaryNorm(boundaries=bounds, ncolors=256)
     suptitle_x = .5*(1 - fraction)
