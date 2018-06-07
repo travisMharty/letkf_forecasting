@@ -79,7 +79,12 @@ def main():
         f'{month:02}',
         f'{day:02}',
         cfg['io']['run_name'])
-    results_folder_path = letkf_io.find_latest_run(results_folder_path)
+    if cfg['io']['run_name'] == 'persistence':
+        results_folder_path = results_folder_path + '_000'
+        if not os.path.exists(results_folder_path):
+            os.makedirs(results_folder_path)
+    else:
+        results_folder_path = letkf_io.find_latest_run(results_folder_path)
     time0 = time_py.time()
     set_up_logging(results_folder_path)
     logging.info('begin error analysis')
