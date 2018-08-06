@@ -216,6 +216,40 @@ def return_stat_df(truth, full_day, stat_function):
     return stats
 
 
+def find_error_stats(year, month, day,
+                     runs, base_folder):
+    to_return = []
+    for run in runs:
+        results_file_path = os.path.join(
+            base_folder,
+            f'results/{year:04}/{month:02}/{day:02}/',
+            run)
+        results_file_path = letkf_io.find_latest_run(
+            results_file_path)
+        print(results_file_path)
+        truth_sd = pd.read_hdf(
+            os.path.join(results_file_path, 'truth_sd.h5'))
+        adict = {'name': run, 'truth_sd': truth_sd}
+        u_spread_file = os.path.join(results_file_path, 'u_spread.h5')
+        if os.path.exists(u_spread_file):
+            adict['u_spread'] = pd.read_hdf(
+                u_spread_file)
+            adict['v_spread'] = pd.read_hdf(
+                os.path.join(results_file_path, 'v_spread.h5'))
+            adict['spread_ci'] = pd.read_hdf(
+                os.path.join(results_file_path, 'spread_ci.h5'))
+        adict['rmse'] = pd.read_hdf(
+            os.path.join(results_file_path, 'rmse.h5'))
+        adict['forecast_sd'] = pd.read_hdf(
+            os.path.join(results_file_path, 'forecast_sd.h5'))
+        adict['bias'] = pd.read_hdf(
+            os.path.join(results_file_path, 'bias.h5'))
+        adict['correlation'] = pd.read_hdf(
+            os.path.join(results_file_path, 'correlation.h5'))
+        to_return.append(adict)
+    return to_return
+
+
 def error_stats(year, month, day, runs, base_folder, optimize_folder=None):
     truth = os.path.join(base_folder,
                          f'data/{year:04}/{month:02}/{day:02}/data.nc')
