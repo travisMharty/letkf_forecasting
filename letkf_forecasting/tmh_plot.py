@@ -380,3 +380,186 @@ def subplots(data, x, y, subplot_titles, axes_labels, sup_title=None,
         ax[j].set(aspect='equal', adjustable='datalim')
         ax[j].set_xlabel(axes_labels[0])
     return fig, ax
+
+
+def generate_all_plots(error_list, subtitle=None):
+    # RMSE Plots
+    this_stat = 'rmse'
+    y_max = np.max(list(map(lambda x: x[this_stat].max().max(), error_list)))
+    runs = [error_stats['name'] for error_stats in error_list]
+    for hor in [15, 30, 45, 60]:
+        plt.figure()
+        for aresult in error_list:
+            aresult[this_stat][hor].dropna().plot(linestyle='--', marker='o')
+        (aresult[this_stat][hor]*np.nan).plot(color='b')
+        plt.legend(runs)
+        plt.ylim([0, y_max])
+        plt.ylabel('RMSE (CI)')
+        if subtitle is not None:
+            plt.title(f'{hor} minute rmse: {subtitle}')
+        else:
+            plt.title(f'{hor} minute rmse')
+
+    # Centered RMSE Plots
+    # y_max = np.max(list(map(lambda x: x[this_stat].max().max(), returned)))
+    y_max = None
+    for hor in [15, 30, 45, 60]:
+        plt.figure()
+        for aresult in error_list:
+            crmse = np.sqrt(
+                aresult['rmse'][hor]**2
+                - aresult['bias'][hor]**2)
+            crmse.dropna().plot(linestyle='--', marker='o')
+        (aresult['rmse'][hor]*np.nan).plot(color='b')
+        plt.legend(runs)
+        plt.ylim([0, y_max])
+        plt.ylabel('Centered RMSE (CI)')
+        if subtitle is not None:
+            plt.title(f'{hor} minute centered rmse: {subtitle}')
+        else:
+            plt.title(f'{hor} minute centered rmse')
+
+    # Bias plot
+    this_stat = 'bias'
+    y_max = np.max(list(map(
+        lambda x: x[this_stat].abs().max().max(), error_list)))
+    # y_max = None
+    y_min = -y_max
+    # y_min = 0
+    for hor in [15, 30, 45, 60]:
+        plt.figure()
+        for aresult in error_list:
+            aresult[this_stat][hor].dropna().plot(linestyle='--', marker='o')
+        (aresult[this_stat][hor]*np.nan).plot(color='b')
+        plt.legend(runs)
+        plt.ylim([y_min, y_max])
+        plt.ylabel('Bias (CI)')
+        if subtitle is not None:
+            plt.title(f'{hor} minute bias: {subtitle}')
+        else:
+            plt.title(f'{hor} minute bias')
+
+    # Correlation plot
+    this_stat = 'correlation'
+    y_max = np.max(list(map(lambda x: x[this_stat].max().max(), error_list)))
+    y_min = np.min(list(map(lambda x: x[this_stat].min().min(), error_list)))
+    # y_max = None
+    for hor in [15, 30, 45, 60]:
+        plt.figure()
+        for aresult in error_list:
+            aresult[this_stat][hor].dropna().plot(linestyle='--', marker='o')
+        (aresult[this_stat][hor]*np.nan).plot(color='b')
+        plt.legend(runs)
+        plt.ylim([y_min, y_max])
+        plt.ylabel('Correlation (unitless)')
+        if subtitle is not None:
+            plt.title(f'{hor} minute correlation: {subtitle}')
+        else:
+            plt.title(f'{hor} minute correlation')
+
+    # Standard deviation plot
+    this_stat = 'forecast_sd'
+    y_max = np.max(list(map(lambda x: x[this_stat].max().max(), error_list)))
+    y_max = np.max([error_list[0]['truth_sd'].max().max(), y_max])
+    y_min = 0
+    # y_max = None
+    for hor in [15, 30, 45, 60]:
+        plt.figure()
+        for aresult in error_list:
+            aresult[this_stat][hor].dropna().plot(linestyle='--', marker='o')
+        error_list[0]['truth_sd'].dropna().plot(linestyle='--', marker='o')
+        (aresult[this_stat][hor]*np.nan).plot(color='b')
+
+        plt.legend(runs + ['truth'])
+        plt.ylim([y_min, y_max])
+        plt.ylabel('SD (CI)')
+        if subtitle is not None:
+            plt.title(f'{hor} minute standard deviation: {subtitle}')
+        else:
+            plt.title(f'{hor} minute standard deviation')
+
+
+def generate_spread_plots(error_list, subtitle=None):
+    runs = [error_stats['name'] for error_stats in error_list]
+
+    # Cloudiness index spread plot
+    this_stat = 'spread_ci'
+    y_max = np.max(list(map(lambda x: x[this_stat].max().max(), error_list)))
+    y_min = 0
+    for hor in [15, 30, 45, 60]:
+        plt.figure()
+        for aresult in error_list:
+            aresult[this_stat][hor].dropna().plot(
+                linestyle='--', marker='o')
+        (aresult[this_stat][hor]*np.nan).plot(color='b')
+        plt.legend(runs + ['truth'])
+        plt.ylim([y_min, y_max])
+        plt.ylabel('Spread (CI)')
+        if subtitle is not None:
+            plt.title(f'{hor} minute CI spread: {subtitle}')
+        else:
+            plt.title(f'{hor} minute CI spread')
+
+    # U spread plot
+    this_stat = 'u_spread'
+    y_max = np.max(list(map(lambda x: x[this_stat].max().max(), error_list)))
+    y_min = 0
+    for hor in [15, 30, 45, 60]:
+        plt.figure()
+        for aresult in error_list:
+            aresult[this_stat][hor].dropna().plot(
+                linestyle='--', marker='o')
+        (aresult[this_stat][hor]*np.nan).plot(color='b')
+        plt.legend(runs + ['truth'])
+        plt.ylim([y_min, y_max])
+        plt.ylabel('spread (m/s)')
+        if subtitle is not None:
+            plt.title(f'{hor} minute U spread: {subtitle}')
+        else:
+            plt.title(f'{hor} minute U spread')
+
+    # V spread plot
+    this_stat = 'v_spread'
+    y_max = np.max(list(map(lambda x: x[this_stat].max().max(), error_list)))
+    y_min = 0
+    for hor in [15, 30, 45, 60]:
+        plt.figure()
+        for aresult in error_list:
+            aresult[this_stat][hor].dropna().plot(
+                linestyle='--', marker='o')
+        (aresult[this_stat][hor]*np.nan).plot(color='b')
+        plt.legend(runs + ['truth'])
+        plt.ylim([y_min, y_max])
+        plt.ylabel('spread (m/s)')
+        if subtitle is not None:
+            plt.title(f'{hor} minute V spread: {subtitle}')
+        else:
+            plt.title(f'{hor} minute V spread')
+
+    # Spread vs RMSE plot
+    this_stat = 'rmse'
+    y_max = np.max(list(map(lambda x: x['rmse'].max().max(), error_list)))
+    y_max_1 = np.max(list(map(
+        lambda x: x['spread_ci'].max().max(), error_list)))
+    y_max = np.max([y_max, y_max_1])
+    # y_max = None
+    for hor in [15, 30, 45, 60]:
+        plt.figure()
+        colors = ['b', 'orange', 'r', 'k', 'g', 'y']
+        color_count = 0
+        for aresult in error_list:
+            c = colors[color_count]
+            color_count += 1
+            aresult['rmse'][hor].dropna().plot(marker='o',
+                                               color=c)
+            aresult['spread_ci'][hor].dropna().plot(
+                linestyle='--', marker='*', color=c)
+            used_result = aresult.copy()
+        (used_result[this_stat][hor]*np.nan).plot(color='b')
+        plt.legend(runs)
+        plt.ylim([0, y_max])
+        plt.ylabel('RMSE (CI)')
+        if subtitle is not None:
+            plt.title(f'{hor} minute rmse vs spread: {subtitle}')
+        else:
+            plt.title(f'{hor} minute rmse vs spread')
