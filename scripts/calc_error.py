@@ -25,7 +25,7 @@ def set_up_configuration(args):
 
 def set_up_logging(results_folder_path):
     log_path = os.path.join(results_folder_path,
-                            'forecast.log')
+                            'error_analysis.log')
     logging.shutdown()
     importlib.reload(logging)
     logging.basicConfig(
@@ -53,7 +53,8 @@ def error_analysis(cfg, results_folder_path, home):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Run forecast_system using provided configuration file.')
+        description='Run error anlysis for latest run of provided '
+        + 'configuration file.')
     parser.add_argument('file_path', type=str,
                         help='The full path to the configuration file.')
     parser.add_argument('-y', '--year', type=int,
