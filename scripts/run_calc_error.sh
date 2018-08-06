@@ -28,15 +28,15 @@ do
     # echo "config_persistence"
     # python calc_error.py config_persistence.yml -y $year -m ${date[0]} -d ${date[1]}
 
-    # echo "${date[@]}"
-    # echo "ow_15_wp3"
-    # python calc_error.py ow_15_wp3.yml -y $year -m ${date[0]} -d ${date[1]}
+    echo "${date[@]}"
+    echo "ow_15_wp3"
+    python calc_error.py ow_15_wp3.yml -y $year -m ${date[0]} -d ${date[1]}
 
     # echo "${date[@]}"
     # echo "ow_15"
     # python calc_error.py ow_15.yml -y $year -m ${date[0]} -d ${date[1]}
 
-    echo "${date[@]}"
-    echo "owp_opt"
-    python calc_error.py owp_opt.yml -y $year -m ${date[0]} -d ${date[1]}
+    # echo "${date[@]}"
+    # echo "owp_opt"
+    # python calc_error.py config_owp_opt.yml -y $year -m ${date[0]} -d ${date[1]}
 done
