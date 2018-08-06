@@ -200,6 +200,17 @@ def return_ensemble(*, data_file_path, ens_params, coords, flags):
         v_size = coords.we_crop.size * coords.sn_stag_crop.size
         U = np.ones(u_size)*u_wind[max_arg]
         V = np.ones(v_size)*v_wind[max_arg]
+    elif flags['opt_flow']:
+        opt_flow_folder = os.path.split(data_file_path)[0]
+        opt_flow_file = os.path.join(opt_flow_folder, 'data_opt_flow.nc')
+        U, V = return_single_time(opt_flow_file, coords.sat_times_all,
+                                  sat_time,
+                                  [coords.sn_slice, coords.sn_stag_slice],
+                                  [coords.we_stag_slice, coords.we_slice],
+                                  ['U_opt_flow', 'V_opt_flow'])
+        # ensure that U and V are not too big
+        U = U.clip(min=-50, max=50)
+        V = V.clip(min=-50, max=50)
     else:
         U, V = return_single_time(data_file_path, coords.wind_times, wind_time,
                                   [coords.sn_slice, coords.sn_stag_slice],
