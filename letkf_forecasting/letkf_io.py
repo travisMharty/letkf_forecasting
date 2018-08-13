@@ -164,9 +164,9 @@ def calc_crop(*, U, V, advect_params):
     sn_min = 600
     sn_max = 824
 
-    we_min_crop = we_min - left
+    we_min_crop = np.max([we_min - left, 0])
     we_max_crop = we_max + right
-    sn_min_crop = sn_min - down
+    sn_min_crop = np.max([sn_min - down, 0])
     sn_max_crop = sn_max + up
     we_stag_min_crop = we_min_crop
     we_stag_max_crop = we_max_crop + 1
