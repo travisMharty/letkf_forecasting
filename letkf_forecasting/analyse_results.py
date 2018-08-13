@@ -417,7 +417,7 @@ def error_stats_many_days(dates, runs, base_folder):
         # adict = {'name': run, 'truth_sd': truth_sd}
         adict = {'name': run}
         if run == 'persistence':
-            adict = return_persistence_dict(
+            adict = return_persistence_dict_one_day(
                 adict, truth, [15, 30, 45, 60])
             to_return.append(adict)
             continue
