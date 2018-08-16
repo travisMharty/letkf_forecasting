@@ -1,10 +1,12 @@
 import os
+import datetime
+import numba
 import xarray as xr
 import numpy as np
 import pandas as pd
 import letkf_forecasting.letkf_io as letkf_io
 import properscoring as ps
-import sklearn.calibration as skcal
+import sklearn.calibration as calibration
 
 
 def return_horizon(df, horizon):
@@ -405,11 +407,21 @@ def return_persistence_dict_one_day(adict, truth, horizons):
     return adict
 
 
-def error_stats_many_days(dates, runs, base_folder):
+def error_stats_many_days(dates, runs, base_folder, only_cloudy=False):
     truth = letkf_io.return_many_truths(dates, base_folder)
     truth = truth['ci']
     truth = letkf_io.add_crop_attributes(truth)
     truth = return_error_domain(truth)
+    if only_cloudy:
+        truth_max = truth.max(dim=['south_north', 'west_east'])
+        truth_mean = truth.mean(dim=['south_north', 'west_east'])
+        bool_max = truth_max > 0.2
+        bool_mean = truth_mean > 0.05
+        cloudy_bool = xr.ufuncs.logical_or(
+            bool_max, bool_mean)
+        cloudy_times = truth.time[cloudy_bool]
+        truth = truth.sel(time=cloudy_times)
+
     to_return = []
     # truth_sd = np.sqrt(truth.var()).item()
     for run in runs:
@@ -423,6 +435,9 @@ def error_stats_many_days(dates, runs, base_folder):
             continue
         all_days = letkf_io.return_many_days(dates, run, base_folder)
         all_days = all_days['ci']
+        # if only_cloudy:
+        #     return all_days, cloudy_times
+        #     all_days = all_days.sel(time=cloudy_times)
         all_days = return_ens_mean(all_days)
 
         rmse = return_rmse_one_day(truth, all_days)
@@ -438,3 +453,151 @@ def error_stats_many_days(dates, runs, base_folder):
 
         to_return.append(adict)
     return to_return
+
+
+def prob_analysis_baselines(month_day, horizons, file_path,
+                            base_folder='/a2/uaren/travis'):
+    ens_members = 50
+    climatology = pd.read_hdf(file_path)
+    climatology = climatology.values.ravel()
+    climatology = climatology[~np.isnan(climatology)]
+    climatology = climatology.clip(min=0, max=1)
+    for this_month_day in month_day:
+        print(this_month_day)
+        year = 2014
+        month = this_month_day[0]
+        day = this_month_day[1]
+        truth = os.path.join(
+            base_folder,
+            f'data/{year:04}/{month:02}/{day:02}/data.nc')
+        truth = xr.open_dataset(truth)
+        truth = truth['ci']
+        truth = letkf_io.add_crop_attributes(truth)
+        truth = return_error_domain(truth)
+
+        full_index = truth.time.to_pandas().index
+
+        crps_persistence = pd.DataFrame(
+            index=full_index,
+            columns=horizons)
+        crps_persistent_dist = pd.DataFrame(
+            index=full_index,
+            columns=horizons)
+        crps_climatology = pd.DataFrame(
+            index=full_index,
+            columns=horizons)
+        crps_dates_climatology = pd.DataFrame(
+            index=full_index,
+            columns=horizons)
+        for horizon in horizons:
+            persistence = truth.copy()
+            time_step = pd.Timedelta(str(horizon) + 'min')
+            persistence['time'] = persistence.time + time_step
+            dates_error_times = np.intersect1d(
+                truth.time.to_pandas(),
+                persistence.time.to_pandas())
+            this_truth = truth.sel(time=dates_error_times)
+            this_index = this_truth.time.to_pandas().index
+            persistence = persistence.sel(time=dates_error_times)
+
+            # for persistence
+            this_crps = ps.crps_ensemble(
+                this_truth.values, persistence.values)
+            this_crps = pd.Series(this_crps.mean(axis=(1, 2)),
+                                  index=this_index)
+            crps_persistence[horizon] = this_crps
+
+            persis_array = persistence.values
+            persis_shape = persis_array.shape
+            persis_array = persis_array.reshape(
+                persis_shape[0], persis_shape[1] * persis_shape[2])
+            persis_weights = np.ones(
+                [dates_error_times.size, ens_members])
+            for ii in range(dates_error_times.size):
+                persis_weights[ii], bin_edges = np.histogram(
+                    persis_array[ii], bins=ens_members,
+                    range=(0, 1), normed=True)
+            persis_ens = (bin_edges[:-1] + bin_edges[1:])/2
+            persis_ens = np.repeat(persis_ens[None, :],
+                                   persis_shape[2], axis=0)
+            persis_ens = np.repeat(persis_ens[None, :],
+                                   persis_shape[1], axis=0)
+            persis_ens = np.repeat(persis_ens[None, :],
+                                   persis_shape[0], axis=0)
+
+            persis_weights = np.repeat(persis_weights[:, None, :],
+                                       persis_shape[2], axis=1)
+            persis_weights = np.repeat(persis_weights[:, None, :, :],
+                                       persis_shape[1], axis=1)
+
+            # for persistent distribution
+            this_crps = ps.crps_ensemble(
+                this_truth.sel(time=dates_error_times).values,
+                persis_ens, weights=persis_weights)
+
+            this_crps = pd.Series(this_crps.mean(axis=(1, 2)),
+                                  index=this_index)
+            crps_persistent_dist[horizon] = this_crps
+
+            clim_weights, bin_edges = np.histogram(
+                climatology, bins=ens_members, range=(0, 1), normed=True)
+            clim_ens = (bin_edges[:-1] + bin_edges[1:])/2
+            clim_ens = np.repeat(clim_ens[None, :], persis_shape[2], axis=0)
+            clim_ens = np.repeat(clim_ens[None, :], persis_shape[1], axis=0)
+            clim_ens = np.repeat(clim_ens[None, :], persis_shape[0], axis=0)
+
+            clim_weights = np.repeat(
+                clim_weights[None, :], persis_shape[2], axis=0)
+            clim_weights = np.repeat(
+                clim_weights[None, :], persis_shape[1], axis=0)
+            clim_weights = np.repeat(
+                clim_weights[None, :], persis_shape[0], axis=0)
+
+            # for climatology
+            this_crps = ps.crps_ensemble(
+                this_truth.sel(time=dates_error_times).values,
+                clim_ens, weights=clim_weights)
+            this_crps = pd.Series(this_crps.mean(axis=(1, 2)),
+                                  index=this_index)
+            crps_climatology[horizon] = this_crps
+
+            climatology_dates = this_truth.values.ravel()
+            climatology_dates = climatology_dates[~np.isnan(climatology_dates)]
+            climatology_dates = climatology_dates.clip(min=0, max=1)
+            clim_dates_weights, bin_edges = np.histogram(
+                climatology_dates, bins=ens_members, range=(0, 1), normed=True)
+            clim_dates_ens = (bin_edges[:-1] + bin_edges[1:])/2
+            clim_dates_ens = np.repeat(clim_dates_ens[None, :],
+                                       persis_shape[2], axis=0)
+            clim_dates_ens = np.repeat(clim_dates_ens[None, :],
+                                       persis_shape[1], axis=0)
+            clim_dates_ens = np.repeat(clim_dates_ens[None, :],
+                                       persis_shape[0], axis=0)
+            clim_dates_weights = np.repeat(clim_dates_weights[None, :],
+                                           persis_shape[2], axis=0)
+            clim_dates_weights = np.repeat(clim_dates_weights[None, :],
+                                           persis_shape[1], axis=0)
+            clim_dates_weights = np.repeat(clim_dates_weights[None, :],
+                                           persis_shape[0], axis=0)
+
+            # for dates climatology
+            this_crps = ps.crps_ensemble(
+                this_truth.sel(time=dates_error_times).values,
+                clim_dates_ens, weights=clim_dates_weights)
+            this_crps = pd.Series(this_crps.mean(axis=(1, 2)),
+                                  index=this_index)
+            crps_dates_climatology[horizon] = this_crps
+
+        adict = {'persistence': crps_persistence,
+                 'persistent_dist': crps_persistent_dist,
+                 'climatology': crps_climatology,
+                 'dates_climatology': crps_dates_climatology}
+
+        for key, value in adict.items():
+            save_directory = (
+                '/a2/uaren/travis/'
+                + f'results/2014/{month:02}/{day:02}/{key}')
+            if not os.path.exists(save_directory):
+                os.makedirs(save_directory)
+            save_file = os.path.join(save_directory, 'crps.h5')
+            value.to_hdf(save_file, 'crps')
