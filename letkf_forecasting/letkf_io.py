@@ -319,7 +319,8 @@ def preprocess_for_many_days(ds):
     return ds
 
 
-def return_many_days_files(dates, run, base_folder):
+def return_many_days_files(
+        dates, run, base_folder, only_of_times=False):
     files = []
     for date in dates:
         year = date.year
@@ -331,12 +332,17 @@ def return_many_days_files(dates, run, base_folder):
         folder = find_run_folder(folder)
         these_files = os.path.join(folder, '*.nc')
         these_files = glob.glob(these_files)
+        if only_of_times & (run != 'opt_flow'):
+            these_files.sort()
+            these_files = these_files[1:]
         files += these_files
     return files
 
 
-def return_many_days(dates, run, base_folder):
-    files = return_many_days_files(dates, run, base_folder)
+def return_many_days(
+        dates, run, base_folder, only_of_times=False):
+    files = return_many_days_files(
+        dates, run, base_folder, only_of_times=only_of_times)
     all_days = xr.open_mfdataset(
         files,
         preprocess=preprocess_for_many_days,

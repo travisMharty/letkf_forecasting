@@ -407,11 +407,20 @@ def return_persistence_dict_one_day(adict, truth, horizons):
     return adict
 
 
-def error_stats_many_days(dates, runs, base_folder, only_cloudy=False):
+def error_stats_many_days(dates, runs, base_folder,
+                          only_cloudy=False, only_of_times=True):
     truth = letkf_io.return_many_truths(dates, base_folder)
     truth = truth['ci']
     truth = letkf_io.add_crop_attributes(truth)
     truth = return_error_domain(truth)
+    if only_of_times:
+        truth_times = truth.time.to_pandas()
+        these_dates = np.unique(truth_times.index.date)
+        keep_times = pd.Series()
+        for this_date in these_dates:
+            keep_times = pd.concat(
+                [keep_times, truth_times.loc[str(this_date)].iloc[1:]])
+        truth = truth.sel(time=keep_times.index)
     if only_cloudy:
         truth_max = truth.max(dim=['south_north', 'west_east'])
         truth_mean = truth.mean(dim=['south_north', 'west_east'])
@@ -421,7 +430,6 @@ def error_stats_many_days(dates, runs, base_folder, only_cloudy=False):
             bool_max, bool_mean)
         cloudy_times = truth.time[cloudy_bool]
         truth = truth.sel(time=cloudy_times)
-
     to_return = []
     # truth_sd = np.sqrt(truth.var()).item()
     for run in runs:
@@ -456,7 +464,7 @@ def error_stats_many_days(dates, runs, base_folder, only_cloudy=False):
 
 
 def prob_analysis_baselines(month_day, horizons, file_path,
-                            base_folder='/a2/uaren/travis'):
+                            base_folder='/a2/uaren/travis', ):
     ens_members = 50
     climatology = pd.read_hdf(file_path)
     climatology = climatology.values.ravel()
