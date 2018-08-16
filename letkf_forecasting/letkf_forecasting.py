@@ -476,6 +476,9 @@ def return_opt_flow(*, coords, time_index, sat_time, data_file_path, sys_vars):
     u_opt_flow, v_opt_flow, pos = optical_flow(image0, image1,
                                                time0, sat_time,
                                                this_U, this_V)
+    if u_opt_flow.size == 0:
+        nothing = np.array([])
+        return nothing, nothing, nothing, nothing
     del this_U, this_V, image0, image1
     pos = pos*4  # optical flow done on coarse grid
 
@@ -507,6 +510,10 @@ def maybe_assim_opt_flow(*, ensemble, data_file_path, sat_time, time_index,
             data_file_path=data_file_path, sys_vars=sys_vars)
         u_opt_flow, v_opt_flow = returned[:2]
         u_opt_flow_flat_pos, v_opt_flow_flat_pos = returned[2:]
+        if u_opt_flow.size == 0:
+            div_opt_flow_flag = False
+            to_return = (ensemble, div_opt_flow_flag)
+            return to_return
         logging.debug('assim opt_flow')
         x_temp = np.arange(sys_vars.U_crop_shape[1])*sys_vars.dx/1000  # in km
         y_temp = np.arange(sys_vars.U_crop_shape[0])*sys_vars.dy/1000

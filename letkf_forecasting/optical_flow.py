@@ -70,6 +70,9 @@ def optical_flow(image0, image1, time0, time1, u, v):
 
     p0 = p0[win_vars > var_thresh]
     p0_resh = p0.reshape(p0.shape[0], p0.shape[2])
+    if p0_resh.size == 0:
+        nothing = np.array([])
+        return nothing, nothing, nothing
 
     p1_guess = p0 + np.array([x_step, y_step])[None, None, :]
     p1, status, err = cv2.calcOpticalFlowPyrLK(
