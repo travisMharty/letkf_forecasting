@@ -54,14 +54,28 @@ def return_rmse(truth, full_day):
     return rmse
 
 
-def return_rmse_one_day(truth, full_day):
+def return_rmse_one_day(truth, full_day, horizons,
+                        cloudy_times=None):
+    if cloudy_times is not None:
+        error_times = cloudy_times
+    else:
+        error_times = truth.time
+    total_error_times = pd.DataFrame(
+        data=False,
+        columns=horizons,
+        index=error_times)
     rmse_df = pd.DataFrame(columns=['rmse'])
-    for horizon in [15, 30, 45, 60]:
-        rmse = (return_horizon(full_day, horizon) - truth)**2
+    for horizon in horizons:
+        forecast = return_horizon(full_day, horizon)
+        these_error_times = np.intersect1d(
+            truth.sel(time=error_times).time.to_pandas(),
+            forecast.time.to_pandas())
+        total_error_times[horizon].loc[these_error_times] = True
+        rmse = (forecast - truth)**2
         rmse = np.sqrt(rmse.mean(
             dim=['south_north', 'west_east', 'time']).values.item())
         rmse_df.loc[horizon] = rmse
-    return rmse_df
+    return rmse_df, total_error_times
 
 
 def return_bias(truth, full_day):
@@ -71,11 +85,14 @@ def return_bias(truth, full_day):
     return bias
 
 
-def return_bias_one_day(truth, full_day):
+def return_bias_one_day(truth, full_day, horizons,
+                        total_error_times):
     bias_df = pd.DataFrame(columns=['bias'])
-    for horizon in [15, 30, 45, 60]:
+    for horizon in horizons:
+        these_error_times = total_error_times.index[
+            total_error_times[horizon]]
         bias = return_horizon(full_day, horizon)
-        bias = bias - truth
+        bias = (bias - truth).sel(time=these_error_times)
         bias = bias.mean(dim=['south_north', 'west_east', 'time'])
         bias = bias.values.item()
         bias_df.loc[horizon] = bias
@@ -93,13 +110,17 @@ def return_correlation(truth, full_day):
     return R
 
 
-def return_correlation_one_day(truth, full_day):
+def return_correlation_one_day(truth, full_day, horizons,
+                               total_error_times):
     R_df = pd.DataFrame(columns=['correlation'])
     truth_df = truth.to_dataframe(name='ci')
     # print(truth_df)
     # print(type(truth_df))
-    for horizon in [15, 30, 45, 60]:
+    for horizon in horizons:
+        these_error_times = total_error_times.index[
+            total_error_times[horizon]]
         fore_df = return_horizon(full_day, horizon)
+        fore_df = fore_df.sel(time=these_error_times)
         fore_df = fore_df.to_dataframe(name='ci')
         # print(fore_df)
         # print(type(truth_df))
@@ -116,16 +137,16 @@ def return_sd(truth, full_day):
     return sd
 
 
-def return_sd_one_day(truth, full_day):
+def return_sd_one_day(truth, full_day, horizons,
+                      total_error_times):
     sd_df = pd.DataFrame(columns=['sd'])
     sd_truth_df = pd.DataFrame(columns=['true_sd'])
-    for horizon in [15, 30, 45, 60]:
+    for horizon in horizons:
+        these_error_times = total_error_times.index[
+            total_error_times[horizon]]
         sd = return_horizon(full_day, horizon)
-        times = np.intersect1d(
-            truth.time.to_pandas(),
-            sd.time.to_pandas())
-        sd = sd.sel(time=times)
-        sd_truth = truth.sel(time=times)
+        sd = sd.sel(time=these_error_times)
+        sd_truth = truth.sel(time=these_error_times)
         sd = sd.var(dim=['south_north', 'west_east', 'time'])
         sd = np.sqrt(sd.values.item())
         sd_df.loc[horizon] = sd
@@ -148,74 +169,74 @@ def return_spread(truth, da):
     return spread
 
 
-def error_compare(year, month, day, runs):
-    truth = xr.open_dataset(
-        f'/home2/travis/data/{year:04}/{month:02}/{day:02}/data.nc')
-    truth = truth['ci']
-    truth = letkf_io.add_crop_attributes(truth)
-    truth = return_error_domain(truth)
-    error_dfs = []
-    for run in runs:
-        full_day = letkf_io.return_day(year, month, day, run)
-        full_day = letkf_io.add_crop_attributes(full_day)
-        full_day = full_day['ci']
-        full_day = return_error_domain(full_day)
-        full_day = return_ens_mean(full_day)
-        fore15 = return_rmse(truth, full_day, 15)
-        fore30 = return_rmse(truth, full_day, 30)
-        fore45 = return_rmse(truth, full_day, 45)
-        fore60 = return_rmse(truth, full_day, 60)
-        error_dfs.append(pd.concat([fore15, fore30, fore45, fore60],
-                                   axis=1, keys=[15, 30, 45, 60]))
-    return error_dfs
+# def error_compare(year, month, day, runs):
+#     truth = xr.open_dataset(
+#         f'/home2/travis/data/{year:04}/{month:02}/{day:02}/data.nc')
+#     truth = truth['ci']
+#     truth = letkf_io.add_crop_attributes(truth)
+#     truth = return_error_domain(truth)
+#     error_dfs = []
+#     for run in runs:
+#         full_day = letkf_io.return_day(year, month, day, run)
+#         full_day = letkf_io.add_crop_attributes(full_day)
+#         full_day = full_day['ci']
+#         full_day = return_error_domain(full_day)
+#         full_day = return_ens_mean(full_day)
+#         fore15 = return_rmse(truth, full_day, 15)
+#         fore30 = return_rmse(truth, full_day, 30)
+#         fore45 = return_rmse(truth, full_day, 45)
+#         fore60 = return_rmse(truth, full_day, 60)
+#         error_dfs.append(pd.concat([fore15, fore30, fore45, fore60],
+#                                    axis=1, keys=[15, 30, 45, 60]))
+#     return error_dfs
 
 
-def error_spread_compare(year, month, day, runs):
-    truth = xr.open_dataset(
-        f'/home2/travis/data/{year:04}/{month:02}/{day:02}/data.nc')
-    truth = truth['ci']
-    truth = letkf_io.add_crop_attributes(truth)
-    truth = return_error_domain(truth)
-    error_dfs = []
-    spread_wind = []
-    spread_ci = []
-    for run in runs:
-        full_day = letkf_io.return_day(year, month, day, run)
-        full_day = letkf_io.add_crop_attributes(full_day)
-        full_day = return_error_domain(full_day)
-        u_spread = return_spread(full_day['U'], 0)
-        v_spread = return_spread(full_day['V'], 0)
-        spread_wind.append(pd.concat([u_spread, v_spread],
-                                     axis=1, keys=['U', 'V']))
-        ci_spread_15 = return_spread(full_day['ci'], 15)
-        ci_spread_30 = return_spread(full_day['ci'], 30)
-        ci_spread_45 = return_spread(full_day['ci'], 45)
-        ci_spread_60 = return_spread(full_day['ci'], 60)
-        spread_ci.append(pd.concat([ci_spread_15, ci_spread_30,
-                                    ci_spread_45, ci_spread_60],
-                                   axis=1, keys=[15, 30, 45, 60]))
-        full_day = full_day['ci']
-        full_day = return_ens_mean(full_day)
-        fore15 = return_rmse(truth, full_day, 15)
-        fore30 = return_rmse(truth, full_day, 30)
-        fore45 = return_rmse(truth, full_day, 45)
-        fore60 = return_rmse(truth, full_day, 60)
-        error_dfs.append(pd.concat([fore15, fore30, fore45, fore60],
-                                   axis=1, keys=[15, 30, 45, 60]))
-    return error_dfs, spread_ci, spread_wind
+# def error_spread_compare(year, month, day, runs):
+#     truth = xr.open_dataset(
+#         f'/home2/travis/data/{year:04}/{month:02}/{day:02}/data.nc')
+#     truth = truth['ci']
+#     truth = letkf_io.add_crop_attributes(truth)
+#     truth = return_error_domain(truth)
+#     error_dfs = []
+#     spread_wind = []
+#     spread_ci = []
+#     for run in runs:
+#         full_day = letkf_io.return_day(year, month, day, run)
+#         full_day = letkf_io.add_crop_attributes(full_day)
+#         full_day = return_error_domain(full_day)
+#         u_spread = return_spread(full_day['U'], 0)
+#         v_spread = return_spread(full_day['V'], 0)
+#         spread_wind.append(pd.concat([u_spread, v_spread],
+#                                      axis=1, keys=['U', 'V']))
+#         ci_spread_15 = return_spread(full_day['ci'], 15)
+#         ci_spread_30 = return_spread(full_day['ci'], 30)
+#         ci_spread_45 = return_spread(full_day['ci'], 45)
+#         ci_spread_60 = return_spread(full_day['ci'], 60)
+#         spread_ci.append(pd.concat([ci_spread_15, ci_spread_30,
+#                                     ci_spread_45, ci_spread_60],
+#                                    axis=1, keys=[15, 30, 45, 60]))
+#         full_day = full_day['ci']
+#         full_day = return_ens_mean(full_day)
+#         fore15 = return_rmse(truth, full_day, 15)
+#         fore30 = return_rmse(truth, full_day, 30)
+#         fore45 = return_rmse(truth, full_day, 45)
+#         fore60 = return_rmse(truth, full_day, 60)
+#         error_dfs.append(pd.concat([fore15, fore30, fore45, fore60],
+#                                    axis=1, keys=[15, 30, 45, 60]))
+#     return error_dfs, spread_ci, spread_wind
 
 
-def return_stat_df(truth, full_day, stat_function):
-    horizons = full_day.horizon.to_pandas().unique()
-    horizons = (horizons/(60*1e9)).astype(np.int16)
-    stats = []
-    for horizon in horizons:
-        this_stat = stat_function(
-            truth,
-            return_horizon(full_day, horizon))
-        stats.append(this_stat)
-    stats = pd.concat(stats, axis=1, keys=horizons)
-    return stats
+# def return_stat_df(truth, full_day, stat_function):
+#     horizons = full_day.horizon.to_pandas().unique()
+#     horizons = (horizons/(60*1e9)).astype(np.int16)
+#     stats = []
+#     for horizon in horizons:
+#         this_stat = stat_function(
+#             truth,
+#             return_horizon(full_day, horizon))
+#         stats.append(this_stat)
+#     stats = pd.concat(stats, axis=1, keys=horizons)
+#     return stats
 
 
 def find_error_stats(year, month, day,
@@ -362,36 +383,46 @@ def error_stats_one_day(year, month, day, runs, base_folder):
     return to_return
 
 
-def return_persistence_dict_one_day(adict, truth, horizons):
+def return_persistence_dict_one_day(adict, truth, horizons,
+                                    cloudy_times=None):
+    if cloudy_times is not None:
+        error_times = cloudy_times
+    else:
+        error_times = truth.time
     rmse_df = pd.DataFrame(columns=['rmse'])
     sd_df = pd.DataFrame(columns=['sd'])
     sd_truth_df = pd.DataFrame(columns=['true_sd'])
     bias_df = pd.DataFrame(columns=['bias'])
     corr_df = pd.DataFrame(columns=['correlation'])
+    total_error_times = pd.DataFrame(
+        data=False,
+        columns=horizons,
+        index=error_times)
     for horizon in horizons:
         forecast = truth.copy()
         forecast['time'] = forecast.time + pd.Timedelta(horizon, 'm')
-
-        rmse = (forecast - truth)**2
+        these_error_times = np.intersect1d(
+            truth.sel(time=error_times).time.to_pandas(),
+            forecast.time.to_pandas())
+        total_error_times[horizon].loc[these_error_times] = True
+        forecast = forecast.sel(time=these_error_times)
+        rmse = (forecast - truth.sel(time=these_error_times))**2
         rmse = rmse.mean(
             dim=['south_north', 'west_east', 'time']).values.item()
         rmse = np.sqrt(rmse)
         rmse_df.loc[horizon] = rmse
 
-        sd_times = np.intersect1d(
-            truth.time.to_pandas(),
-            forecast.time.to_pandas())
-        sd = forecast.sel(time=sd_times).var(
+        sd = forecast.sel(time=these_error_times).var(
             dim=['south_north', 'west_east', 'time']).values.item()
         sd = np.sqrt(sd)
         sd_df.loc[horizon] = sd
 
-        sd_truth = truth.sel(time=sd_times).var(
+        sd_truth = truth.sel(time=these_error_times).var(
             dim=['south_north', 'west_east', 'time']).values.item()
         sd_truth = np.sqrt(sd_truth)
         sd_truth_df.loc[horizon] = sd_truth
 
-        bias = forecast - truth
+        bias = forecast - truth.sel(time=these_error_times)
         bias_df.loc[horizon] = bias.mean(
             dim=['south_north', 'west_east', 'time']).values.item()
 
@@ -404,10 +435,11 @@ def return_persistence_dict_one_day(adict, truth, horizons):
     adict['truth_sd'] = sd_truth_df
     adict['bias'] = bias_df
     adict['correlation'] = corr_df
+    adict['stat_times'] = total_error_times
     return adict
 
 
-def error_stats_many_days(dates, runs, base_folder,
+def error_stats_many_days(dates, runs, horizons, base_folder,
                           only_cloudy=False, only_of_times=True):
     truth = letkf_io.return_many_truths(dates, base_folder)
     truth = truth['ci']
@@ -429,7 +461,8 @@ def error_stats_many_days(dates, runs, base_folder,
         cloudy_bool = xr.ufuncs.logical_or(
             bool_max, bool_mean)
         cloudy_times = truth.time[cloudy_bool]
-        truth = truth.sel(time=cloudy_times)
+    else:
+        cloudy_times = None
     to_return = []
     # truth_sd = np.sqrt(truth.var()).item()
     for run in runs:
@@ -438,26 +471,37 @@ def error_stats_many_days(dates, runs, base_folder,
         adict = {'name': run}
         if run == 'persistence':
             adict = return_persistence_dict_one_day(
-                adict, truth, [15, 30, 45, 60])
+                adict, truth, horizons,
+                cloudy_times=cloudy_times)
             to_return.append(adict)
             continue
-        all_days = letkf_io.return_many_days(dates, run, base_folder)
+        all_days = letkf_io.return_many_days(dates, run, base_folder,
+                                             only_of_times=only_of_times)
         all_days = all_days['ci']
         # if only_cloudy:
         #     return all_days, cloudy_times
         #     all_days = all_days.sel(time=cloudy_times)
         all_days = return_ens_mean(all_days)
 
-        rmse = return_rmse_one_day(truth, all_days)
-        forecast_sd, truth_sd = return_sd_one_day(truth, all_days)
-        bias = return_bias_one_day(truth, all_days)
-        corr = return_correlation_one_day(truth, all_days)
+        rmse, total_error_times = return_rmse_one_day(
+            truth, all_days, horizons,
+            cloudy_times=cloudy_times)
+        forecast_sd, truth_sd = return_sd_one_day(
+            truth, all_days, horizons,
+            total_error_times=total_error_times)
+        bias = return_bias_one_day(
+            truth, all_days, horizons,
+            total_error_times=total_error_times)
+        corr = return_correlation_one_day(
+            truth, all_days, horizons,
+            total_error_times=total_error_times)
 
         adict['rmse'] = rmse
         adict['forecast_sd'] = forecast_sd
         adict['truth_sd'] = truth_sd
         adict['bias'] = bias
         adict['correlation'] = corr
+        adict['stat_times'] = total_error_times
 
         to_return.append(adict)
     return to_return
@@ -609,3 +653,209 @@ def prob_analysis_baselines(month_day, horizons, file_path,
                 os.makedirs(save_directory)
             save_file = os.path.join(save_directory, 'crps.h5')
             value.to_hdf(save_file, 'crps')
+
+
+def prob_analysis_runs(month_day, runs, horizons,
+                       base_folder='/a2/uaren/travis', ):
+    for this_month_day in month_day:
+        print(this_month_day)
+        year = 2014
+        month = this_month_day[0]
+        day = this_month_day[1]
+        truth = os.path.join(
+            base_folder,
+            f'data/{year:04}/{month:02}/{day:02}/data.nc')
+        truth = xr.open_dataset(truth)
+        truth = truth['ci']
+        truth = letkf_io.add_crop_attributes(truth)
+        truth = return_error_domain(truth)
+        truth = truth.load()
+
+        full_index = truth.time.to_pandas().index
+        for run in runs:
+            crps_df = pd.DataFrame(
+                index=full_index,
+                columns=horizons)
+            print(run)
+            full_day = letkf_io.return_day(
+                year, month, day, run, base_folder)
+            full_day = letkf_io.add_crop_attributes(full_day)
+            full_day = return_error_domain(full_day)
+            full_day = full_day['ci']
+            full_day = full_day.load()
+            for horizon in horizons:
+                this_full_day = return_horizon(full_day, horizon)
+                these_error_times = np.intersect1d(
+                    full_index, this_full_day.time.to_pandas().index)
+                this_full_day = this_full_day.sel(time=these_error_times)
+                this_truth = truth.sel(time=these_error_times)
+                this_crps = ps.crps_ensemble(
+                    this_truth.values,
+                    this_full_day.values.transpose([0, 2, 3, 1]))
+                this_crps = pd.Series(this_crps.mean(axis=(1, 2)),
+                                      index=these_error_times)
+                crps_df[horizon] = this_crps
+            file_path = os.path.join(
+                base_folder,
+                'results',
+                f'{year:04}',
+                f'{month:02}',
+                f'{day:02}',
+                run)
+            file_path = letkf_io.find_latest_run(file_path)
+            file_path = os.path.join(file_path, 'crps.h5')
+            crps_df.to_hdf(file_path, 'crps')
+
+
+def fraction_of_positives_runs(month_day, runs, horizons, bounds_dict, N_bins,
+                               base_folder='/a2/uaren/travis', ):
+    bins = np.arange(N_bins)
+    multi_column = [np.repeat(horizons, bins.size),
+                    np.tile(bins, len(horizons))]
+    multi_column = list(zip(*multi_column))
+    multi_column = pd.MultiIndex.from_tuples(
+        multi_column, names=['horizon', 'bin'])
+
+    for this_month_day in month_day:
+        print(this_month_day)
+        year = 2014
+        month = this_month_day[0]
+        day = this_month_day[1]
+        truth = os.path.join(
+            base_folder,
+            f'data/{year:04}/{month:02}/{day:02}/data.nc')
+        truth = xr.open_dataset(truth)
+        truth = truth['ci']
+        truth = letkf_io.add_crop_attributes(truth)
+        truth = return_error_domain(truth)
+        truth = truth.load()
+
+        full_index = truth.time.to_pandas().index
+        for run in runs:
+            print(run)
+            full_day = letkf_io.return_day(
+                year, month, day, run, base_folder)
+            full_day = letkf_io.add_crop_attributes(full_day)
+            full_day = return_error_domain(full_day)
+            full_day = full_day['ci']
+            full_day = full_day.load()
+            for bound_name, bounds in bounds_dict.items():
+                print(bound_name)
+                if bounds[0] == 0:
+                    truth_bounded = (truth < bounds[1]).astype('float')
+                    full_day_bounded = (full_day < bounds[1]).astype('float')
+                elif bounds[1] == 1:
+                    truth_bounded = (truth >= bounds[0]).astype('float')
+                    full_day_bounded = (full_day >= bounds[0]).astype('float')
+                else:
+                    truth_bounded = np.logical_and(
+                        truth >= bounds[0],
+                        truth < bounds[1]).astype('float')
+                    full_day_bounded = np.logical_and(
+                        full_day >= bounds[0],
+                        full_day < bounds[1]).astype('float')
+                brier_score = pd.DataFrame(
+                    index=full_index,
+                    columns=horizons)
+                fraction_of_positives = pd.DataFrame(
+                    index=full_index,
+                    columns=multi_column)
+                mean_predicted_prob = fraction_of_positives.copy()
+                forecast_hist = fraction_of_positives.copy()
+                truth_hist = pd.DataFrame(
+                    index=full_index,
+                    columns=bins)
+                for tt in range(truth_bounded.shape[0]):
+                    hist, temp = np.histogram(
+                        truth_bounded.values[tt],
+                        bins=N_bins,
+                        range=(0, 1))
+                    truth_hist.iloc[tt] = hist
+                for horizon in horizons:
+                    this_full_day = return_horizon(full_day_bounded, horizon)
+                    these_error_times = np.intersect1d(
+                        full_index, this_full_day.time.to_pandas().index)
+                    this_full_day = this_full_day.sel(time=these_error_times)
+                    this_full_day = this_full_day.mean(dim='ensemble_number')
+                    # account for boundary cases
+                    this_full_day = (this_full_day - 1e-8).clip(0, 1)
+                    this_truth = truth_bounded.sel(time=these_error_times)
+
+                    this_brier_score = ps.brier_score(
+                        this_truth.values.ravel(),
+                        this_full_day.values.ravel())
+                    this_brier_score = this_brier_score.reshape(
+                        this_truth.shape).mean(axis=(1, 2))
+                    this_brier_score = pd.Series(this_brier_score,
+                                                 index=these_error_times)
+                    brier_score[horizon]  = this_brier_score
+
+                    this_fraction_of_positives = np.ones(
+                        [this_truth.shape[0], N_bins]) * np.nan
+                    this_mean_predicted_prob = np.ones(
+                        [this_truth.shape[0], N_bins]) * np.nan
+                    this_forecast_hist = this_fraction_of_positives.copy()
+
+                    for tt in range(this_truth.shape[0]):
+                        this_forecast_hist[tt], temp = np.histogram(
+                            this_full_day.values[tt],
+                            bins=N_bins,
+                            range=(0, 1))
+                        fop, mpp = calibration.calibration_curve(
+                            this_truth.values[tt].ravel(),
+                            this_full_day.values[tt].ravel(),
+                            n_bins=N_bins)
+                        if fop.size < N_bins:
+                            correct_bins = np.floor(mpp*N_bins).astype('int')
+                            indexes = np.setdiff1d(bins, correct_bins)
+                            indexes -= np.arange(indexes.size)
+                            fop = np.insert(fop, indexes, 0)
+                            # print(mpp)
+                            # print(this_forecast_hist[tt])
+                            mpp = np.insert(mpp, indexes, 0)
+                            # print(mpp)
+                            # print(correct_bins)
+                            # print(indexes)
+                        this_fraction_of_positives[tt] = fop
+                        this_mean_predicted_prob[tt] = mpp
+                    this_forcast_hist = pd.DataFrame(
+                        this_forecast_hist,
+                        index=these_error_times,
+                        columns=bins)
+                    forecast_hist[horizon] = this_forcast_hist
+                    this_fraction_of_positives = pd.DataFrame(
+                        this_fraction_of_positives,
+                        index=these_error_times,
+                        columns=bins)
+                    fraction_of_positives[horizon] = this_fraction_of_positives
+                    this_mean_predicted_prob = pd.DataFrame(
+                        this_mean_predicted_prob,
+                        index=these_error_times,
+                        columns=bins)
+                    mean_predicted_prob[horizon] = this_mean_predicted_prob
+                file_path = os.path.join(
+                    base_folder,
+                    'results',
+                    f'{year:04}',
+                    f'{month:02}',
+                    f'{day:02}',
+                    run)
+                file_path = letkf_io.find_latest_run(file_path)
+                this_folder = (bound_name
+                               + '_' + str(bounds[0]).replace('.', 'p')
+                               + '_' + str(bounds[1]).replace('.', 'p'))
+                file_path = os.path.join(
+                    file_path, this_folder)
+                if not os.path.exists(file_path):
+                    os.mkdir(file_path)
+
+                this_file_path = os.path.join(file_path, 'brier_score.h5')
+                brier_score.to_hdf(this_file_path, 'brier_score')
+                this_file_path = os.path.join(file_path, 'truth_hist.h5')
+                truth_hist.to_hdf(this_file_path, 'truth_hist')
+                this_file_path = os.path.join(file_path, 'forecast_hist.h5')
+                forecast_hist.to_hdf(this_file_path, 'forecast_hist')
+                this_file_path = os.path.join(file_path, 'fraction_of_positives.h5')
+                fraction_of_positives.to_hdf(this_file_path, 'fraction_of_positives')
+                this_file_path = os.path.join(file_path, 'mean_predicted_prob.h5')
+                mean_predicted_prob.to_hdf(this_file_path, 'mean_predicted_prob')
