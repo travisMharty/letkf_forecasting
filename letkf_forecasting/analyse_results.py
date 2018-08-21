@@ -648,7 +648,7 @@ def prob_analysis_baselines(month_day, horizons, file_path,
         for key, value in adict.items():
             save_directory = (
                 '/a2/uaren/travis/'
-                + f'results/2014/{month:02}/{day:02}/{key}')
+                + f'results/2014/{month:02}/{day:02}/{key}_000')
             if not os.path.exists(save_directory):
                 os.makedirs(save_directory)
             save_file = os.path.join(save_directory, 'crps.h5')
