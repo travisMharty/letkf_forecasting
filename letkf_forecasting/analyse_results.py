@@ -440,7 +440,8 @@ def return_persistence_dict_one_day(adict, truth, horizons,
 
 
 def error_stats_many_days(dates, runs, horizons, base_folder,
-                          only_cloudy=False, only_of_times=True):
+                          only_cloudy=False, only_of_times=True,
+                          mean_win_size=None):
     truth = letkf_io.return_many_truths(dates, base_folder)
     truth = truth['ci']
     truth = letkf_io.add_crop_attributes(truth)
@@ -477,7 +478,8 @@ def error_stats_many_days(dates, runs, horizons, base_folder,
             continue
         all_days = letkf_io.return_many_days(dates, run, base_folder,
                                              only_of_times=only_of_times)
-        all_days = all_days['ci']
+        if mean_win_size is None:
+            all_days = all_days['ci']
         # if only_cloudy:
         #     return all_days, cloudy_times
         #     all_days = all_days.sel(time=cloudy_times)
@@ -855,7 +857,44 @@ def fraction_of_positives_runs(month_day, runs, horizons, bounds_dict, N_bins,
                 truth_hist.to_hdf(this_file_path, 'truth_hist')
                 this_file_path = os.path.join(file_path, 'forecast_hist.h5')
                 forecast_hist.to_hdf(this_file_path, 'forecast_hist')
-                this_file_path = os.path.join(file_path, 'fraction_of_positives.h5')
-                fraction_of_positives.to_hdf(this_file_path, 'fraction_of_positives')
-                this_file_path = os.path.join(file_path, 'mean_predicted_prob.h5')
-                mean_predicted_prob.to_hdf(this_file_path, 'mean_predicted_prob')
+                this_file_path = os.path.join(file_path,
+                                              'fraction_of_positives.h5')
+                fraction_of_positives.to_hdf(this_file_path,
+                                             'fraction_of_positives')
+                this_file_path = os.path.join(file_path,
+                                              'mean_predicted_prob.h5')
+                mean_predicted_prob.to_hdf(this_file_path,
+                                           'mean_predicted_prob')
+
+
+def read_prob_stats(month_day, runs, stats,
+                    base_folder='/a2/uaren/travis'):
+    to_return = []
+    year = 2014
+    baselines = ['climatology', 'dates_climatology',
+                 'persistence', 'persistent_dist']
+    for run in runs:
+        print(run)
+        adict = {'name': run}
+        for stat in stats:
+            print(stat)
+            this_stat = pd.DataFrame()
+            for this_month_day in month_day:
+                month = this_month_day[0]
+                day = this_month_day[1]
+                file_path = os.path.join(
+                    base_folder,
+                    'results',
+                    f'{year:04}',
+                    f'{month:02}',
+                    f'{day:02}',
+                    run)
+                if run not in baselines:
+                    file_path = letkf_io.find_latest_run(file_path)
+                file_path = os.path.join(
+                    file_path, stat + '.h5')
+                temp_stat = pd.read_hdf(file_path)
+                this_stat = pd.concat([this_stat, temp_stat])
+            adict[stat] = this_stat
+        to_return.append(adict)
+    return to_return
