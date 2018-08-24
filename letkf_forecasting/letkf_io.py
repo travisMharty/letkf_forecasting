@@ -306,15 +306,19 @@ def add_crop_attributes(ds):
     return ds
 
 
-def preprocess_for_many_days(ds):
+def preprocess_for_many_days(ds, buff=0):
     # This automatically crops the domain to the error domain.
     # This is needed so that all the different days can be concatenated.
     ds = add_crop_attributes(ds)
     ds = ds.sel(
-        west_east=slice(ds.we_er_min, ds.we_er_max),
-        south_north=slice(ds.sn_er_min, ds.sn_er_max),
-        west_east_stag=slice(ds.we_er_min, ds.we_er_max),
-        south_north_stag=slice(ds.sn_er_min, ds.sn_er_max))
+        west_east=slice(ds.we_er_min - buff,
+                        ds.we_er_max + buff),
+        south_north=slice(ds.sn_er_min - buff,
+                          ds.sn_er_max + buff),
+        west_east_stag=slice(ds.we_er_min - buff,
+                             ds.we_er_max + buff),
+        south_north_stag=slice(ds.sn_er_min - buff,
+                               ds.sn_er_max + buff))
     ds.coords['horizon'] = (ds.time - ds.time[0])/60
     return ds
 
@@ -340,13 +344,35 @@ def return_many_days_files(
 
 
 def return_many_days(
-        dates, run, base_folder, only_of_times=False):
+        dates, run, base_folder, only_of_times=False,
+        mean_win_size=None):
     files = return_many_days_files(
         dates, run, base_folder, only_of_times=only_of_times)
-    all_days = xr.open_mfdataset(
-        files,
-        preprocess=preprocess_for_many_days,
-        decode_cf=False)
+    if mean_win_size is None:
+        all_days = xr.open_mfdataset(
+            files,
+            preprocess=preprocess_for_many_days,
+            decode_cf=False)
+    else:
+        buff = (mean_win_size - 1)/2
+
+        def this_preprocess(ds):
+            ds = preprocess_for_many_days(ds, buff)
+            return ds
+        all_days = xr.open_mfdataset(
+            files,
+            preprocess=this_preprocess,
+            decode_cf=False)
+        all_days = all_days['ci']
+        all_days = all_days.rolling(west_east=mean_win_size,
+                                    center=True).mean()
+        all_days = all_days.rolling(south_north=mean_win_size,
+                                    center=True).mean()
+        all_days = all_days.sel(
+            west_east=slice(all_days.we_er_min,
+                            all_days.we_er_max),
+            south_north=slice(all_days.sn_er_min,
+                              all_days.sn_er_max))
     all_days.horizon.attrs['units'] = 'minutes'
     all_days = xr.decode_cf(all_days)
     return all_days
