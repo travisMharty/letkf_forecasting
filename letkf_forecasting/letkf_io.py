@@ -353,6 +353,8 @@ def return_many_days(
             files,
             preprocess=preprocess_for_many_days,
             decode_cf=False)
+        all_days.horizon.attrs['units'] = 'minutes'
+        all_days = xr.decode_cf(all_days)
     else:
         buff = (mean_win_size - 1)/2
 
@@ -363,18 +365,19 @@ def return_many_days(
             files,
             preprocess=this_preprocess,
             decode_cf=False)
-        all_days = all_days['ci']
+        all_days.horizon.attrs['units'] = 'minutes'
+        all_days = xr.decode_cf(all_days)
+        all_days = all_days['ci'].load()
         all_days = all_days.rolling(west_east=mean_win_size,
                                     center=True).mean()
         all_days = all_days.rolling(south_north=mean_win_size,
                                     center=True).mean()
+        all_days = add_crop_attributes(all_days)
         all_days = all_days.sel(
             west_east=slice(all_days.we_er_min,
                             all_days.we_er_max),
             south_north=slice(all_days.sn_er_min,
                               all_days.sn_er_max))
-    all_days.horizon.attrs['units'] = 'minutes'
-    all_days = xr.decode_cf(all_days)
     return all_days
 
 
