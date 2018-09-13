@@ -169,7 +169,7 @@ def var_plot(ensemble, domain_shape,
 
 def ensemble_stamps_cdf(
         others, other_titles, ensemble, nrows, ncols, domain_shape, adjust,
-        cmap='Blues', vmin=0, vmax=1, nc=11):
+        cmap='Blues', vmin=0, vmax=1, nc=11, cbar_label=None, dpi=150):
     if vmin is None or vmax is None:
         vmax = ensemble.max()
         vmin = -vmax
@@ -182,7 +182,7 @@ def ensemble_stamps_cdf(
                             (adjust*(1 + fraction + pad)*float(dx * ncols)))
     fig, ax = plt.subplots(nrows, ncols,
                            sharey=True, sharex=True,
-                           figsize=figsize, dpi=150)
+                           figsize=figsize, dpi=dpi)
     for j in range(len(other_titles)):
         if others[j].shape == domain_shape:
             this_other = others[j]
@@ -203,7 +203,7 @@ def ensemble_stamps_cdf(
         ar.return_ens_mean(ensemble),
         cmap=cmap,
         norm=norm)
-    # ax[0, j + 1].set_title('Mean')
+    ax[0, j + 1].set_title('Mean')
     ax[0, j + 1].axis('off')
 
     ens_count = 0
@@ -229,7 +229,8 @@ def ensemble_stamps_cdf(
             ax[i, j].set(aspect='equal', adjustable='box-forced')
 
     plt.subplots_adjust(wspace=0.02, hspace=0.02)
-    plt.colorbar(im, ax=ax.ravel().tolist(), pad=pad, fraction=fraction)
+    plt.colorbar(im, ax=ax.ravel().tolist(), pad=pad, fraction=fraction,
+                 label=cbar_label)
     # for j in range(len(other_titles)):
     #     ax_pos = ax[0, j].axis()
     #     print(ax_pos)
@@ -254,7 +255,7 @@ def ensemble_stamps_cdf(
 
 def ensemble_stamps(
         others, other_titles, ensemble, nrows, ncols, domain_shape, adjust,
-        cmap='Blues', vmin=0, vmax=1):
+        cmap='Blues', vmin=0, vmax=1, cbar_label=None):
     if vmin is None or vmax is None:
         vmax = np.max(np.abs(ensemble))
         vmin = -vmax
@@ -284,7 +285,7 @@ def ensemble_stamps(
     try:
         j
     except Exception:
-        j =-1
+        j = -1
     im = ax[0, j + 1].pcolormesh(
         ensemble.mean(axis=1).reshape(domain_shape),
         cmap=cmap,
@@ -315,7 +316,8 @@ def ensemble_stamps(
             ax[i, j].set(aspect='equal', adjustable='box-forced')
 
     plt.subplots_adjust(wspace=0.02, hspace=0.02)
-    plt.colorbar(im, ax=ax.ravel().tolist(), pad=pad, fraction=fraction)
+    plt.colorbar(im, ax=ax.ravel().tolist(), pad=pad, fraction=fraction,
+                 label=cbar_label)
     # for j in range(len(other_titles)):
     #     ax_pos = ax[0, j].axis()
     #     print(ax_pos)
