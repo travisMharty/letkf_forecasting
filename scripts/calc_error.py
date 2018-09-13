@@ -92,7 +92,7 @@ def main():
     try:
         error_analysis(cfg, results_folder_path,
                        args.home)
-        logging.inlfo('error analysis ended')
+        logging.info('error analysis ended')
     except Exception:
         logging.exception('error_analysis failed')
     time1 = time_py.time()
