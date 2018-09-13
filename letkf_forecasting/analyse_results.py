@@ -226,17 +226,17 @@ def return_spread(truth, da):
 #     return error_dfs, spread_ci, spread_wind
 
 
-# def return_stat_df(truth, full_day, stat_function):
-#     horizons = full_day.horizon.to_pandas().unique()
-#     horizons = (horizons/(60*1e9)).astype(np.int16)
-#     stats = []
-#     for horizon in horizons:
-#         this_stat = stat_function(
-#             truth,
-#             return_horizon(full_day, horizon))
-#         stats.append(this_stat)
-#     stats = pd.concat(stats, axis=1, keys=horizons)
-#     return stats
+def return_stat_df(truth, full_day, stat_function):
+    horizons = full_day.horizon.to_pandas().unique()
+    horizons = (horizons/(60*1e9)).astype(np.int16)
+    stats = []
+    for horizon in horizons:
+        this_stat = stat_function(
+            truth,
+            return_horizon(full_day, horizon))
+        stats.append(this_stat)
+    stats = pd.concat(stats, axis=1, keys=horizons)
+    return stats
 
 
 def find_error_stats(year, month, day,
@@ -455,10 +455,12 @@ def error_stats_many_days(dates, runs, horizons, base_folder,
                 [keep_times, truth_times.loc[str(this_date)].iloc[1:]])
         truth = truth.sel(time=keep_times.index)
     if only_cloudy:
+        print('only_cloudy')
         truth_max = truth.max(dim=['south_north', 'west_east'])
         truth_mean = truth.mean(dim=['south_north', 'west_east'])
         bool_max = truth_max > 0.2
-        bool_mean = truth_mean > 0.05
+        bool_mean = truth_mean > 0.1
+        # bool_mean = truth_mean > 0.05
         cloudy_bool = xr.ufuncs.logical_or(
             bool_max, bool_mean)
         cloudy_times = truth.time[cloudy_bool]
@@ -477,13 +479,22 @@ def error_stats_many_days(dates, runs, horizons, base_folder,
             to_return.append(adict)
             continue
         all_days = letkf_io.return_many_days(dates, run, base_folder,
-                                             only_of_times=only_of_times)
+                                             only_of_times=only_of_times,
+                                             mean_win_size=mean_win_size)
         if mean_win_size is None:
             all_days = all_days['ci']
+
         # if only_cloudy:
         #     return all_days, cloudy_times
         #     all_days = all_days.sel(time=cloudy_times)
         all_days = return_ens_mean(all_days)
+
+        # # delete
+        # this  = return_rmse_one_day(
+        #     truth, all_days, horizons,
+        #     cloudy_times=cloudy_times)
+        # return this, all_days
+        # # delete
 
         rmse, total_error_times = return_rmse_one_day(
             truth, all_days, horizons,
