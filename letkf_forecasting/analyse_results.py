@@ -64,7 +64,10 @@ def return_rmse_one_day(truth, full_day, horizons,
         data=False,
         columns=horizons,
         index=error_times)
-    rmse_df = pd.DataFrame(columns=['rmse'])
+    if 'ensemble_number' in full_day.coords:
+        rmse_df = pd.DataFrame(columns=full_day.ensemble_number.values)
+    else:
+        rmse_df = pd.DataFrame(columns=['rmse'])
     for horizon in horizons:
         forecast = return_horizon(full_day, horizon)
         these_error_times = np.intersect1d(
@@ -72,9 +75,13 @@ def return_rmse_one_day(truth, full_day, horizons,
             forecast.time.to_pandas())
         total_error_times[horizon].loc[these_error_times] = True
         rmse = (forecast - truth)**2
-        rmse = np.sqrt(rmse.mean(
-            dim=['south_north', 'west_east', 'time']).values.item())
-        rmse_df.loc[horizon] = rmse
+        rmse = np.sqrt(
+            rmse.mean(dim=['south_north', 'west_east', 'time']).values)
+        if type(rmse) is list:
+            rmse_df.loc[horizon] = rmse
+        else:
+            rmse = rmse.item()
+            rmse_df.loc[horizon] = rmse
     return rmse_df, total_error_times
 
 
@@ -87,15 +94,22 @@ def return_bias(truth, full_day):
 
 def return_bias_one_day(truth, full_day, horizons,
                         total_error_times):
-    bias_df = pd.DataFrame(columns=['bias'])
+    if 'ensemble_number' in full_day.coords:
+        bias_df = pd.DataFrame(columns=full_day.ensemble_number.values)
+    else:
+        bias_df = pd.DataFrame(columns=['bias'])
     for horizon in horizons:
         these_error_times = total_error_times.index[
             total_error_times[horizon]]
         bias = return_horizon(full_day, horizon)
         bias = (bias - truth).sel(time=these_error_times)
         bias = bias.mean(dim=['south_north', 'west_east', 'time'])
-        bias = bias.values.item()
-        bias_df.loc[horizon] = bias
+        bias = bias.values
+        if type(bias) is list:
+            bias_df.loc[horizon] = bias
+        else:
+            bias = bias.item()
+            bias_df.loc[horizon] = bias
     return bias_df
 
 
@@ -112,20 +126,34 @@ def return_correlation(truth, full_day):
 
 def return_correlation_one_day(truth, full_day, horizons,
                                total_error_times):
-    R_df = pd.DataFrame(columns=['correlation'])
+    if 'ensemble_number' in full_day.coords:
+        R_df = pd.DataFrame(columns=full_day.ensemble_number.values)
+        ens_flag = True
+    else:
+        R_df = pd.DataFrame(columns=['correlation'])
+        ens_flag = False
     truth_df = truth.to_dataframe(name='ci')
     # print(truth_df)
     # print(type(truth_df))
     for horizon in horizons:
         these_error_times = total_error_times.index[
-            total_error_times[horizon]]
+                total_error_times[horizon]]
         fore_df = return_horizon(full_day, horizon)
         fore_df = fore_df.sel(time=these_error_times)
-        fore_df = fore_df.to_dataframe(name='ci')
-        # print(fore_df)
-        # print(type(truth_df))
-        R = fore_df.corrwith(truth_df['ci']).item()
-        R_df.loc[horizon] = R
+        if not ens_flag:
+            fore_df = fore_df.to_dataframe(name='ci')
+            # print(fore_df)
+            # print(type(truth_df))
+            R = fore_df.corrwith(truth_df['ci']).item()
+            R_df.loc[horizon] = R
+        else:
+            for ens_num in R_df.columns:
+                this_fore_df = fore_df.sel(ensemble_number=ens_num)
+                this_fore_df = this_fore_df.drop('ensemble_number')
+                this_fore_df = this_fore_df.to_dataframe(name='ci')
+                R = this_fore_df.corrwith(truth_df['ci'])
+                R = R.item()
+                R_df[ens_num].loc[horizon] = R
     return R_df
 
 
@@ -139,7 +167,10 @@ def return_sd(truth, full_day):
 
 def return_sd_one_day(truth, full_day, horizons,
                       total_error_times):
-    sd_df = pd.DataFrame(columns=['sd'])
+    if 'ensemble_number' in full_day.coords:
+        sd_df = pd.DataFrame(columns=full_day.ensemble_number.values)
+    else:
+        sd_df = pd.DataFrame(columns=['sd'])
     sd_truth_df = pd.DataFrame(columns=['true_sd'])
     for horizon in horizons:
         these_error_times = total_error_times.index[
@@ -148,8 +179,12 @@ def return_sd_one_day(truth, full_day, horizons,
         sd = sd.sel(time=these_error_times)
         sd_truth = truth.sel(time=these_error_times)
         sd = sd.var(dim=['south_north', 'west_east', 'time'])
-        sd = np.sqrt(sd.values.item())
-        sd_df.loc[horizon] = sd
+        sd = np.sqrt(sd.values)
+        if type(sd) is list:
+            sd_df.loc[horizon] = sd
+        else:
+            sd = sd.item()
+            sd_df.loc[horizon] = sd
         sd_truth = sd_truth.var(dim=['south_north', 'west_east', 'time'])
         sd_truth = np.sqrt(sd_truth.values.item())
         sd_truth_df.loc[horizon] = sd_truth
@@ -478,6 +513,11 @@ def error_stats_many_days(dates, runs, horizons, base_folder,
                 cloudy_times=cloudy_times)
             to_return.append(adict)
             continue
+        if run[0] == 'ensemble':
+            ens_flag = True
+            run = run[1]
+        else:
+            ens_flag = False
         all_days = letkf_io.return_many_days(dates, run, base_folder,
                                              only_of_times=only_of_times,
                                              mean_win_size=mean_win_size)
@@ -487,7 +527,8 @@ def error_stats_many_days(dates, runs, horizons, base_folder,
         # if only_cloudy:
         #     return all_days, cloudy_times
         #     all_days = all_days.sel(time=cloudy_times)
-        all_days = return_ens_mean(all_days)
+        if not ens_flag:
+            all_days = return_ens_mean(all_days)
 
         # # delete
         # this  = return_rmse_one_day(
