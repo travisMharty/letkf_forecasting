@@ -26,6 +26,18 @@ def create_folder(results_base_path, year, month, day, run_name):
     return file_path_r
 
 
+def return_analysis_ensemble(*, sat_time, results_file_path):
+    analysis_file = time2name(sat_time)
+    analysis_file = os.path.join(results_file_path, analysis_file)
+    this_ensemble = xr.open_dataset(analysis_file)
+    analysis_mean = this_ensemble.isel(time=0).mean(dim='ensemble_number')
+    U = analysis_mean['U'].values.astype('float64')
+    V = analysis_mean['V'].values.astype('float64')
+    CI = analysis_mean['ci'].values.astype('float64')
+    ensemble = np.concatenate([U.ravel(), V.ravel(), CI.ravel()])[:, None]
+    return ensemble
+
+
 def time2name(Timestamp):
     year = Timestamp.year
     month = Timestamp.month
@@ -37,8 +49,16 @@ def time2name(Timestamp):
 
 def save_netcdf(file_path_r, U, V, ci, param_dict, we_crop, sn_crop,
                 we_stag_crop, sn_stag_crop,
-                sat_times, ens_num):
-    file_path = os.path.join(file_path_r, time2name(sat_times[0]))
+                sat_times, ens_num, flags):
+    if 'analysis_fore' in flags:
+        if flags['analysis_fore']:
+            file_name = time2name(sat_times[0])
+            file_name = file_name[:-3] + '_anlys_fore' + '.nc'
+        else:
+            file_name = time2name(sat_times[0])
+    else:
+        file_name = time2name(sat_times[0])
+    file_path = os.path.join(file_path_r, file_name)
     with Dataset(file_path, mode='w') as store:
         for k, v in param_dict.items():
             try:
@@ -278,7 +298,8 @@ def add_horizon(ds):
     return ds
 
 
-def return_day(year, month, day, run_name, base_folder, optimize_folder=None):
+def return_day(year, month, day, run_name, base_folder, optimize_folder=None,
+               analysis_fore_flag=False):
     path = base_folder
     if optimize_folder is None:
         path = os.path.join(
@@ -289,7 +310,10 @@ def return_day(year, month, day, run_name, base_folder, optimize_folder=None):
             path, optimize_folder,
             f'{year:04}/{month:02}/{day:02}/' + run_name)
     path = find_run_folder(path)
-    path = os.path.join(path, '*.nc')
+    if analysis_fore_flag:
+        path = os.path.join(path, '????????_????Z_anlys_fore.nc')
+    else:
+        path = os.path.join(path, '????????_????Z.nc')
     full_day = xr.open_mfdataset(path,
                                  preprocess=add_horizon,
                                  decode_cf=False)
