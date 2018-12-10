@@ -35,12 +35,35 @@ def main():
     if args.day is not None:
         cfg['date']['day'] = args.day
     # Create path to save results
-    results_file_path = letkf_io.create_folder(
-        os.path.join(args.home, 'results'), cfg['date']['year'],
-        cfg['date']['month'], cfg['date']['day'],
-        cfg['io']['run_name'])
-    yaml_file_path = os.path.join(
-        results_file_path, 'config_' + cfg['io']['run_name'] + '.yml')
+    if 'analysis_fore' in cfg['flags']:
+        if cfg['flags']['analysis_fore']:
+            results_file_path = os.path.join(
+                args.home, 'results', cfg['date']['year'],
+                cfg['date']['month'], cfg['date']['day'],
+                cfg['io']['run_name'])
+            results_file_path = letkf_io.find_latest_run(results_file_path)
+            yaml_file_path = os.path.join(
+                results_file_path,
+                'config_' + cfg['io']['run_name']
+                + '_anlys_fore' + '.yml')
+            log_path = os.path.join(results_file_path,
+                                    'forecast_anlys_fore.log')
+        else:
+            results_file_path = letkf_io.create_folder(
+                os.path.join(args.home, 'results'), cfg['date']['year'],
+                cfg['date']['month'], cfg['date']['day'],
+                cfg['io']['run_name'])
+            yaml_file_path = os.path.join(
+                results_file_path, 'config_' + cfg['io']['run_name'] + '.yml')
+            log_path = os.path.join(results_file_path, 'forecast.log')
+    else:
+        results_file_path = letkf_io.create_folder(
+            os.path.join(args.home, 'results'), cfg['date']['year'],
+            cfg['date']['month'], cfg['date']['day'],
+            cfg['io']['run_name'])
+        yaml_file_path = os.path.join(
+            results_file_path, 'config_' + cfg['io']['run_name'] + '.yml')
+        log_path = os.path.join(results_file_path, 'forecast.log')
     cfg['version'] = __version__
     with open(yaml_file_path, 'w') as ymlfile:
         yaml.dump(cfg, ymlfile, default_flow_style=False)
@@ -49,7 +72,6 @@ def main():
         month=cfg['date']['month'], day=cfg['date']['day'])
     time0 = time_py.time()
 
-    log_path = os.path.join(results_file_path, 'forecast.log')
     logging.basicConfig(
         filename=log_path,
         format='%(asctime)s %(levelname)s %(name)s %(message)s',
