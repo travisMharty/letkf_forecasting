@@ -2,6 +2,8 @@ import os
 import numpy as np
 import pandas as pd
 import xarray as xr
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 from letkf_forecasting import (
@@ -9,9 +11,8 @@ from letkf_forecasting import (
     letkf_io)
 
 
-def return_smoothing_data():
+def return_smoothing_data(directory_name):
     runs = ['owp_opt']
-    directory_name = 'third_set'
     error_stats = []
     for run in runs:
         load_directory = ('/a2/uaren/travis/'
@@ -27,7 +28,6 @@ def return_smoothing_data():
     for this_stat in error_stats:
         if this_stat['name'] == 'owp_opt':
             owp_rmse = this_stat['rmse']
-            owp_corr = this_stat['correlation']
             owp_sd = this_stat['forecast_sd']
     smoothing_params = np.array(
         [3, 9, 15, 21, 27, 33, 39, 45, 51, 57, 63])
@@ -96,187 +96,57 @@ def return_smoothing_data():
         one_wrf_corr.loc[hor] = wrf_corr.loc[hor].iloc[optimal_index]
         one_wrf_sd.loc[hor] = wrf_sd.loc[hor].iloc[optimal_index]
     to_return = {
-        'owp_rmse': owp_rmse,
-        'owp_corr': owp_corr,
-        'owp_sd': owp_sd,
-        'of_rmse': of_rmse,
-        'of_corr': of_corr,
-        'of_sd': of_sd,
-        'wrf_rmse': wrf_rmse,
-        'wrf_corr': wrf_corr,
-        'wrf_sd': wrf_sd,
+        # 'owp_rmse': owp_rmse,
+        # 'owp_sd': owp_sd,
+        # 'of_rmse': of_rmse,
+        # 'of_corr': of_corr,
+        # 'of_sd': of_sd,
+        # 'wrf_rmse': wrf_rmse,
+        # 'wrf_corr': wrf_corr,
+        # 'wrf_sd': wrf_sd,
         'one_of_rmse': one_of_rmse,
-        'one_of_corr': one_of_corr,
-        'one_of_sd': one_of_sd,
+        # 'one_of_corr': one_of_corr,
+        # 'one_of_sd': one_of_sd,
         'one_wrf_rmse': one_wrf_rmse,
-        'one_wrf_corr': one_wrf_corr,
-        'one_wrf_sd': one_wrf_sd,
+        # 'one_wrf_corr': one_wrf_corr,
+        # 'one_wrf_sd': one_wrf_sd,
     }
     return to_return
 
 
-def plot_smoothing_data(*, cpal_dict, marker_dict, legend_dict, format, dpi):
-    to_plot = return_smoothing_data()
-    save_directory = ('/home/travis/python_code/'
-                      'letkf_forecasting/figures/'
-                      'smoothing_plots')
+def plot_smoothing_data(*, cpal_dict, marker_dict, legend_dict, format, dpi,
+                        smoothing_error, averaged_error, save_directory):
+    save_directory = os.path.join(save_directory,
+                                  'smoothing_plots')
+    if not os.path.exists(save_directory):
+        os.makedirs(save_directory)
     # RMSE
     plt.figure()
-    plt.plot(to_plot['one_of_rmse'],
+    plt.plot(smoothing_error['one_of_rmse'],
              color=cpal_dict['opt_flow'],
              marker=marker_dict['opt_flow'])
-    plt.plot(to_plot['one_wrf_rmse'],
+    plt.plot(smoothing_error['one_wrf_rmse'],
              color=cpal_dict['wrf_no_div'],
              marker=marker_dict['wrf_no_div'])
-    plt.plot(to_plot['owp_rmse'].loc[slice(15, None)],
+    plt.plot(averaged_error['owp_opt']['rmse'].loc[slice(15, None)],
              color=cpal_dict['owp_opt'],
              marker=marker_dict['owp_opt'])
     plt.legend([legend_dict['opt_flow'],
                 legend_dict['wrf_no_div'],
                 legend_dict['owp_opt']])
-    plt.title('RMSE for equal SD')
-    plt.xlabel('Forecast horizon (min)')
+    plt.title('RMSE for all days w/ equal SD')
+    plt.xlabel('Forecast horizon (min.)')
     plt.ylabel('RMSE (CI)')
     plt.xlim([15, 60])
     plt.savefig(fname=os.path.join(save_directory,
                                    f'rmse.{format}'),
                 format=format, dpi=dpi)
 
-    # correlation
-    plt.figure()
-    plt.plot(to_plot['one_of_corr'],
-             color=cpal_dict['opt_flow'],
-             marker=marker_dict['opt_flow'])
-    plt.plot(to_plot['one_wrf_corr'],
-             color=cpal_dict['wrf_no_div'],
-             marker=marker_dict['wrf_no_div'])
-    plt.plot(to_plot['owp_corr'].loc[slice(15, None)],
-             color=cpal_dict['owp_opt'],
-             marker=marker_dict['owp_opt'])
-    plt.legend([legend_dict['opt_flow'],
-                legend_dict['wrf_no_div'],
-                legend_dict['owp_opt']])
-    plt.title('Correlation for equal SD')
-    plt.xlabel('Forecast horizon (min)')
-    plt.ylabel('Correlation')
-    plt.xlim([15, 60])
-    plt.savefig(fname=os.path.join(save_directory,
-                                   f'correlation.{format}'),
-                format=format, dpi=dpi)
 
-    for hor in [15, 30, 45, 60]:
-        # sd vs rmse
-        plt.figure()
-        plt.plot(
-            to_plot['of_sd'].loc[hor],
-            to_plot['of_rmse'].loc[hor],
-            color=cpal_dict['opt_flow'],
-            marker=marker_dict['opt_flow'])
-        plt.plot(
-            to_plot['wrf_sd'].loc[hor],
-            to_plot['wrf_rmse'].loc[hor],
-            color=cpal_dict['wrf_no_div'],
-            marker=marker_dict['wrf_no_div'])
-        plt.plot(
-            to_plot['owp_sd'].loc[hor],
-            to_plot['owp_rmse'].loc[hor].values,
-            color=cpal_dict['owp_opt'],
-            marker=marker_dict['owp_opt'])
-        plt.legend([legend_dict['opt_flow'],
-                    legend_dict['wrf_no_div'],
-                    legend_dict['owp_opt']])
-        plt.xlabel('Standard deviation (CI)')
-        plt.ylabel('RMSE (CI)')
-        plt.title(f'Standard deviation vs RMSE; Horizon: {hor}')
-        plt.savefig(fname=os.path.join(save_directory,
-                                       f'sd_vs_rmse_{hor}.{format}'),
-                    format=format, dpi=dpi)
-
-        # rmse
-        plt.figure()
-        plt.plot(
-            to_plot['of_rmse'].loc[hor],
-            color=cpal_dict['opt_flow'],
-            marker=marker_dict['opt_flow'])
-        plt.plot(
-            to_plot['wrf_rmse'].loc[hor],
-            color=cpal_dict['wrf_no_div'],
-            marker=marker_dict['wrf_no_div'])
-        plt.plot(
-            to_plot['of_rmse'].columns,
-            to_plot['owp_rmse'].loc[hor].values
-            * np.ones(to_plot['of_rmse'].columns.size),
-            '--',
-            color=cpal_dict['owp_opt'],
-            marker=marker_dict['owp_opt'])
-        plt.legend([legend_dict['opt_flow'],
-                    legend_dict['wrf_no_div'],
-                    legend_dict['owp_opt']])
-        plt.xlabel('Smoothing parameter')
-        plt.ylabel('RMSE (CI)')
-        plt.title(f'Smoothing vs RMSE; Horizon: {hor}')
-        plt.savefig(fname=os.path.join(save_directory,
-                                       f'rmse_{hor}.{format}'),
-                    format=format, dpi=dpi)
-
-        # correlation
-        plt.figure()
-        plt.plot(
-            to_plot['of_corr'].loc[hor],
-            color=cpal_dict['opt_flow'],
-            marker=marker_dict['opt_flow'])
-        plt.plot(
-            to_plot['wrf_corr'].loc[hor],
-            color=cpal_dict['wrf_no_div'],
-            marker=marker_dict['wrf_no_div'])
-        plt.plot(
-            to_plot['of_corr'].columns,
-            to_plot['owp_corr'].loc[hor].values
-            * np.ones(to_plot['of_corr'].columns.size),
-            '--',
-            color=cpal_dict['owp_opt'],
-            marker=marker_dict['owp_opt'])
-        plt.legend([legend_dict['opt_flow'],
-                    legend_dict['wrf_no_div'],
-                    legend_dict['owp_opt']])
-        plt.xlabel('Smoothing parameter')
-        plt.ylabel('Correlation')
-        plt.title(f'Smoothing vs Correlation; Horizon: {hor}')
-        plt.savefig(fname=os.path.join(save_directory,
-                                       f'corr_{hor}.{format}'),
-                    format=format, dpi=dpi)
-
-        # standard deviation
-        plt.figure()
-        plt.plot(
-            to_plot['of_sd'].loc[hor],
-            color=cpal_dict['opt_flow'],
-            marker=marker_dict['opt_flow'])
-        plt.plot(
-            to_plot['wrf_sd'].loc[hor],
-            color=cpal_dict['wrf_no_div'],
-            marker=marker_dict['wrf_no_div'])
-        plt.plot(
-            to_plot['of_sd'].columns,
-            to_plot['owp_sd'].loc[hor].values
-            * np.ones(to_plot['of_sd'].columns.size),
-            '--',
-            color=cpal_dict['owp_opt'],
-            marker=marker_dict['owp_opt'])
-        plt.legend([legend_dict['opt_flow'],
-                    legend_dict['wrf_no_div'],
-                    legend_dict['owp_opt']])
-        plt.xlabel('Smoothing parameter')
-        plt.ylabel('Standard deviation (CI)')
-        plt.title(f'Smoothing vs Standard deviation; Horizon: {hor}')
-        plt.savefig(fname=os.path.join(save_directory,
-                                       f'sd_{hor}.{format}'),
-                    format=format, dpi=dpi)
-
-
-def return_original_stats():
+def return_original_stats(directory_name):
     runs = ['opt_flow', 'wrf_no_div', 'owp_opt', 'persistence']
-    directory_name = 'third_set_only_cloudy'
+    # directory_name = 'third_set_only_cloudy'
+    #directory_name = 'third_set'
     error_stats = {}
     for run in runs:
         load_directory = ('/a2/uaren/travis/'
@@ -292,29 +162,30 @@ def return_original_stats():
     return error_stats
 
 
-def plot_original_error(*, cpal_dict, marker_dict, legend_dict, format, dpi):
-    to_plot = return_original_stats()
-    save_directory = ('/home/travis/python_code/'
-                      'letkf_forecasting/figures/'
-                      'error_plots')
+def plot_original_error(*, cpal_dict, marker_dict, legend_dict, format, dpi,
+                        averaged_error, save_directory):
+    save_directory = os.path.join(save_directory,
+                                  'error_plots')
+    if not os.path.exists(save_directory):
+        os.makedirs(save_directory)
     # RMSE
     plt.figure()
-    this_to_plot = to_plot[
+    this_to_plot = averaged_error[
         'persistence']['rmse'].loc[slice(15, None)]
     plt.plot(this_to_plot,
              color=cpal_dict['persistence'],
              marker=marker_dict['persistence'])
-    this_to_plot = to_plot[
+    this_to_plot = averaged_error[
         'opt_flow']['rmse'].loc[slice(15, None)]
     plt.plot(this_to_plot,
              color=cpal_dict['opt_flow'],
              marker=marker_dict['opt_flow'])
-    this_to_plot = to_plot[
+    this_to_plot = averaged_error[
         'wrf_no_div']['rmse'].loc[slice(15, None)]
     plt.plot(this_to_plot,
              color=cpal_dict['wrf_no_div'],
              marker=marker_dict['wrf_no_div'])
-    this_to_plot = to_plot[
+    this_to_plot = averaged_error[
         'owp_opt']['rmse'].loc[slice(15, None)]
     plt.plot(this_to_plot,
              color=cpal_dict['owp_opt'],
@@ -323,80 +194,13 @@ def plot_original_error(*, cpal_dict, marker_dict, legend_dict, format, dpi):
                 legend_dict['opt_flow'],
                 legend_dict['wrf_no_div'],
                 legend_dict['owp_opt']])
-    plt.title('RMSE')
-    plt.xlabel('Forecast horizon (min)')
+    plt.title('RMSE for all days')
+    plt.xlabel('Forecast horizon (min.)')
     plt.ylabel('RMSE (CI)')
     plt.xlim([15, 60])
+    plt.xticks([15, 30, 45, 60])
     plt.savefig(fname=os.path.join(save_directory,
                                    f'rmse.{format}'),
-                format=format, dpi=dpi)
-
-    # correlation
-    plt.figure()
-    this_to_plot = to_plot[
-        'persistence']['correlation'].loc[slice(15, None)]
-    plt.plot(this_to_plot,
-             color=cpal_dict['persistence'],
-             marker=marker_dict['persistence'])
-    this_to_plot = to_plot[
-        'opt_flow']['correlation'].loc[slice(15, None)]
-    plt.plot(this_to_plot,
-             color=cpal_dict['opt_flow'],
-             marker=marker_dict['opt_flow'])
-    this_to_plot = to_plot[
-        'wrf_no_div']['correlation'].loc[slice(15, None)]
-    plt.plot(this_to_plot,
-             color=cpal_dict['wrf_no_div'],
-             marker=marker_dict['wrf_no_div'])
-    this_to_plot = to_plot[
-        'owp_opt']['correlation'].loc[slice(15, None)]
-    plt.plot(this_to_plot,
-             color=cpal_dict['owp_opt'],
-             marker=marker_dict['owp_opt'])
-    plt.legend([legend_dict['persistence'],
-                legend_dict['opt_flow'],
-                legend_dict['wrf_no_div'],
-                legend_dict['owp_opt']])
-    plt.title('Correlation')
-    plt.xlabel('Forecast horizon (min)')
-    plt.ylabel('Correlation')
-    plt.xlim([15, 60])
-    plt.savefig(fname=os.path.join(save_directory,
-                                   f'correlation.{format}'),
-                format=format, dpi=dpi)
-
-    # forecast sd
-    plt.figure()
-    this_to_plot = to_plot[
-        'persistence']['forecast_sd'].loc[slice(15, None)]
-    plt.plot(this_to_plot,
-             color=cpal_dict['persistence'],
-             marker=marker_dict['persistence'])
-    this_to_plot = to_plot[
-        'opt_flow']['forecast_sd'].loc[slice(15, None)]
-    plt.plot(this_to_plot,
-             color=cpal_dict['opt_flow'],
-             marker=marker_dict['opt_flow'])
-    this_to_plot = to_plot[
-        'wrf_no_div']['forecast_sd'].loc[slice(15, None)]
-    plt.plot(this_to_plot,
-             color=cpal_dict['wrf_no_div'],
-             marker=marker_dict['wrf_no_div'])
-    this_to_plot = to_plot[
-        'owp_opt']['forecast_sd'].loc[slice(15, None)]
-    plt.plot(this_to_plot,
-             color=cpal_dict['owp_opt'],
-             marker=marker_dict['owp_opt'])
-    plt.legend([legend_dict['persistence'],
-                legend_dict['opt_flow'],
-                legend_dict['wrf_no_div'],
-                legend_dict['owp_opt']])
-    plt.title('Forecast standard deviation')
-    plt.xlabel('Forecast horizon (min)')
-    plt.ylabel('Standard deviation (CI)')
-    plt.xlim([15, 60])
-    plt.savefig(fname=os.path.join(save_directory,
-                                   f'sd.{format}'),
                 format=format, dpi=dpi)
 
 
@@ -404,93 +208,131 @@ def return_daily_error():
     runs = ['persistence', 'opt_flow', 'wrf_no_div', 'owp_opt']
     base_folder = '/a2/uaren/travis/'
     year = 2014
-    month_day = [[4, 9],  [4, 15], [4, 18],
-                 [5, 6],  [5, 9],  [5, 29],
-                 [6, 11], [6, 12],
-                 [4, 2],  [4, 5],  [4, 19],
-                 [5, 7],  [5, 8],  [5, 19],
-                 [6, 3],  [6, 10], [6, 14],
-                 [6, 15],
+    month_day = [[4, 2],  [4, 5], [4, 9],
                  [4, 10], [4, 11], [4, 12],
+                 [4, 15], [4, 18], [4, 19],
                  [4, 20], [4, 21], [4, 22],
-                 [4, 25], [4, 26], [5, 5],
-                 [5, 20], [5, 21], [5, 22],
-                 [5, 23], [5, 24], [5, 25],
-                 [5, 30], [6, 16], [6, 17],
+                 [4, 25], [4, 26],
+
+                 [5, 5], [5, 6], [5, 7],
+                 [5, 8], [5, 9], [5, 19], [5, 20],
+                 [5, 21], [5, 22], [5, 23],
+                 [5, 24], [5, 25], [5, 29],
+                 [5, 30],
+
+                 [6, 3],  [6, 10], [6, 11],
+                 [6, 12], [6, 14], [6, 15],
+                 [6, 16], [6, 17],
                  [6, 18], [6, 19], [6, 22]]
-    persistence = pd.DataFrame(columns=[15, 30, 45, 60])
-    opt_flow = persistence.copy()
-    wrf_no_div = persistence.copy()
-    owp_opt = persistence.copy()
+    # persistence =
+    opt_flow = pd.DataFrame(columns=[15, 30, 45, 60])
+    wrf_no_div = opt_flow.copy()
+    owp_opt = opt_flow.copy()
+    daily_error = {'opt_flow': opt_flow,
+                   'wrf_no_div': wrf_no_div,
+                   'owp_opt': owp_opt}
+    # daily_error = {'persistence': persistence,
+    #                'opt_flow': opt_flow,
+    #                'wrf_no_div': wrf_no_div,
+    #                'owp_opt': owp_opt}
     for this_month_day in month_day:
         month = this_month_day[0]
         day = this_month_day[1]
-        returned = analyse_results.find_error_stats(
-            year, month, day, runs, base_folder)
-        for this_stat in returned:
-            name = this_stat['name']
-            this_date = this_stat['rmse'].index[0].date()
-            exec(
-                name
-                + '.loc[this_date] '
-                + '= np.sqrt((this_stat[\'rmse\']**2)'
-                + '.mean())')
-    persistence = persistence.sort_index()
-    opt_flow = opt_flow.sort_index()
-    wrf_no_div = wrf_no_div.sort_index()
-    owp_opt = owp_opt.sort_index()
-    adict = {'persistence': persistence,
-             'opt_flow': opt_flow,
-             'wrf_no_div': wrf_no_div,
-             'owp_opt': owp_opt}
-    return adict
+        this_date = pd.datetime(year, month, day).date()
+        for run_name in daily_error.keys():
+            results_folder_path = os.path.join(
+                base_folder,
+                'results',
+                f'{year:04}',
+                f'{month:02}',
+                f'{day:02}',
+                run_name)
+            results_folder_path = letkf_io.find_latest_run(
+                results_folder_path)
+            results_folder_path = os.path.join(
+                results_folder_path, 'single_day')
+            stat_name = 'rmse'
+            file_path = os.path.join(
+                results_folder_path, f'{stat_name}.h5')
+            rmse = pd.read_hdf(file_path, stat_name)
+            daily_error[run_name].loc[this_date] = rmse['rmse']
 
 
-def plot_daily_error(*, cpal_dict, marker_dict, legend_dict, format, dpi):
-    save_directory = ('/home/travis/python_code/'
-                      'letkf_forecasting/figures/'
-                      'daily_error')
-    error_dict = return_daily_error()
-    persistence = error_dict['persistence']
-    opt_flow = error_dict['opt_flow']
-    wrf_no_div = error_dict['wrf_no_div']
-    owp_opt = error_dict['owp_opt']
+    #     returned = analyse_results.find_error_stats(
+    #         year, month, day, runs, base_folder)
+    #     for this_stat in returned:
+    #         name = this_stat['name']
+    #         this_date = this_stat['rmse'].index[0].date()
+    #         exec(
+    #             name
+    #             + '.loc[this_date] '
+    #             + '= np.sqrt((this_stat[\'rmse\']**2)'
+    #             + '.mean())')
+    # persistence = persistence.sort_index()
+    # opt_flow = opt_flow.sort_index()
+    # wrf_no_div = wrf_no_div.sort_index()
+    # owp_opt = owp_opt.sort_index()
+    # adict = {'persistence': persistence,
+    #          'opt_flow': opt_flow,
+    #          'wrf_no_div': wrf_no_div,
+    #          'owp_opt': owp_opt}
+    return daily_error
 
+
+def plot_daily_error(*, cpal_dict, marker_dict, legend_dict, format, dpi,
+                     daily_error, averaged_error, save_directory):
+    save_directory = os.path.join(save_directory,
+                                  'daily_error')
+    if not os.path.exists(save_directory):
+        os.makedirs(save_directory)
+    #persistence = daily_error['persistence']
+    # persistence = pd.concat(
+    #     [persistence,
+    #      (averaged_error['persistence']['rmse'].T)[[15, 30, 45, 60]]])
+    opt_flow = daily_error['opt_flow']
     xticks = [str(index.month) + ' ' + str(index.day)
-              for index in persistence.index]
+              for index in opt_flow.index]
+    opt_flow = pd.concat(
+        [opt_flow,
+         (averaged_error['opt_flow']['rmse'].T)[[15, 30, 45, 60]]])
+    wrf_no_div = daily_error['wrf_no_div']
+    wrf_no_div = pd.concat(
+        [wrf_no_div,
+         (averaged_error['wrf_no_div']['rmse'].T)[[15, 30, 45, 60]]])
+    owp_opt = daily_error['owp_opt']
+    owp_opt = pd.concat(
+        [owp_opt,
+         (averaged_error['owp_opt']['rmse'].T)[[15, 30, 45, 60]]])
+    y_max = np.max([opt_flow.max(),
+                    wrf_no_div.max(),
+                    owp_opt.max()])
+
+    # y_max = np.max([persistence.max(),
+    #                 opt_flow.max(),
+    #                 wrf_no_div.max(),
+    #                 owp_opt.max()])
+
+    xticks.append('All days')
     xarange = np.arange(len(xticks))
     figsize = plt.figaspect(0.3)
     width = 0.28
+    # width = 0.20
 
     for hor in [15, 30, 45, 60]:
-        of_skill = 1 - opt_flow[hor]/persistence[hor]
-        wrf_skill = 1 - wrf_no_div[hor]/persistence[hor]
-        owp_skill = 1 - owp_opt[hor]/persistence[hor]
-
         plt.figure(figsize=figsize)
-        plt.bar(xarange,
-                of_skill, width,
-                color=cpal_dict['opt_flow'])
-        plt.bar(xarange + width,
-                wrf_skill, width,
-                color=cpal_dict['wrf_no_div'])
-        plt.bar(xarange + 2*width,
-                owp_skill, width,
-                color=cpal_dict['owp_opt'])
-        plt.xticks(xarange + width, xticks, rotation=90)
-        plt.title(f'RMSE skill score; Horizon: {hor}')
-        plt.legend([legend_dict['opt_flow'],
-                    legend_dict['wrf_no_div'],
-                    legend_dict['owp_opt']])
-        plt.xlabel('Date')
-        plt.ylabel('RMSE skill score')
-        plt.ylim([0, None])
-        plt.tight_layout()
-        plt.savefig(fname=os.path.join(save_directory,
-                                       f'rmse_ss_{hor}.{format}'),
-                    format=format, dpi=dpi)
+        # plt.bar(xarange,
+        #         persistence[hor], width,
+        #         color=cpal_dict['opt_flow'])
+        # plt.bar(xarange + width,
+        #         opt_flow[hor], width,
+        #         color=cpal_dict['opt_flow'])
+        # plt.bar(xarange + 2*width,
+        #         wrf_no_div[hor], width,
+        #         color=cpal_dict['wrf_no_div'])
+        # plt.bar(xarange + 3*width,
+        #         owp_opt[hor], width,
+        #         color=cpal_dict['owp_opt'])
 
-        plt.figure(figsize=figsize)
         plt.bar(xarange,
                 opt_flow[hor], width,
                 color=cpal_dict['opt_flow'])
@@ -501,151 +343,174 @@ def plot_daily_error(*, cpal_dict, marker_dict, legend_dict, format, dpi):
                 owp_opt[hor], width,
                 color=cpal_dict['owp_opt'])
         plt.xticks(xarange + width, xticks, rotation=90)
-        plt.title(f'RMSE; Horizon: {hor}')
+        plt.title(f'RMSE for a horizon of {hor} minutes')
         plt.legend([legend_dict['opt_flow'],
                     legend_dict['wrf_no_div'],
                     legend_dict['owp_opt']])
         plt.xlabel('Date')
         plt.ylabel('RMSE (CI)')
-        plt.ylim([0, None])
+        plt.ylim([0, y_max])
+        plt.xlim([xarange[0] - 0.5, xarange[-1] + 2*width + 0.5])
         plt.tight_layout()
         plt.savefig(fname=os.path.join(save_directory,
                                        f'rmse_{hor}.{format}'),
                     format=format, dpi=dpi)
 
 
-def return_spaghetti_error(*, month, day):
+def return_spaghetti_error(*, dates_dict, run_names,
+                           base_folder='/a2/uaren/travis'):
     year = 2014
-    horizons = [15, 30, 45, 60]
-    base_folder = '/a2/uaren/travis/'
-    truth = xr.open_dataset(
-        f'/a2/uaren/travis/data/{year:04}/{month:02}/{day:02}/data.nc')
-    truth = truth['ci']
-    truth = letkf_io.add_crop_attributes(truth)
-    truth_full = truth.copy()
-    truth = analyse_results.return_error_domain(truth)
+    spaghetti_error = {}
+    for day_type, month_day in dates_dict.items():
+        month = month_day[0]
+        day = month_day[1]
+        this_error = {}
+        for run_name in run_names:
+            if run_name[0] is 'ensemble':
+                ensemble_flag = True
+                run_name = run_name[1]
+            else:
+                ensemble_flag = False
+            results_folder_path = os.path.join(
+                base_folder,
+                'results',
+                f'{year:04}',
+                f'{month:02}',
+                f'{day:02}',
+                run_name)
+            results_folder_path = letkf_io.find_latest_run(
+                results_folder_path)
+            results_folder_path = os.path.join(
+                results_folder_path, 'single_day')
+            stat_name = 'rmse'
+            if ensemble_flag:
+                stat_name = stat_name + '_ens'
+                run_name = 'ensemble'
+            file_path = os.path.join(
+                results_folder_path, f'{stat_name}.h5')
+            print(file_path)
+            rmse = pd.read_hdf(file_path, stat_name)
+            this_error[run_name] = rmse
+        spaghetti_error[day_type] = this_error
+    return spaghetti_error
 
-    truth = truth.load()
 
-    full_day = letkf_io.return_day(year,
-                                   month,
-                                   day,
-                                   'owp_opt',
-                                   base_folder)
+# def return_spaghetti_error(*, month, day):
+#     year = 2014
+#     horizons = [15, 30, 45, 60]
+#     base_folder = '/a2/uaren/travis/'
+#     truth = xr.open_dataset(
+#         f'/a2/uaren/travis/data/{year:04}/{month:02}/{day:02}/data.nc')
+#     truth = truth['ci']
+#     truth = letkf_io.add_crop_attributes(truth)
+#     truth = analyse_results.return_error_domain(truth)
 
-    full_day = letkf_io.add_crop_attributes(full_day)
-    full_day = analyse_results.return_error_domain(full_day)
-    full_day = full_day['ci'].load()
+#     truth = truth.load()
 
-    full_day_mean = analyse_results.return_ens_mean(full_day)
+#     full_day = letkf_io.return_day(year,
+#                                    month,
+#                                    day,
+#                                    'owp_opt',
+#                                    base_folder)
 
-    wrf = letkf_io.return_day(year,
-                              month,
-                              day,
-                              'wrf_no_div',
-                              base_folder)
+#     full_day = letkf_io.add_crop_attributes(full_day)
+#     full_day = analyse_results.return_error_domain(full_day)
+#     full_day = full_day['ci'].load()
 
-    wrf = letkf_io.add_crop_attributes(wrf)
-    wrf = analyse_results.return_error_domain(wrf)
-    wrf = wrf['ci'].load()
+#     full_day_mean = analyse_results.return_ens_mean(full_day)
 
-    opt_flow = letkf_io.return_day(year,
-                                   month,
-                                   day,
-                                   'opt_flow',
-                                   base_folder)
+#     wrf = letkf_io.return_day(year,
+#                               month,
+#                               day,
+#                               'wrf_no_div',
+#                               base_folder)
 
-    opt_flow = letkf_io.add_crop_attributes(opt_flow)
-    opt_flow = analyse_results.return_error_domain(opt_flow)
-    opt_flow = opt_flow['ci'].load()
+#     wrf = letkf_io.add_crop_attributes(wrf)
+#     wrf = analyse_results.return_error_domain(wrf)
+#     wrf = wrf['ci'].load()
 
-    full_day.ensemble_number.size
+#     opt_flow = letkf_io.return_day(year,
+#                                    month,
+#                                    day,
+#                                    'opt_flow',
+#                                    base_folder)
 
-    ens_num = full_day.ensemble_number.size
+#     opt_flow = letkf_io.add_crop_attributes(opt_flow)
+#     opt_flow = analyse_results.return_error_domain(opt_flow)
+#     opt_flow = opt_flow['ci'].load()
 
-    ensemble_rmse = np.ones([len(horizons), ens_num]) * np.nan
-    ensemble_bias = np.ones([len(horizons), ens_num]) * np.nan
+#     full_day.ensemble_number.size
 
-    mean_rmse = np.ones([len(horizons)]) * np.nan
-    mean_bias = np.ones([len(horizons)]) * np.nan
+#     ens_num = full_day.ensemble_number.size
 
-    wrf_rmse = np.ones([len(horizons)]) * np.nan
-    wrf_bias = np.ones([len(horizons)]) * np.nan
+#     ensemble_rmse = np.ones([len(horizons), ens_num]) * np.nan
 
-    opt_flow_rmse = np.ones([len(horizons)]) * np.nan
-    opt_flow_bias = np.ones([len(horizons)]) * np.nan
-    for ii, hor in enumerate(horizons):
-        ensemble_rmse_temp = analyse_results.return_horizon(full_day, int(hor))
-        ensemble_rmse_temp = ensemble_rmse_temp - truth
-        ensemble_rmse[ii] = np.sqrt((ensemble_rmse_temp ** 2).mean(
-            dim=['south_north', 'west_east', 'time'])).values
-        ensemble_bias_temp = analyse_results.return_horizon(full_day, hor)
-        ensemble_bias_temp = ensemble_bias_temp - truth
-        ensemble_bias[ii] = ensemble_bias_temp.mean(
-            dim=['south_north', 'west_east', 'time']).values
+#     mean_rmse = np.ones([len(horizons)]) * np.nan
 
-        mean_rmse_temp = analyse_results.return_horizon(full_day_mean, int(hor))
-        mean_rmse_temp = mean_rmse_temp - truth
-        mean_rmse[ii] = np.sqrt((mean_rmse_temp ** 2).mean(
-            dim=['south_north', 'west_east', 'time'])).values
-        mean_bias_temp = analyse_results.return_horizon(full_day_mean, hor)
-        mean_bias_temp = mean_bias_temp - truth
-        mean_bias[ii] = mean_bias_temp.mean(
-            dim=['south_north', 'west_east', 'time']).values
+#     wrf_rmse = np.ones([len(horizons)]) * np.nan
 
-        wrf_rmse_temp = analyse_results.return_horizon(wrf, int(hor))
-        wrf_rmse_temp = wrf_rmse_temp - truth
-        wrf_rmse[ii] = np.sqrt((wrf_rmse_temp ** 2).mean(
-            dim=['south_north', 'west_east', 'time'])).values
-        wrf_bias_temp = analyse_results.return_horizon(wrf, hor)
-        wrf_bias_temp = wrf_bias_temp - truth
-        wrf_bias[ii] = wrf_bias_temp.mean(
-            dim=['south_north', 'west_east', 'time']).values
+#     opt_flow_rmse = np.ones([len(horizons)]) * np.nan
+#     for ii, hor in enumerate(horizons):
+#         ensemble_rmse_temp = analyse_results.return_horizon(full_day, int(hor))
+#         ensemble_rmse_temp = ensemble_rmse_temp - truth
+#         ensemble_rmse[ii] = np.sqrt((ensemble_rmse_temp ** 2).mean(
+#             dim=['south_north', 'west_east', 'time'])).values
 
-        opt_flow_rmse_temp = analyse_results.return_horizon(opt_flow, int(hor))
-        opt_flow_rmse_temp = opt_flow_rmse_temp - truth
-        opt_flow_rmse[ii] = np.sqrt((opt_flow_rmse_temp ** 2).mean(
-            dim=['south_north', 'west_east', 'time'])).values
-        opt_flow_bias_temp = analyse_results.return_horizon(opt_flow, hor)
-        opt_flow_bias_temp = opt_flow_bias_temp - truth
-        opt_flow_bias[ii] = opt_flow_bias_temp.mean(
-            dim=['south_north', 'west_east', 'time']).values
-    return_dict = {'horizons': horizons,
-                   'ensemble_rmse': ensemble_rmse,
-                   'ensemble_bias': ensemble_bias,
-                   'mean_rmse': mean_rmse,
-                   'mean_bias': mean_bias,
-                   'wrf_rmse': wrf_rmse,
-                   'wrf_bias': wrf_bias,
-                   'opt_flow_rmse': opt_flow_rmse,
-                   'opt_flow_bias': opt_flow_bias}
-    return return_dict
+#         mean_rmse_temp = analyse_results.return_horizon(full_day_mean, int(hor))
+#         mean_rmse_temp = mean_rmse_temp - truth
+#         mean_rmse[ii] = np.sqrt((mean_rmse_temp ** 2).mean(
+#             dim=['south_north', 'west_east', 'time'])).values
+
+#         wrf_rmse_temp = analyse_results.return_horizon(wrf, int(hor))
+#         wrf_rmse_temp = wrf_rmse_temp - truth
+#         wrf_rmse[ii] = np.sqrt((wrf_rmse_temp ** 2).mean(
+#             dim=['south_north', 'west_east', 'time'])).values
+
+#         opt_flow_rmse_temp = analyse_results.return_horizon(opt_flow, int(hor))
+#         opt_flow_rmse_temp = opt_flow_rmse_temp - truth
+#         opt_flow_rmse[ii] = np.sqrt((opt_flow_rmse_temp ** 2).mean(
+#             dim=['south_north', 'west_east', 'time'])).values
+
+#     return_dict = {'horizons': horizons,
+#                    'ensemble_rmse': ensemble_rmse,
+#                    'mean_rmse': mean_rmse,
+#                    'wrf_rmse': wrf_rmse,
+#                    'opt_flow_rmse': opt_flow_rmse}
+#     return return_dict
 
 
 def plot_spaghetti(*, cpal_dict, legend_dict, marker_dict,
-                   format, dpi, dates_dict):
+                   format, dpi, dates_dict,
+                   spaghetti_error,
+                   save_directory):
+    case_study_dict = {'translation': 'Case Study 1',
+                       'more_complex': 'Case Study 2',
+                       'two_levels': 'Case Study 3'}
     for day_type, month_day in dates_dict.items():
-        print(month_day)
         month = month_day[0]
         day = month_day[1]
-        save_directory = ('/home/travis/python_code/'
-                          'letkf_forecasting/figures/'
-                          + day_type)
-        returned_dict = return_spaghetti_error(month=month,
-                                               day=day)
+        this_title = case_study_dict[day_type]
+        this_save_directory = os.path.join(save_directory,
+                                           day_type)
+        if not os.path.exists(this_save_directory):
+            os.makedirs(this_save_directory)
+        # save_directory = ('/home/travis/python_code/'
+        #                   'letkf_forecasting/figures/'
+        #                   + day_type)
+        this_error = spaghetti_error[day_type]
 
-        horizons = returned_dict['horizons']
-        ensemble_rmse = returned_dict['ensemble_rmse']
-        ensemble_bias = returned_dict['ensemble_bias']
-        mean_rmse = returned_dict['mean_rmse']
-        mean_bias = returned_dict['mean_bias']
-        wrf_rmse = returned_dict['wrf_rmse']
-        wrf_bias = returned_dict['wrf_bias']
-        opt_flow_rmse = returned_dict['opt_flow_rmse']
-        opt_flow_bias = returned_dict['opt_flow_bias']
+        ensemble_rmse = this_error['ensemble']
+        mean_rmse = this_error['owp_opt']
+        wrf_rmse = this_error['wrf_no_div']
+        opt_flow_rmse = this_error['opt_flow']
+        persistence_rmse = this_error['persistence']
+        horizons = mean_rmse.index.values
 
         # RMSE
         plt.figure()
+        plt.plot(horizons, persistence_rmse,
+                 marker=marker_dict['persistence'],
+                 color=cpal_dict['persistence'])
         plt.plot(horizons, opt_flow_rmse,
                  marker=marker_dict['opt_flow'],
                  color=cpal_dict['opt_flow'])
@@ -658,128 +523,117 @@ def plot_spaghetti(*, cpal_dict, legend_dict, marker_dict,
         plt.plot(horizons, ensemble_rmse, alpha=0.5, linestyle=':',
                  color=cpal_dict['ens_member'])
         plt.xlim([min(horizons), max(horizons)])
-        plt.legend([legend_dict['opt_flow'],
+        plt.xticks(horizons)
+        legend = plt.legend([legend_dict['persistence'],
+                    legend_dict['opt_flow'],
                     legend_dict['wrf_no_div'],
                     legend_dict['owp_opt'],
                     legend_dict['ens_member']])
-        plt.xlabel('Horizon')
+        for handle in legend.legendHandles:
+            handle.set_alpha(1)
+        # plt.legend([legend_dict['persistence'],
+        #             legend_dict['opt_flow'],
+        #             legend_dict['wrf_no_div'],
+        #             legend_dict['owp_opt'],
+        #             legend_dict['ens_member']])
+        plt.xlabel('Forecast horizon (min.)')
         plt.ylabel('RMSE (CI)')
-        plt.title(f'RMSE: {month}/{day}')
-        plt.savefig(fname=os.path.join(save_directory,
+        plt.title(f'RMSE for {this_title}: 2014/{month}/{day}')
+        plt.savefig(fname=os.path.join(this_save_directory,
                                        f'rmse.{format}'),
-                    format=format, dpi=dpi)
-
-        # Bias
-        plt.figure()
-        plt.plot(horizons, opt_flow_bias,
-                 marker=marker_dict['opt_flow'],
-                 color=cpal_dict['opt_flow'])
-        plt.plot(horizons, wrf_bias,
-                 marker=marker_dict['wrf_no_div'],
-                 color=cpal_dict['wrf_no_div'])
-        plt.plot(horizons, mean_bias,
-                 marker=marker_dict['owp_opt'],
-                 color=cpal_dict['owp_opt'])
-        plt.plot(horizons, ensemble_bias, alpha=0.5, linestyle=':',
-                 color=cpal_dict['ens_member'])
-        plt.xlim([min(horizons), max(horizons)])
-        plt.legend([legend_dict['opt_flow'],
-                    legend_dict['wrf_no_div'],
-                    legend_dict['owp_opt'],
-                    legend_dict['ens_member']])
-        plt.xlabel('Horizon')
-        plt.ylabel('Bias (CI)')
-        plt.title(f'Bias: {month}/{day}')
-        plt.savefig(fname=os.path.join(save_directory,
-                                       f'bias.{format}'),
-                    format=format, dpi=dpi)
-
-        # Absolute of Bias
-        plt.figure()
-        plt.plot(horizons, np.abs(opt_flow_bias),
-                 marker=marker_dict['opt_flow'],
-                 color=cpal_dict['opt_flow'])
-        plt.plot(horizons, np.abs(wrf_bias),
-                 marker=marker_dict['wrf_no_div'],
-                 color=cpal_dict['wrf_no_div'])
-        plt.plot(horizons, np.abs(mean_bias),
-                 marker=marker_dict['owp_opt'],
-                 color=cpal_dict['owp_opt'])
-        plt.plot(horizons, np.abs(ensemble_bias), alpha=0.5, linestyle=':',
-                 color=cpal_dict['ens_member'])
-        plt.xlim([min(horizons), max(horizons)])
-        plt.legend([legend_dict['opt_flow'],
-                    legend_dict['wrf_no_div'],
-                    legend_dict['owp_opt'],
-                    legend_dict['ens_member']])
-        plt.xlabel('Horizon')
-        plt.ylabel('Bias (CI)')
-        plt.title(f'Absolute of Bias: {month}/{day}')
-        plt.savefig(fname=os.path.join(save_directory,
-                                       f'abs_bias.{format}'),
                     format=format, dpi=dpi)
 
 
 def main():
     format = 'png'
-    dpi = 300
+    dpi = 400
     cpal = sns.color_palette('deep')
     sns.set_style('whitegrid')
-    sns.set_context('paper', font_scale=1.0,
+    sns.set_context('paper', font_scale=1.5,
                     rc={'lines.linewidth': 1.0,
                         'lines.markersize': 7})
     cpal_dict = {'opt_flow': cpal[0],
                  'wrf_no_div': cpal[1],
                  'owp_opt': cpal[2],
                  'persistence': cpal[3],
-                 'ens_member': cpal[4]}
+                 'ens_member': cpal[2]}
     legend_dict = {'opt_flow': 'Opt. Flow',
-                   'wrf_no_div': 'WRF',
-                   'owp_opt': 'BACON',
+                   'wrf_no_div': 'NWP Winds',
+                   'owp_opt': 'ANOC',
                    'persistence': 'Persistence',
-                   'ens_member': 'Ens. Member'}
+                   'ens_member': 'ANOC ens. members'}
     marker_dict = {'opt_flow': 'o',
                    'wrf_no_div': '^',
                    'owp_opt': 'd',
                    'persistence': 's',
                    'ens_member': '*'}
 
+    directory_name = 'third_set'
+    save_directory = ('/home/travis/python_code/'
+                      'letkf_forecasting/figures/')
+
+    # smoothing_error = return_smoothing_data(
+    #     directory_name=directory_name)
+    averaged_error = return_original_stats(
+        directory_name=directory_name)
+    daily_error = return_daily_error()
+
     # # plot smoothed
     # plot_smoothing_data(cpal_dict=cpal_dict,
     #                     legend_dict=legend_dict,
     #                     marker_dict=marker_dict,
     #                     format=format,
-    #                     dpi=dpi)
+    #                     dpi=dpi,
+    #                     smoothing_error=smoothing_error,
+    #                     averaged_error=averaged_error,
+    #                     save_directory=save_directory)
     # plt.close('all')
 
-    # # plot original error plots
-    # plot_original_error(cpal_dict=cpal_dict,
-    #                     legend_dict=legend_dict,
-    #                     marker_dict=marker_dict,
-    #                     format=format,
-    #                     dpi=dpi)
-    # plt.close('all')
+    # plot original error plots
+    plot_original_error(cpal_dict=cpal_dict,
+                        legend_dict=legend_dict,
+                        marker_dict=marker_dict,
+                        format=format,
+                        dpi=dpi,
+                        averaged_error=averaged_error,
+                        save_directory=save_directory)
+    plt.close('all')
 
     # # plot error by date plots
     # plot_daily_error(cpal_dict=cpal_dict,
     #                  legend_dict=legend_dict,
     #                  marker_dict=marker_dict,
     #                  format=format,
-    #                  dpi=dpi)
+    #                  dpi=dpi,
+    #                  daily_error=daily_error,
+    #                  averaged_error=averaged_error,
+    #                  save_directory=save_directory)
     # plt.close('all')
 
-    # get spaghetti data
+    # plot spaghetti data
     dates_dict = {
         'translation': (4, 15),
         'more_complex': (5, 29),
         'two_levels': (4, 26)
     }
+    run_names = ['persistence',
+                 'opt_flow',
+                 'wrf_no_div',
+                 'owp_opt',
+                 ['ensemble', 'owp_opt']]
+    spaghetti_error = return_spaghetti_error(
+        dates_dict=dates_dict,
+        run_names=run_names)
     plot_spaghetti(cpal_dict=cpal_dict,
                    legend_dict=legend_dict,
                    marker_dict=marker_dict,
                    format=format,
                    dpi=dpi,
-                   dates_dict=dates_dict)
+                   dates_dict=dates_dict,
+                   spaghetti_error=spaghetti_error,
+                   save_directory=save_directory)
+
+
     plt.close('all')
 
 
