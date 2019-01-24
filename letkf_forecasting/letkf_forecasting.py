@@ -12,6 +12,7 @@ from siphon.simplewebservice.wyoming import WyomingUpperAir
 from letkf_forecasting import __version__
 from letkf_forecasting.optical_flow import optical_flow
 from letkf_forecasting.letkf_io import (
+    return_analysis_ensemble,
     return_single_time,
     extract_components,
     save_netcdf,
@@ -241,7 +242,8 @@ def return_ensemble(*, data_file_path, ens_params, coords, flags):
 
 
 def forecast_setup(*, data_file_path, date, io, advect_params, ens_params,
-                   pert_params, flags, sat2sat, sat2wind, wrf, opt_flow):
+                   pert_params, flags, sat2sat, sat2wind, wrf, opt_flow,
+                   results_file_path):
     param_dict = set_up_param_dict(
         date=date, io=io, advect_params=advect_params, ens_params=ens_params,
         pert_params=pert_params, flags=flags, sat2sat=sat2sat,
@@ -251,9 +253,19 @@ def forecast_setup(*, data_file_path, date, io, advect_params, ens_params,
     sys_vars = calc_system_variables(
         coords=coords, advect_params=advect_params, flags=flags,
         pert_params=pert_params)
-    ensemble = return_ensemble(data_file_path=data_file_path,
-                               ens_params=ens_params,
-                               coords=coords, flags=flags)
+    if 'analysis_fore' in flags:
+        if flags['analysis_fore']:
+            sat_time = coords.sat_times[0]
+            ensemble = return_analysis_ensemble(
+                sat_time=sat_time, results_file_path=results_file_path)
+        else:
+            ensemble = return_ensemble(data_file_path=data_file_path,
+                                       ens_params=ens_params,
+                                       coords=coords, flags=flags)
+    else:
+        ensemble = return_ensemble(data_file_path=data_file_path,
+                                   ens_params=ens_params,
+                                   coords=coords, flags=flags)
     if flags['assim']:
         assim_vars = calc_assim_variables(sys_vars=sys_vars,
                                           advect_params=advect_params,
@@ -335,7 +347,7 @@ def forecast(*, ensemble, flags, coords, time_index, sat_time,
 
 
 def save(*, ensemble_array, coords, ens_params, param_dict, sys_vars,
-         save_times, results_file_path):
+         save_times, results_file_path, flags):
     U, V, ci = extract_components(
         ensemble_array, ens_params['ens_num'], sys_vars.num_of_horizons + 1,
         sys_vars.U_crop_shape, sys_vars.V_crop_shape, sys_vars.ci_crop_shape)
@@ -343,11 +355,14 @@ def save(*, ensemble_array, coords, ens_params, param_dict, sys_vars,
         results_file_path, U, V, ci, param_dict,
         coords.we_crop, coords.sn_crop,
         coords.we_stag_crop, coords.sn_stag_crop,
-        save_times, ens_params['ens_num'])
+        save_times, ens_params['ens_num'], flags)
 
 
 def maybe_assim_sat2sat(*, ensemble, data_file_path, sat_time,
                         coords, sys_vars, flags):
+    if 'analysis_fore' in flags:
+        if flags['analysis_fore']:
+            return ensemble
     if flags['assim_sat2sat']:
         raise NotImplementedError
     else:
@@ -361,6 +376,9 @@ def maybe_assim_sat2sat(*, ensemble, data_file_path, sat_time,
 def maybe_assim_sat2wind(*, ensemble, data_file_path, sat_time,
                          coords, sys_vars, assim_vars, sat2wind,
                          flags):
+    if 'analysis_fore' in flags:
+        if flags['analysis_fore']:
+            return ensemble, False
     if flags['assim_sat2wind']:
         logging.debug('Assim sat2wind')
         q = return_single_time(data_file_path, coords.sat_times_all,
@@ -387,6 +405,9 @@ def maybe_assim_sat2wind(*, ensemble, data_file_path, sat_time,
 def maybe_assim_wrf(*, ensemble, data_file_path, sat_time,
                     coords, sys_vars, assim_vars, wrf,
                     ens_params, flags):
+    if 'analysis_fore' in flags:
+        if flags['analysis_fore']:
+            return ensemble, False
     wind_time = return_wind_time(sat_time=sat_time, coords=coords)
     if sat_time == wind_time and not flags['radiosonde']:
         U, V = return_single_time(data_file_path, coords.wind_times,
@@ -563,6 +584,19 @@ def maybe_assim_opt_flow(*, ensemble, data_file_path, sat_time, time_index,
     return to_return
 
 
+def maybe_load_analysis(*, sat_time, results_file_path, flags,
+                        ensemble):
+    if 'analysis_fore' in flags:
+        if flags['analysis_fore']:
+            ensemble = return_analysis_ensemble(
+                sat_time=sat_time, results_file_path=results_file_path)
+            return ensemble
+        else:
+            return ensemble
+    else:
+        return ensemble
+
+
 def forecast_system(*, data_file_path, results_file_path,
                     date, io, flags, advect_params, ens_params, pert_params,
                     sat2sat, sat2wind, wrf, opt_flow, workers):
@@ -571,7 +605,7 @@ def forecast_system(*, data_file_path, results_file_path,
         flags=flags, advect_params=advect_params,
         ens_params=ens_params, pert_params=pert_params,
         sat2sat=sat2sat, sat2wind=sat2wind, wrf=wrf,
-        opt_flow=opt_flow)
+        opt_flow=opt_flow, results_file_path=results_file_path)
     remove_div_flag = True
     ensemble = preprocess(
         ensemble=ensemble, flags=flags,
@@ -588,10 +622,14 @@ def forecast_system(*, data_file_path, results_file_path,
     save(ensemble_array=ensemble_array, coords=coords,
          ens_params=ens_params, param_dict=param_dict,
          sys_vars=sys_vars, save_times=save_times,
-         results_file_path=results_file_path)
+         results_file_path=results_file_path,
+         flags=flags)
     for time_index in range(1, coords.sat_times.size):
         sat_time = coords.sat_times[time_index]
         logging.info(str(sat_time))
+        ensemble = maybe_load_analysis(
+            sat_time=sat_time, flags=flags,
+            ensemble=ensemble, results_file_path=results_file_path)
         ensemble = maybe_assim_sat2sat(
             ensemble=ensemble, data_file_path=data_file_path,
             sat_time=sat_time, coords=coords, sys_vars=sys_vars,
@@ -628,4 +666,5 @@ def forecast_system(*, data_file_path, results_file_path,
         save(ensemble_array=ensemble_array, coords=coords,
              ens_params=ens_params, param_dict=param_dict,
              sys_vars=sys_vars, save_times=save_times,
-             results_file_path=results_file_path)
+             results_file_path=results_file_path,
+             flags=flags)
