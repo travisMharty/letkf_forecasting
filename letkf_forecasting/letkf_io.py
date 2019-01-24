@@ -348,7 +348,8 @@ def preprocess_for_many_days(ds, buff=0):
 
 
 def return_many_days_files(
-        dates, run, base_folder, only_of_times=False):
+        dates, run, base_folder, only_of_times=False,
+        analysis_fore_flag=False):
     files = []
     for date in dates:
         year = date.year
@@ -358,7 +359,10 @@ def return_many_days_files(
             base_folder,
             f'results/{year:04}/{month:02}/{day:02}/{run}')
         folder = find_run_folder(folder)
-        these_files = os.path.join(folder, '*.nc')
+        if analysis_fore_flag:
+            these_files = os.path.join(folder, '????????_????Z_anlys_fore.nc')
+        else:
+            these_files = os.path.join(folder, '????????_????Z.nc')
         these_files = glob.glob(these_files)
         if only_of_times & (run != 'opt_flow'):
             these_files.sort()
@@ -369,9 +373,10 @@ def return_many_days_files(
 
 def return_many_days(
         dates, run, base_folder, only_of_times=False,
-        mean_win_size=None):
+        mean_win_size=None, analysis_fore_flag=False):
     files = return_many_days_files(
-        dates, run, base_folder, only_of_times=only_of_times)
+        dates, run, base_folder, only_of_times=only_of_times,
+        analysis_fore_flag=analysis_fore_flag)
     if mean_win_size is None:
         all_days = xr.open_mfdataset(
             files,
