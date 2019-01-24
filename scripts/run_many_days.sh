@@ -17,31 +17,37 @@ year=2014
 
 # declare -a month_day=("5 19" "6 3") why is this here?
 
+# declare -a month_day=(
+#     "4 9" "4 15" "4 18" "5 6" "5 9" "5 29" "6 11" "6 12" "4 2" "4 5" "4 19"\
+#     "5 7" "5 8" "5 19" "6 03" "6 10" "6 14" "6 15" "4 10" "4 11" "4 12"\
+#     "4 20" "4 21" "4 22" "4 25" "4 26" "5 5" "5 20" "5 21" "5 22" "5 23"\
+#     "5 24" "5 25" "5 30" "6 16" "6 17" "6 18" "6 19" "6 22")
 
-declare -a month_day=(
-    "4 9" "4 15" "4 18" "5 6" "5 9" "5 29" "6 11" "6 12" "4 2" "4 5" "4 19"\
-    "5 7" "5 8" "5 19" "6 03" "6 10" "6 14" "6 15" "4 10" "4 11" "4 12"\
-    "4 20" "4 21" "4 22" "4 25" "4 26" "5 5" "5 20" "5 21" "5 22" "5 23"\
-    "5 24" "5 25" "5 30" "6 16" "6 17" "6 18" "6 19" "6 22")
+declare -a month_day=("5 29")
 
 for md in "${month_day[@]}"
 do
     date=($md)
+
+    # echo "${date[@]}"
+    # echo "analysis_fore"
+    # python run_forecast_system.py config_analysis_fore.yml -y $year -m ${date[0]} -d ${date[1]}
+
     # echo "${date[@]}"
     # echo "opt_flow"
     # python run_forecast_system.py config_opt_flow.yml -y $year -m ${date[0]} -d ${date[1]}
 
-    echo "${date[@]}"
-    echo "opt_flow_with_div"
-    python run_forecast_system.py config_opt_flow_with_div.yml -y $year -m ${date[0]} -d ${date[1]}
+    # echo "${date[@]}"
+    # echo "opt_flow_with_div"
+    # python run_forecast_system.py config_opt_flow_with_div.yml -y $year -m ${date[0]} -d ${date[1]}
 
     # echo "${date[@]}"
     # echo "ow_15"
     # python run_forecast_system.py ow_15.yml -y $year -m ${date[0]} -d ${date[1]}
 
-    # echo "${date[@]}"
-    # echo "owp_opt.yml"
-    # python run_forecast_system.py config_owp_opt.yml -y $year -m ${date[0]} -d ${date[1]}
+    echo "${date[@]}"
+    echo "owp_opt.yml"
+    python run_forecast_system.py config_owp_opt.yml -y $year -m ${date[0]} -d ${date[1]}
 
     # echo "${date[@]}"
     # echo "radiosonde"
