@@ -37,10 +37,12 @@ def main():
     # Create path to save results
     if 'analysis_fore' in cfg['flags']:
         if cfg['flags']['analysis_fore']:
-            results_file_path = os.path.join(
-                args.home, 'results', cfg['date']['year'],
-                cfg['date']['month'], cfg['date']['day'],
-                cfg['io']['run_name'])
+            year = cfg['date']['year']
+            month = cfg['date']['month']
+            day = cfg['date']['day']
+            this_run = cfg['io']['run_name']
+            results_file_path = (
+                f'{args.home}/results/{year:04}/{month:02}/{day:02}/{this_run}')
             results_file_path = letkf_io.find_latest_run(results_file_path)
             yaml_file_path = os.path.join(
                 results_file_path,
