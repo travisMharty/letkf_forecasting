@@ -513,14 +513,19 @@ def error_stats_many_days(dates, runs, horizons, base_folder,
                 cloudy_times=cloudy_times)
             to_return.append(adict)
             continue
+        ens_flag = False
+        analysis_fore_flag = False
         if run[0] == 'ensemble':
             ens_flag = True
             run = run[1]
-        else:
-            ens_flag = False
-        all_days = letkf_io.return_many_days(dates, run, base_folder,
-                                             only_of_times=only_of_times,
-                                             mean_win_size=mean_win_size)
+        elif run[0] == 'anly_fore':
+            run = run[1]
+            analysis_fore_flag = True
+        all_days = letkf_io.return_many_days(
+            dates, run, base_folder,
+            only_of_times=only_of_times,
+            mean_win_size=mean_win_size,
+            analysis_fore_flag=analysis_fore_flag)
         if mean_win_size is None:
             all_days = all_days['ci']
 
