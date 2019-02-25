@@ -217,6 +217,7 @@ def plot_original_error(*, cpal_dict, marker_dict,
     plt.ylabel('RMSE (CI)')
     plt.xlim([15, 60])
     plt.xticks([15, 30, 45, 60])
+    plt.ylim([None, None])
     plt.savefig(fname=os.path.join(save_directory,
                                    f'rmse.{format}'),
                 format=format, dpi=dpi)
@@ -335,9 +336,11 @@ def plot_daily_error(*, cpal_dict, marker_dict, legend_dict,
     anly_fore = pd.concat(
         [anly_fore,
          (averaged_error['owp_opt_anly_fore']['rmse'].T)[[15, 30, 45, 60]]])
+
     y_max = np.max([opt_flow.max(),
                     wrf_no_div.max(),
                     owp_opt.max()])
+    y_min = 0
 
     # y_max = np.max([persistence.max(),
     #                 opt_flow.max(),
@@ -389,7 +392,7 @@ def plot_daily_error(*, cpal_dict, marker_dict, legend_dict,
 
         plt.xlabel('Date')
         plt.ylabel('RMSE (CI)')
-        plt.ylim([0, y_max])
+        plt.ylim([y_min, y_max])
         plt.xlim([xarange[0] - 0.5, xarange[-1] + 2*width + 0.5])
         plt.tight_layout()
         plt.savefig(fname=os.path.join(save_directory,
@@ -617,12 +620,13 @@ def plot_spaghetti(*, cpal_dict, legend_dict, loc_dict, marker_dict,
                              legend_dict['ens_member']],
                             ncol=2,
                             loc=loc_dict[day_type])
+        # y_min = None
         y_min = None
         y_max = None
         if day_type == 'translation':
-            y_max = 0.095
+            y_max = 0.1
         if day_type == 'more_complex':
-            y_max = 0.288
+            y_max = 0.29
         plt.ylim([y_min, y_max])
         for handle in legend.legendHandles:
             handle.set_alpha(1)
@@ -645,8 +649,10 @@ def table_original_error(*, save_directory,
     file_name = 'all_days'
     decimals = 2
     horizons = [15, 30, 45, 60]
-    runs = ['owp_opt', 'owp_opt_anly_fore', 'persistence',
-            'opt_flow', 'wrf_no_div', 'wrf_mean', 'radiosonde']
+    # runs = ['owp_opt', 'owp_opt_anly_fore', 'persistence',
+    #         'opt_flow', 'wrf_no_div', 'wrf_mean', 'radiosonde']
+    runs = ['owp_opt', 'owp_opt_anly_fore',
+            'opt_flow', 'wrf_no_div', 'wrf_mean', 'radiosonde', 'persistence']
     rmse = pd.DataFrame(index=horizons, columns=runs)
     rmse.index.name = 'Horizon'
     correlation = rmse.copy()
@@ -778,8 +784,10 @@ def table_case_studies(*, save_directory, legend_dict,
                        spaghetti_error, dates_dict):
     decimals = 2
     horizons = [15, 30, 45, 60]
-    runs = ['owp_opt', 'owp_opt_anly_fore', 'persistence',
-            'opt_flow', 'wrf_no_div', 'wrf_mean', 'radiosonde']
+    # runs = ['owp_opt', 'owp_opt_anly_fore', 'persistence',
+    #         'opt_flow', 'wrf_no_div', 'wrf_mean', 'radiosonde']
+    runs = ['owp_opt', 'owp_opt_anly_fore',
+            'opt_flow', 'wrf_no_div', 'wrf_mean', 'radiosonde', 'persistence']
 
     def format_table(text, header_num=5, footer_num=2):
         text = text.split(' ')
@@ -850,7 +858,7 @@ def table_case_studies(*, save_directory, legend_dict,
 def main():
     format = 'png'
     dpi = 400
-    cpal = sns.color_palette('deep')
+    cpal = sns.color_palette('colorblind')
     sns.set_style('whitegrid')
     sns.set_context('paper', font_scale=1.5,
                     rc={'lines.linewidth': 1.0,
@@ -858,8 +866,8 @@ def main():
     cpal_dict = {'opt_flow': cpal[0],
                  'wrf_no_div': cpal[1],
                  'owp_opt': cpal[2],
-                 'anly_fore': cpal[4],
-                 'persistence': cpal[3],
+                 'anly_fore': cpal[5],
+                 'persistence': 'gray',
                  'ens_member': cpal[2]}
     legend_dict = {'opt_flow': 'Opt. Flow',
                    'wrf_no_div': 'NWP Winds',
@@ -870,7 +878,7 @@ def main():
     marker_dict = {'opt_flow': 'o',
                    'wrf_no_div': '^',
                    'owp_opt': 'd',
-                   'anly_fore': '*',
+                   'anly_fore': 'X',
                    'persistence': 's',
                    'ens_member': '1'}
 
@@ -882,7 +890,7 @@ def main():
     #     directory_name=directory_name)
     averaged_error = return_original_stats(
         directory_name=directory_name)
-    # daily_error = return_daily_error()
+    daily_error = return_daily_error()
 
     # # plot smoothed
     # plot_smoothing_data(cpal_dict=cpal_dict,
@@ -895,61 +903,61 @@ def main():
     #                     save_directory=figure_directory)
     # plt.close('all')
 
-    # plot original error plots
-    plot_original_error(cpal_dict=cpal_dict,
-                        legend_dict=legend_dict,
-                        marker_dict=marker_dict,
+    # # plot original error plots
+    # plot_original_error(cpal_dict=cpal_dict,
+    #                     legend_dict=legend_dict,
+    #                     marker_dict=marker_dict,
 
-                        format=format,
-                        dpi=dpi,
-                        averaged_error=averaged_error,
-                        save_directory=figure_directory)
-    plt.close('all')
-
-    # # plot error by date plots
-    # plot_daily_error(cpal_dict=cpal_dict,
-    #                  legend_dict=legend_dict,
-    #                  marker_dict=marker_dict,
-    #
-    #                  format=format,
-    #                  dpi=dpi,
-    #                  daily_error=daily_error,
-    #                  averaged_error=averaged_error,
-    #                  save_directory=figure_directory)
+    #                     format=format,
+    #                     dpi=dpi,
+    #                     averaged_error=averaged_error,
+    #                     save_directory=figure_directory)
     # plt.close('all')
 
-    # plot spaghetti data
-    dates_dict = {
-        'translation': (4, 15),
-        'more_complex': (5, 29),
-        'two_levels': (4, 26)
-    }
-    run_names = ['persistence',
-                 'opt_flow',
-                 'wrf_no_div',
-                 'owp_opt',
-                 'wrf_mean',
-                 'radiosonde',
-                 ['ensemble', 'owp_opt'],
-                 ['anly_fore', 'owp_opt']]
-    loc_dict = {
-        'translation': 'upper left',
-        'more_complex': 'upper left',
-        'two_levels': 'lower right'
-    }
-    spaghetti_error = return_spaghetti_error(
-        dates_dict=dates_dict,
-        run_names=run_names)
-    plot_spaghetti(cpal_dict=cpal_dict,
-                   legend_dict=legend_dict,
-                   marker_dict=marker_dict,
-                   loc_dict=loc_dict,
-                   format=format,
-                   dpi=dpi,
-                   dates_dict=dates_dict,
-                   spaghetti_error=spaghetti_error,
-                   save_directory=figure_directory)
+    # plot error by date plots
+    plot_daily_error(cpal_dict=cpal_dict,
+                     legend_dict=legend_dict,
+                     marker_dict=marker_dict,
+
+                     format=format,
+                     dpi=dpi,
+                     daily_error=daily_error,
+                     averaged_error=averaged_error,
+                     save_directory=figure_directory)
     plt.close('all')
+
+    # # plot spaghetti data
+    # dates_dict = {
+    #     'translation': (4, 15),
+    #     'more_complex': (5, 29),
+    #     'two_levels': (4, 26)
+    # }
+    # run_names = ['persistence',
+    #              'opt_flow',
+    #              'wrf_no_div',
+    #              'owp_opt',
+    #              'wrf_mean',
+    #              'radiosonde',
+    #              ['ensemble', 'owp_opt'],
+    #              ['anly_fore', 'owp_opt']]
+    # loc_dict = {
+    #     'translation': 'upper left',
+    #     'more_complex': 'upper left',
+    #     'two_levels': 'lower right'
+    # }
+    # spaghetti_error = return_spaghetti_error(
+    #     dates_dict=dates_dict,
+    #     run_names=run_names)
+    # plot_spaghetti(cpal_dict=cpal_dict,
+    #                legend_dict=legend_dict,
+    #                marker_dict=marker_dict,
+    #                loc_dict=loc_dict,
+    #                format=format,
+    #                dpi=dpi,
+    #                dates_dict=dates_dict,
+    #                spaghetti_error=spaghetti_error,
+    #                save_directory=figure_directory)
+    # plt.close('all')
 
     # # tables
     # table_directory = '/home2/travis/python_code/letkf_forecasting/tables/'
