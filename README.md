@@ -124,6 +124,9 @@ The notebooks domains_figure.ipynb, error_field_plots.ipynb, and ensemble_stamps
 
 The notebook run_prepare_data.ipynb calculates and saves CI fields based on geostationary satellite images.
 
+Some portions of this package make assumptions about the directorys of the machine upon which it is operating.
+A user may need to make modifications to these potions to reflect their own machine's directories.
+
 ## Packaging
 
 To use ``letkf_forecasting`` now, run ``pip install -e .`` in this directory
