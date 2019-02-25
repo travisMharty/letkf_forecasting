@@ -77,7 +77,8 @@ def return_rmse_one_day(truth, full_day, horizons,
         rmse = (forecast - truth)**2
         rmse = np.sqrt(
             rmse.mean(dim=['south_north', 'west_east', 'time']).values)
-        if type(rmse) is list:
+        rmse = np.array(rmse)
+        if rmse.size > 1:
             rmse_df.loc[horizon] = rmse
         else:
             rmse = rmse.item()
@@ -105,7 +106,8 @@ def return_bias_one_day(truth, full_day, horizons,
         bias = (bias - truth).sel(time=these_error_times)
         bias = bias.mean(dim=['south_north', 'west_east', 'time'])
         bias = bias.values
-        if type(bias) is list:
+        bias = np.array(bias)
+        if bias.size > 1:
             bias_df.loc[horizon] = bias
         else:
             bias = bias.item()
@@ -180,7 +182,8 @@ def return_sd_one_day(truth, full_day, horizons,
         sd_truth = truth.sel(time=these_error_times)
         sd = sd.var(dim=['south_north', 'west_east', 'time'])
         sd = np.sqrt(sd.values)
-        if type(sd) is list:
+        sd = np.array(sd)
+        if sd.size > 1:
             sd_df.loc[horizon] = sd
         else:
             sd = sd.item()
@@ -474,9 +477,16 @@ def return_persistence_dict_one_day(adict, truth, horizons,
     return adict
 
 
+def down_sample_coord(coord, dx):
+    coord_ds = np.arange(coord[0],
+                         coord[-1] + dx,
+                         dx)
+    return coord_ds
+
+
 def error_stats_many_days(dates, runs, horizons, base_folder,
                           only_cloudy=False, only_of_times=True,
-                          mean_win_size=None):
+                          mean_win_size=None, one_km_err=False):
     truth = letkf_io.return_many_truths(dates, base_folder)
     truth = truth['ci']
     truth = letkf_io.add_crop_attributes(truth)
@@ -501,6 +511,11 @@ def error_stats_many_days(dates, runs, horizons, base_folder,
         cloudy_times = truth.time[cloudy_bool]
     else:
         cloudy_times = None
+    if one_km_err:
+        west_east_err = down_sample_coord(truth.west_east, 1)
+        south_north_err = down_sample_coord(truth.south_north, 1)
+        truth = truth.sel(west_east=west_east_err,
+                          south_north=south_north_err)
     to_return = []
     # truth_sd = np.sqrt(truth.var()).item()
     for run in runs:
@@ -528,7 +543,9 @@ def error_stats_many_days(dates, runs, horizons, base_folder,
             analysis_fore_flag=analysis_fore_flag)
         if mean_win_size is None:
             all_days = all_days['ci']
-
+        if one_km_err:
+            all_days = all_days.sel(west_east=west_east_err,
+                                    south_north=south_north_err)
         # if only_cloudy:
         #     return all_days, cloudy_times
         #     all_days = all_days.sel(time=cloudy_times)
