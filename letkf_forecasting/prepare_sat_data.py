@@ -91,7 +91,7 @@ def lcc_to_sphere(x, y, R=6370, truelat0=31.7, truelat1=31.7,
     F = (np.cos(phi1) * np.power(np.tan(np.pi / 4 + phi1 / 2), n) / n)
     rho0 = F / np.power(np.tan(np.pi / 4 + phi0 / 2), n)
     x = x / R
-    y = y /R
+    y = y / R
     rho = np.sqrt(x**2 + (y - rho0)**2)
     phis = 2 * (np.arctan2(F**(1.0 / n), rho**(1.0 / n)) - np.pi / 4)
     lambdas = np.arcsin(x / rho) / n + lambda0
