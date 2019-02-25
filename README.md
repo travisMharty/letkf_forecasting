@@ -57,7 +57,7 @@ and perturbation.
 There are 13 modules in this package:
 1. advection.py
 1. advect.pyx
-1. analyze_results.py
+1. analyse_results.py
 1. assimilation_accessories.py
 1. assimilation.py
 1. get_wrf_data.py
@@ -74,7 +74,7 @@ This includes the functions for removing divergence.
 
 The module advect.pyx is cython code used to speed up advection.
 
-The module analyze_results.py contains functions useful in analyzing the
+The module analyse_results.py contains functions useful in analyzing the
 forecasts.
 
 The modules assimilation_accessories.py contains functions needed for the
