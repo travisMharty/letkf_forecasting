@@ -84,9 +84,7 @@ def main():
                         default=20, type=int)
     args = parser.parse_args()
 
-    # wrf_length_array = np.array([1, 2, 4])
     wrf_length_array = np.array([1])
-    # of_length_array = np.array([20, 30, 40])
     of_length_array = np.array([20])
     wrf_inflation_array = np.array([1.5, 4])
     of_inflation_array = np.array([1.5, 2])

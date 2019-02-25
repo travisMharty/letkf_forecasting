@@ -18,7 +18,6 @@ def coarsen(array, coarseness):
 
 def optical_flow(image0, image1, time0, time1, u, v):
     var_size = 7
-    # win_var_size = 11
     var_sig = 2
     var_thresh = 300
     sd_num = 2                  # for removing u_of & v_of
@@ -28,7 +27,6 @@ def optical_flow(image0, image1, time0, time1, u, v):
                           minDistance=10,
                           blockSize=4)
     winSize = (50, 50)
-    # windSize = (int(round(80/coarseness)), int(round(80/coarseness)))
     maxLevel = 5
     lk_params = dict(winSize=winSize,
                      maxLevel=maxLevel,
@@ -106,9 +104,6 @@ def optical_flow(image0, image1, time0, time1, u, v):
     u_of = u_of[good_wind]
     v_of = v_of[good_wind]
     p1_good = p1_resh[good_wind]
-    # p0_good = p0_resh[good_wind]
-    # p0_good = np.round(p0_good)
-    # p0_good = p0_good.astype('int')
     p1_good = np.round(p1_good)
     p1_good = p1_good.astype('int')
     return u_of, v_of, p1_good

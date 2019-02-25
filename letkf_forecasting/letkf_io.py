@@ -265,18 +265,6 @@ def return_single_time(data_file_path, times, time,
     return to_return
 
 
-# def return_results_folder(year, month, day, run_name):
-#     # path = os.path.expanduser('~')
-#     path = '/a2/uaren/travis/'
-#     path = os.path.join(
-#         path,
-#         f'results/{year:04}/{month:02}/{day:02}/' + run_name)
-#     paths = glob.glob(path + '*')
-#     paths.sort()
-#     path = paths[-1]
-#     return path
-
-
 def find_run_folder(folder_path):
     if os.path.exists(folder_path):
         return folder_path
@@ -331,8 +319,6 @@ def add_crop_attributes(ds):
 
 
 def preprocess_for_many_days(ds, buff=0):
-    # This automatically crops the domain to the error domain.
-    # This is needed so that all the different days can be concatenated.
     ds = add_crop_attributes(ds)
     ds = ds.sel(
         west_east=slice(ds.we_er_min - buff,
@@ -455,8 +441,6 @@ def save_newly_created_data(results_file_path, interpolated_ci,
     x_stag = np.concatenate([x - dx/2, [x[-1] + dx/2]])
     dy = (y[1] - y[0])
     y_stag = np.concatenate([y - dy/2, [y[-1] + dy/2]])
-    # if not os.path.exists(results_file_path):
-    #     os.makedirs(results_file_path)
     with Dataset(results_file_path, 'w') as store:
         store.createDimension('west_east', size=x.size)
         store.createDimension('south_north', size=y.size)
@@ -492,16 +476,3 @@ def save_newly_created_data(results_file_path, interpolated_ci,
         Vnc[:] = V
         timenc.units = 'seconds since 1970-1-1'
         time_windnc.units = 'seconds since 1970-1-1'
-        # # should move this into forecast_system with calculation
-        # cinc.we_min_crop = west_east_range[0]
-        # cinc.we_max_crop = west_east_range[-1]
-        # cinc.sn_min_crop = south_north_range[0]
-        # cinc.sn_max_crop = south_north_range[-1]
-        # Unc.we_min_crop = west_east_range_stag[0]
-        # Unc.we_max_crop = west_east_range_stag[-1]
-        # Unc.sn_min_crop = south_north_range[0]
-        # Unc.sn_max_crop = south_north_range[-1]
-        # Vnc.we_min_crop = west_east_range[0]
-        # Vnc.we_max_crop = west_east_range[-1]
-        # Vnc.sn_min_crop = south_north_range_stag[0]
-        # Vnc.sn_max_crop = south_north_range_stag[-1]

@@ -97,20 +97,8 @@ def return_smoothing_data(directory_name):
         one_wrf_corr.loc[hor] = wrf_corr.loc[hor].iloc[optimal_index]
         one_wrf_sd.loc[hor] = wrf_sd.loc[hor].iloc[optimal_index]
     to_return = {
-        # 'owp_rmse': owp_rmse,
-        # 'owp_sd': owp_sd,
-        # 'of_rmse': of_rmse,
-        # 'of_corr': of_corr,
-        # 'of_sd': of_sd,
-        # 'wrf_rmse': wrf_rmse,
-        # 'wrf_corr': wrf_corr,
-        # 'wrf_sd': wrf_sd,
         'one_of_rmse': one_of_rmse,
-        # 'one_of_corr': one_of_corr,
-        # 'one_of_sd': one_of_sd,
         'one_wrf_rmse': one_wrf_rmse,
-        # 'one_wrf_corr': one_wrf_corr,
-        # 'one_wrf_sd': one_wrf_sd,
     }
     return to_return
 
@@ -150,8 +138,6 @@ def return_original_stats(directory_name):
             'owp_opt', 'owp_opt_anly_fore', 'persistence']
     runs = ['owp_opt', 'owp_opt_anly_fore', 'persistence', 'opt_flow',
             'wrf_no_div', 'wrf_mean', 'radiosonde']
-    # directory_name = 'third_set_only_cloudy'
-    #directory_name = 'third_set'
     error_stats = {}
     for run in runs:
         load_directory = ('/a2/uaren/travis/'
@@ -224,7 +210,6 @@ def plot_original_error(*, cpal_dict, marker_dict,
 
 
 def return_daily_error():
-    # runs = ['persistence', 'opt_flow', 'wrf_no_div', 'owp_opt']
     base_folder = '/a2/uaren/travis/'
     year = 2014
     month_day = [[4, 2],  [4, 5], [4, 9],
@@ -243,7 +228,6 @@ def return_daily_error():
                  [6, 12], [6, 14], [6, 15],
                  [6, 16], [6, 17],
                  [6, 18], [6, 19], [6, 22]]
-    # persistence =
     opt_flow = pd.DataFrame(columns=[15, 30, 45, 60])
     wrf_no_div = opt_flow.copy()
     owp_opt = opt_flow.copy()
@@ -252,10 +236,6 @@ def return_daily_error():
                    'wrf_no_div': wrf_no_div,
                    'owp_opt': owp_opt,
                    'anly_fore': anly_fore}
-    # daily_error = {'persistence': persistence,
-    #                'opt_flow': opt_flow,
-    #                'wrf_no_div': wrf_no_div,
-    #                'owp_opt': owp_opt}
     for this_month_day in month_day:
         month = this_month_day[0]
         day = this_month_day[1]
@@ -284,26 +264,6 @@ def return_daily_error():
                 results_folder_path, f'{stat_name}.h5')
             rmse = pd.read_hdf(file_path, stat_name)
             daily_error[run_name].loc[this_date] = rmse['rmse']
-
-
-    #     returned = analyse_results.find_error_stats(
-    #         year, month, day, runs, base_folder)
-    #     for this_stat in returned:
-    #         name = this_stat['name']
-    #         this_date = this_stat['rmse'].index[0].date()
-    #         exec(
-    #             name
-    #             + '.loc[this_date] '
-    #             + '= np.sqrt((this_stat[\'rmse\']**2)'
-    #             + '.mean())')
-    # persistence = persistence.sort_index()
-    # opt_flow = opt_flow.sort_index()
-    # wrf_no_div = wrf_no_div.sort_index()
-    # owp_opt = owp_opt.sort_index()
-    # adict = {'persistence': persistence,
-    #          'opt_flow': opt_flow,
-    #          'wrf_no_div': wrf_no_div,
-    #          'owp_opt': owp_opt}
     return daily_error
 
 
@@ -314,10 +274,6 @@ def plot_daily_error(*, cpal_dict, marker_dict, legend_dict,
                                   'daily_error')
     if not os.path.exists(save_directory):
         os.makedirs(save_directory)
-    #persistence = daily_error['persistence']
-    # persistence = pd.concat(
-    #     [persistence,
-    #      (averaged_error['persistence']['rmse'].T)[[15, 30, 45, 60]]])
     opt_flow = daily_error['opt_flow']
     xticks = [str(index.month) + ' ' + str(index.day)
               for index in opt_flow.index]
@@ -342,15 +298,9 @@ def plot_daily_error(*, cpal_dict, marker_dict, legend_dict,
                     owp_opt.max()])
     y_min = 0
 
-    # y_max = np.max([persistence.max(),
-    #                 opt_flow.max(),
-    #                 wrf_no_div.max(),
-    #                 owp_opt.max()])
-
     xticks.append('All days')
     xarange = np.arange(len(xticks))
     figsize = plt.figaspect(0.3)
-    # width = 0.28
     width = 0.20
 
     for hor in [15, 30, 45, 60]:
@@ -374,21 +324,6 @@ def plot_daily_error(*, cpal_dict, marker_dict, legend_dict,
                     legend_dict['owp_opt'],
                     legend_dict['anly_fore']],
                    ncol=2)
-
-        # plt.bar(xarange,
-        #         opt_flow[hor], width,
-        #         color=cpal_dict['opt_flow'])
-        # plt.bar(xarange + width,
-        #         wrf_no_div[hor], width,
-        #         color=cpal_dict['wrf_no_div'])
-        # plt.bar(xarange + 2*width,
-        #         owp_opt[hor], width,
-        #         color=cpal_dict['owp_opt'])
-        # plt.xticks(xarange + width, xticks, rotation=90)
-        # plt.title(f'RMSE for a horizon of {hor} minutes')
-        # plt.legend([legend_dict['opt_flow'],
-        #             legend_dict['wrf_no_div'],
-        #             legend_dict['owp_opt']])
 
         plt.xlabel('Date')
         plt.ylabel('RMSE (CI)')
@@ -475,90 +410,6 @@ def return_spaghetti_error(*, dates_dict, run_names,
     return spaghetti_error
 
 
-# def return_spaghetti_error(*, month, day):
-#     year = 2014
-#     horizons = [15, 30, 45, 60]
-#     base_folder = '/a2/uaren/travis/'
-#     truth = xr.open_dataset(
-#         f'/a2/uaren/travis/data/{year:04}/{month:02}/{day:02}/data.nc')
-#     truth = truth['ci']
-#     truth = letkf_io.add_crop_attributes(truth)
-#     truth = analyse_results.return_error_domain(truth)
-
-#     truth = truth.load()
-
-#     full_day = letkf_io.return_day(year,
-#                                    month,
-#                                    day,
-#                                    'owp_opt',
-#                                    base_folder)
-
-#     full_day = letkf_io.add_crop_attributes(full_day)
-#     full_day = analyse_results.return_error_domain(full_day)
-#     full_day = full_day['ci'].load()
-
-#     full_day_mean = analyse_results.return_ens_mean(full_day)
-
-#     wrf = letkf_io.return_day(year,
-#                               month,
-#                               day,
-#                               'wrf_no_div',
-#                               base_folder)
-
-#     wrf = letkf_io.add_crop_attributes(wrf)
-#     wrf = analyse_results.return_error_domain(wrf)
-#     wrf = wrf['ci'].load()
-
-#     opt_flow = letkf_io.return_day(year,
-#                                    month,
-#                                    day,
-#                                    'opt_flow',
-#                                    base_folder)
-
-#     opt_flow = letkf_io.add_crop_attributes(opt_flow)
-#     opt_flow = analyse_results.return_error_domain(opt_flow)
-#     opt_flow = opt_flow['ci'].load()
-
-#     full_day.ensemble_number.size
-
-#     ens_num = full_day.ensemble_number.size
-
-#     ensemble_rmse = np.ones([len(horizons), ens_num]) * np.nan
-
-#     mean_rmse = np.ones([len(horizons)]) * np.nan
-
-#     wrf_rmse = np.ones([len(horizons)]) * np.nan
-
-#     opt_flow_rmse = np.ones([len(horizons)]) * np.nan
-#     for ii, hor in enumerate(horizons):
-#         ensemble_rmse_temp = analyse_results.return_horizon(full_day, int(hor))
-#         ensemble_rmse_temp = ensemble_rmse_temp - truth
-#         ensemble_rmse[ii] = np.sqrt((ensemble_rmse_temp ** 2).mean(
-#             dim=['south_north', 'west_east', 'time'])).values
-
-#         mean_rmse_temp = analyse_results.return_horizon(full_day_mean, int(hor))
-#         mean_rmse_temp = mean_rmse_temp - truth
-#         mean_rmse[ii] = np.sqrt((mean_rmse_temp ** 2).mean(
-#             dim=['south_north', 'west_east', 'time'])).values
-
-#         wrf_rmse_temp = analyse_results.return_horizon(wrf, int(hor))
-#         wrf_rmse_temp = wrf_rmse_temp - truth
-#         wrf_rmse[ii] = np.sqrt((wrf_rmse_temp ** 2).mean(
-#             dim=['south_north', 'west_east', 'time'])).values
-
-#         opt_flow_rmse_temp = analyse_results.return_horizon(opt_flow, int(hor))
-#         opt_flow_rmse_temp = opt_flow_rmse_temp - truth
-#         opt_flow_rmse[ii] = np.sqrt((opt_flow_rmse_temp ** 2).mean(
-#             dim=['south_north', 'west_east', 'time'])).values
-
-#     return_dict = {'horizons': horizons,
-#                    'ensemble_rmse': ensemble_rmse,
-#                    'mean_rmse': mean_rmse,
-#                    'wrf_rmse': wrf_rmse,
-#                    'opt_flow_rmse': opt_flow_rmse}
-#     return return_dict
-
-
 def plot_spaghetti(*, cpal_dict, legend_dict, loc_dict, marker_dict,
                    format, dpi, dates_dict,
                    spaghetti_error,
@@ -574,9 +425,6 @@ def plot_spaghetti(*, cpal_dict, legend_dict, loc_dict, marker_dict,
                                            day_type)
         if not os.path.exists(this_save_directory):
             os.makedirs(this_save_directory)
-        # save_directory = ('/home/travis/python_code/'
-        #                   'letkf_forecasting/figures/'
-        #                   + day_type)
         this_error = spaghetti_error[day_type]
         analy_fore_rmse = this_error['owp_opt_anly_fore']['rmse']
         ensemble_rmse = this_error['ensemble']['rmse']
@@ -620,7 +468,6 @@ def plot_spaghetti(*, cpal_dict, legend_dict, loc_dict, marker_dict,
                              legend_dict['ens_member']],
                             ncol=2,
                             loc=loc_dict[day_type])
-        # y_min = None
         y_min = None
         y_max = None
         if day_type == 'translation':
@@ -630,11 +477,6 @@ def plot_spaghetti(*, cpal_dict, legend_dict, loc_dict, marker_dict,
         plt.ylim([y_min, y_max])
         for handle in legend.legendHandles:
             handle.set_alpha(1)
-        # plt.legend([legend_dict['persistence'],
-        #             legend_dict['opt_flow'],
-        #             legend_dict['wrf_no_div'],
-        #             legend_dict['owp_opt'],
-        #             legend_dict['ens_member']])
         plt.xlabel('Forecast horizon (min.)')
         plt.ylabel('RMSE (CI)')
         plt.title(f'RMSE for {this_title}: 2014/{month}/{day}')
@@ -649,8 +491,6 @@ def table_original_error(*, save_directory,
     file_name = 'all_days'
     decimals = 2
     horizons = [15, 30, 45, 60]
-    # runs = ['owp_opt', 'owp_opt_anly_fore', 'persistence',
-    #         'opt_flow', 'wrf_no_div', 'wrf_mean', 'radiosonde']
     runs = ['owp_opt', 'owp_opt_anly_fore',
             'opt_flow', 'wrf_no_div', 'wrf_mean', 'radiosonde', 'persistence']
     rmse = pd.DataFrame(index=horizons, columns=runs)
@@ -784,8 +624,6 @@ def table_case_studies(*, save_directory, legend_dict,
                        spaghetti_error, dates_dict):
     decimals = 2
     horizons = [15, 30, 45, 60]
-    # runs = ['owp_opt', 'owp_opt_anly_fore', 'persistence',
-    #         'opt_flow', 'wrf_no_div', 'wrf_mean', 'radiosonde']
     runs = ['owp_opt', 'owp_opt_anly_fore',
             'opt_flow', 'wrf_no_div', 'wrf_mean', 'radiosonde', 'persistence']
 
@@ -886,33 +724,9 @@ def main():
     figure_directory = ('/home/travis/python_code/'
                         'letkf_forecasting/figures/')
 
-    # smoothing_error = return_smoothing_data(
-    #     directory_name=directory_name)
     averaged_error = return_original_stats(
         directory_name=directory_name)
     daily_error = return_daily_error()
-
-    # # plot smoothed
-    # plot_smoothing_data(cpal_dict=cpal_dict,
-    #                     legend_dict=legend_dict,
-    #                     marker_dict=marker_dict,
-    #                     format=format,
-    #                     dpi=dpi,
-    #                     smoothing_error=smoothing_error,
-    #                     averaged_error=averaged_error,
-    #                     save_directory=figure_directory)
-    # plt.close('all')
-
-    # # plot original error plots
-    # plot_original_error(cpal_dict=cpal_dict,
-    #                     legend_dict=legend_dict,
-    #                     marker_dict=marker_dict,
-
-    #                     format=format,
-    #                     dpi=dpi,
-    #                     averaged_error=averaged_error,
-    #                     save_directory=figure_directory)
-    # plt.close('all')
 
     # plot error by date plots
     plot_daily_error(cpal_dict=cpal_dict,
@@ -925,63 +739,6 @@ def main():
                      averaged_error=averaged_error,
                      save_directory=figure_directory)
     plt.close('all')
-
-    # # plot spaghetti data
-    # dates_dict = {
-    #     'translation': (4, 15),
-    #     'more_complex': (5, 29),
-    #     'two_levels': (4, 26)
-    # }
-    # run_names = ['persistence',
-    #              'opt_flow',
-    #              'wrf_no_div',
-    #              'owp_opt',
-    #              'wrf_mean',
-    #              'radiosonde',
-    #              ['ensemble', 'owp_opt'],
-    #              ['anly_fore', 'owp_opt']]
-    # loc_dict = {
-    #     'translation': 'upper left',
-    #     'more_complex': 'upper left',
-    #     'two_levels': 'lower right'
-    # }
-    # spaghetti_error = return_spaghetti_error(
-    #     dates_dict=dates_dict,
-    #     run_names=run_names)
-    # plot_spaghetti(cpal_dict=cpal_dict,
-    #                legend_dict=legend_dict,
-    #                marker_dict=marker_dict,
-    #                loc_dict=loc_dict,
-    #                format=format,
-    #                dpi=dpi,
-    #                dates_dict=dates_dict,
-    #                spaghetti_error=spaghetti_error,
-    #                save_directory=figure_directory)
-    # plt.close('all')
-
-    # # tables
-    # table_directory = '/home2/travis/python_code/letkf_forecasting/tables/'
-    # table_legend_dict = {'opt_flow': 'Opt.~Flow',
-    #                      'opt_flow_with_div': 'Opt. Flow w/ Div.',
-    #                      'wrf_no_div': 'NWP Winds',
-    #                      'wrf': 'NWP w/ Div.',
-    #                      'owp_opt': 'ANOC Ens.~Mean',
-    #                      'persistence': 'Persis.',
-    #                      'radiosonde': 'Radiosonde',
-    #                      'wrf_mean': 'NWP Avg.~Winds',
-    #                      'ens_member': 'ANOC Ens.~Member',
-    #                      'owp_opt_anly_fore': 'ANOC Control'}
-
-    # # original error table
-    # table_original_error(save_directory=table_directory,
-    #                      legend_dict=table_legend_dict,
-    #                      averaged_error=averaged_error)
-
-    # # case study tables
-    # table_case_studies(save_directory=table_directory,
-    #                    legend_dict=table_legend_dict,
-    #                    spaghetti_error=spaghetti_error,
-    #                    dates_dict=dates_dict)
 
 
 if __name__ == '__main__':

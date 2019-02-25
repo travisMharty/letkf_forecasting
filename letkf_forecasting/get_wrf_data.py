@@ -6,9 +6,8 @@ import letkf_forecasting.prepare_sat_data as prep
 
 
 def rh_calc(temps, pressure, qvapor):
-
     """
-    Actually calculate rh from arrays
+    Calculate rh from arrays
     """
     T1 = 273.16
     # Groff-Gratch equation
@@ -16,10 +15,7 @@ def rh_calc(temps, pressure, qvapor):
               - 5.028 * np.log10(temps/T1)
               + 1.50475*10**-4 * (1 - 10**(-8.2969 * (temps/T1 - 1)))
               + 0.42873*10**-3 * (10**(4.76955 * (1 - T1/temps)) - 1)
-              + 0.78614)
-    # Bolton Equation
-    # ew = ne.evaluate(
-    #     '6.112*exp(17.62*(temps-273.15)/(243.21 + temps - 273.15))')
+              + 0.78614)d
     es = ew*(1.0016+3.15*10**-6*pressure-0.074/pressure)
     e = qvapor/(qvapor+0.62198)*pressure
     rh = e/es*100
@@ -28,7 +24,7 @@ def rh_calc(temps, pressure, qvapor):
 
 def dewpoint_calc(qvapor, pressure):
     """
-    Actually calculate tdew from arrays
+    Calculate tdew from arrays
     """
     e = qvapor/(qvapor+0.62198)*pressure
     # Bolton's fit

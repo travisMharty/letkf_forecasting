@@ -147,7 +147,6 @@ def advect_5min_ensemble(
 
         CI_fields = ensemble[wind_size:].copy()
         CI_fields = CI_fields.T
-        # CI_fields = 1 - CI_fields
         us = ensemble[:U_size].T.reshape(ens_size, U_shape[0], U_shape[1])
         vs = ensemble[U_size: V_size + U_size].T.reshape(
             ens_size, V_shape[0], V_shape[1])
@@ -155,8 +154,6 @@ def advect_5min_ensemble(
         func = partial(time_deriv_3_loop, domain_shape=domain_shape,
                        T_steps=T_steps,
                        dt=dt, dx=dx, dy=dy)
-        # us = ndimage.uniform_filter(us, (0, 20, 20))
-        # vs = ndimage.uniform_filter(vs, (0, 20, 20))
         logging.debug('Running 5min ensemble advection')
 
         with ProcessPoolExecutor(max_workers=workers) as executor:
@@ -164,7 +161,6 @@ def advect_5min_ensemble(
                                    CI_fields, us, vs)
             temp = list(futures)
         temp = np.stack(temp, axis=1)
-        # temp = 1 - temp
         ensemble[wind_size:] = temp
         logging.debug('Done with advection')
         return ensemble
@@ -178,12 +174,10 @@ def advect_5min_single(
 
     CI_fields = ensemble[wind_size:].copy()
     CI_fields = CI_fields.reshape(domain_shape)
-    # CI_fields = 1 - CI_fields
     U = ensemble[:U_size].reshape(U_shape[0], U_shape[1])
     V = ensemble[U_size: V_size + U_size].reshape(
         V_shape[0], V_shape[1])
     CI_fields = advect_5min(CI_fields, dt, U, dx, V, dy, T_steps)
-    # CI_fields = 1 - CI_fields
     ensemble = np.concatenate([U.ravel(), V.ravel(), CI_fields.ravel()])
     return ensemble
 
@@ -205,8 +199,6 @@ def divergence(u, v, dx, dy):
 
 
 def remove_divergence(V, u, v, sigma):
-    # this could bimproved by increasing the order in V
-
     c_shape = u.shape
     V_div = divergence(u, v, 1, 1)
     ff = fe.Function(V)
@@ -231,8 +223,6 @@ def remove_divergence(V, u, v, sigma):
 
 def remove_divergence_single(
         FunctionSpace, u, v, sigma):
-    # this is not done on Arakawa Grid which sucks...
-    # the interpolations are quick and dirty.
     temp_u = u
     temp_u = .5*(temp_u[:, :-1] + temp_u[:, 1:])
     temp_v = v
@@ -250,9 +240,6 @@ def remove_divergence_single(
 
 def remove_divergence_ensemble(
         *, FunctionSpace, wind_ensemble, U_crop_shape, V_crop_shape, sigma):
-    # this is not done on Arakawa Grid which sucks...
-    # the interpolations are quick and dirty.
-
     U_size = U_crop_shape[0]*U_crop_shape[1]
     V_size = V_crop_shape[0]*V_crop_shape[1]
     ens_size = wind_ensemble.shape[1]
@@ -263,7 +250,6 @@ def remove_divergence_ensemble(
         temp_v = wind_ensemble[U_size:U_size + V_size,
                                ens_num].reshape(V_crop_shape)
         temp_v = .5*(temp_v[:-1, :] + temp_v[1:, :])
-        # hardwired smoothing in sigma
         temp_u, temp_v = remove_divergence(FunctionSpace,
                                            temp_u, temp_v, sigma)
         temp1 = np.pad(temp_u, ((0, 0), (0, 1)), mode='edge')

@@ -9,8 +9,6 @@ def of_vectors_plot(clouds0_8b, clouds1_8b, p0_good, p1_good, u, v,
     adjust = 1.1
     nrows, ncols = 1, 2
     dy, dx = clouds0_8b.shape
-    # figsize = plt.figaspect(float(dy * nrows) /
-    #                         ((1 + fraction + pad)*float(dx * ncols)))
     figsize = plt.figaspect(float(dy * nrows) / float(adjust * dx * ncols))
     fig, ax = plt.subplots(nrows, ncols, sharey=True, sharex=True,
                            figsize=figsize, dpi=300)
@@ -35,10 +33,6 @@ def of_vectors_plot(clouds0_8b, clouds1_8b, p0_good, p1_good, u, v,
     ax[0].set(xlim=[0, dx])
     ax[1].set(ylim=[0, dy])
     ax[1].set(xlim=[0, dx])
-
-    # plt.colorbar(im, ax=ax.tolist(), pad=pad, fraction=fraction)
-    # qk = plt.quiverkey(qu, .5, 0.92, 20, r'$20 \frac{m}{s}$', labelpos='E',
-    #                    coordinates='figure')
     return fig, ax
 
 
@@ -67,7 +61,6 @@ def wrf_opt_flow_plot(ensemble, U_shape, V_shape,
     ax[0].scatter(of_coord[:, 0], of_coord[:, 1], c=U_of,
                   cmap=cmap,
                   norm=norm)
-    # qu = ax[0].quiver(p0_good[:, 0], p0_good[:, 1], u, v)
     ax[0].set_aspect('equal', 'datalim')
     ax[0].set_title('U')
     ax[0].set_xlabel('Position (km/4)')
@@ -118,7 +111,6 @@ def opt_flow_sd_plot(ensemble, U_shape, V_shape,
     ax[0].scatter(of_coord[:, 0], of_coord[:, 1],
                   cmap=cmap,
                   norm=norm)
-    # qu = ax[0].quiver(p0_good[:, 0], p0_good[:, 1], u, v)
     ax[0].set_aspect('equal', 'datalim')
     ax[0].set_title('U_sd')
     ax[0].set_xlabel('Position (km/4)')
@@ -192,7 +184,6 @@ def ensemble_stamps_cdf(
             this_other,
             cmap=cmap,
             norm=norm)
-        #delete
         ax[0, j].set_title(other_titles[j])
         ax[0, j].axis('off')
     try:
@@ -231,25 +222,6 @@ def ensemble_stamps_cdf(
     plt.subplots_adjust(wspace=0.02, hspace=0.02)
     plt.colorbar(im, ax=ax.ravel().tolist(), pad=pad, fraction=fraction,
                  label=cbar_label)
-    # for j in range(len(other_titles)):
-    #     ax_pos = ax[0, j].axis()
-    #     print(ax_pos)
-    #     rec = patches.Rectangle((ax_pos[0] + 1, ax_pos[2] + 2),
-    #                             ax_pos[1] - ax_pos[0] - 4,
-    #                             ax_pos[3] - ax_pos[2] + 65,
-    #                             fill=False, lw=lw, color='k', capstyle='butt')
-    #     rec = ax[0, j].add_patch(rec)
-    #     rec.set_clip_on(False)
-    # if j is None:
-    #     j=0
-    # ax_pos = ax[0, j + 1].axis()
-    # rec = patches.Rectangle((ax_pos[0] + 1, ax_pos[2] + 2),
-    #                         ax_pos[1] - ax_pos[0] - 4,
-    #                         ax_pos[3] - ax_pos[2] + 65,
-    #                         fill=False, lw=lw, color='k')
-    # rec = ax[0, j + 1].add_patch(rec)
-    # rec.set_clip_on(False)
-
     return fig, ax
 
 
@@ -279,7 +251,6 @@ def ensemble_stamps(
             this_other,
             cmap=cmap,
             norm=norm)
-        #delete
         ax[0, j].set_title(other_titles[j])
         ax[0, j].axis('off')
     try:
@@ -290,7 +261,6 @@ def ensemble_stamps(
         ensemble.mean(axis=1).reshape(domain_shape),
         cmap=cmap,
         norm=norm)
-    # ax[0, j + 1].set_title('Mean')
     ax[0, j + 1].axis('off')
 
     ens_count = 0
@@ -318,25 +288,6 @@ def ensemble_stamps(
     plt.subplots_adjust(wspace=0.02, hspace=0.02)
     plt.colorbar(im, ax=ax.ravel().tolist(), pad=pad, fraction=fraction,
                  label=cbar_label)
-    # for j in range(len(other_titles)):
-    #     ax_pos = ax[0, j].axis()
-    #     print(ax_pos)
-    #     rec = patches.Rectangle((ax_pos[0] + 1, ax_pos[2] + 2),
-    #                             ax_pos[1] - ax_pos[0] - 4,
-    #                             ax_pos[3] - ax_pos[2] + 65,
-    #                             fill=False, lw=lw, color='k', capstyle='butt')
-    #     rec = ax[0, j].add_patch(rec)
-    #     rec.set_clip_on(False)
-    # if j is None:
-    #     j=0
-    # ax_pos = ax[0, j + 1].axis()
-    # rec = patches.Rectangle((ax_pos[0] + 1, ax_pos[2] + 2),
-    #                         ax_pos[1] - ax_pos[0] - 4,
-    #                         ax_pos[3] - ax_pos[2] + 65,
-    #                         fill=False, lw=lw, color='k')
-    # rec = ax[0, j + 1].add_patch(rec)
-    # rec.set_clip_on(False)
-
     return fig, ax
 
 
@@ -347,7 +298,6 @@ def subplots(data, x, y, subplot_titles, axes_labels, sup_title=None,
     """
     fraction = 0.10
     pad = .02
-    # cmap = 'Blues'
     if vmax is None:
         vmin = 0
         vmax = 1
@@ -403,7 +353,6 @@ def generate_all_plots(error_list, subtitle=None):
             plt.title(f'{hor} minute rmse')
 
     # Centered RMSE Plots
-    # y_max = np.max(list(map(lambda x: x[this_stat].max().max(), returned)))
     y_max = None
     for hor in [15, 30, 45, 60]:
         plt.figure()
@@ -425,9 +374,7 @@ def generate_all_plots(error_list, subtitle=None):
     this_stat = 'bias'
     y_max = np.max(list(map(
         lambda x: x[this_stat].abs().max().max(), error_list)))
-    # y_max = None
     y_min = -y_max
-    # y_min = 0
     for hor in [15, 30, 45, 60]:
         plt.figure()
         for aresult in error_list:
@@ -445,7 +392,6 @@ def generate_all_plots(error_list, subtitle=None):
     this_stat = 'correlation'
     y_max = np.max(list(map(lambda x: x[this_stat].max().max(), error_list)))
     y_min = np.min(list(map(lambda x: x[this_stat].min().min(), error_list)))
-    # y_max = None
     for hor in [15, 30, 45, 60]:
         plt.figure()
         for aresult in error_list:
@@ -464,7 +410,6 @@ def generate_all_plots(error_list, subtitle=None):
     y_max = np.max(list(map(lambda x: x[this_stat].max().max(), error_list)))
     y_max = np.max([error_list[0]['truth_sd'].max().max(), y_max])
     y_min = 0
-    # y_max = None
     for hor in [15, 30, 45, 60]:
         plt.figure()
         for aresult in error_list:
@@ -544,7 +489,6 @@ def generate_spread_plots(error_list, subtitle=None):
     y_max_1 = np.max(list(map(
         lambda x: x['spread_ci'].max().max(), error_list)))
     y_max = np.max([y_max, y_max_1])
-    # y_max = None
     for hor in [15, 30, 45, 60]:
         plt.figure()
         colors = ['b', 'orange', 'r', 'k', 'g', 'y']

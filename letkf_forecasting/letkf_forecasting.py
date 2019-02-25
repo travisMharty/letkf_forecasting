@@ -143,7 +143,6 @@ def calc_assim_variables(*, sys_vars, advect_params, flags, sat2sat, sat2wind,
         assim_vars['assim_pos_sat2wind'] = assim_pos_sat2wind
         assim_vars['assim_pos_2d_sat2wind'] = assim_pos_2d_sat2wind
         assim_vars['full_pos_2d_sat2wind'] = full_pos_2d_sat2wind
-        # Check if these are needed
         assim_pos_U, assim_pos_2d_U, full_pos_2d_U = (
             assimilation_position_generator(sys_vars.U_crop_shape,
                                             sat2wind['grid_size']))
@@ -210,9 +209,7 @@ def return_ensemble(*, data_file_path, ens_params, coords, flags):
                                   [coords.sn_slice, coords.sn_stag_slice],
                                   [coords.we_stag_slice, coords.we_slice],
                                   ['U_opt_flow', 'V_opt_flow'])
-        # ensure that U and V are not too big
 
-        # Need to look at this for correct time step and correct starting time
         time_step = (of_sat_time - sat_time).seconds
         U = U * (250 / time_step)
         V = V * (250 / time_step)
@@ -234,8 +231,6 @@ def return_ensemble(*, data_file_path, ens_params, coords, flags):
             ens_size=ens_params['ens_num'])
     else:
         ensemble = np.concatenate([U.ravel(), V.ravel(), q.ravel()])[:, None]
-    # make sure arrays are not masked arrays, will fail if the mask is
-    # actually used when reshaping
     shape = ensemble.shape
     ensemble = np.ma.compressed(ensemble).reshape(shape)
     return ensemble
@@ -569,7 +564,6 @@ def maybe_assim_opt_flow(*, ensemble, data_file_path, sat_time, time_index,
                                   [coords.sn_slice, coords.sn_stag_slice],
                                   [coords.we_stag_slice, coords.we_slice],
                                   ['U_opt_flow', 'V_opt_flow'])
-        # ensure that U and V are not too big
         time_step = (sat_time - coords.sat_times[time_index - 1]).seconds
         U = U * (250 / time_step)
         V = V * (250 / time_step)

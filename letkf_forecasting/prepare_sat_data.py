@@ -184,9 +184,6 @@ def get_clearsky(times, elevation, lats, lons):
         app_zenith.T), pressure)
     cos_zen = np.cos(np.radians(zenith.T))
     LT = pv.clearsky.lookup_linke_turbidity(times, lats.mean(), lons.mean())
-    # LT = pd.DataFrame(LT, columns=[0])
-    # for c in np.arange(lats.size - 1) + 1:
-    #     LT[c] = pv.clearsky.lookup_linke_turbidity(times, lats[c], lons[c])
     ones = pd.DataFrame(np.ones([times.size, lats.size]),
                         index=times, columns=np.arange(lats.size))
     LT = ones.mul(LT, axis=0)

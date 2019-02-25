@@ -66,44 +66,6 @@ def assimilate(ensemble, observations, flat_sensor_indices, R_inverse,
                localization_length=False, assimilation_positions=False,
                assimilation_positions_2d=False,
                full_positions_2d=False):
-    """
-    *** NEED TO REWRITE
-    Assimilates observations into ensemble using the LETKF.
-
-    Parameters
-    ----------
-    ensemble : array
-         The ensemble of size kxn where k is the number of ensemble members
-         and n is the state vector size.
-    observations : array
-         An observation vector of length m.
-    H : array
-         Forward observation matrix of size mxn. **may need changing**
-    R_inverse : array
-         Inverse of observation error matrix. **will need changing**
-    inflation : float
-         Inflation parameter.
-    localization_length : float
-         Localization distance in each direction so that assimilation will take
-         on (2*localization + 1)**2 elements. If equal to False then no
-         localization will take place.
-    assimilation_positions : array
-         Row and column index of state domain over which assimilation will
-         take place. First column contains row positions, second column
-         contains column positions, total number of rows is number of
-         assimilations. If False the assimilation will take place over
-         full_positions. If localization_length is False then this variable
-         will not be used.
-    full_positions : array
-         Array similar to assimilation_positions including the positions of
-         all elements of the state.
-
-    Return
-    ------
-    ensemble : array
-         Analysis ensemble of the same size as input ensemble
-    """
-    # Change to allow for R to not be pre-inverted?
     if localization_length is False:
 
         # LETKF without localization
@@ -113,7 +75,6 @@ def assimilate(ensemble, observations, flat_sensor_indices, R_inverse,
         x_bar = ensemble.mean(axis=1)
         ensemble -= x_bar[:, None]
         ens_size = ensemble.shape[1]
-        # C = (Y_b.T).dot(R_inverse)
         C = Y_b.T*R_inverse
         eig_value, eig_vector = np.linalg.eigh(
             (ens_size-1)*np.eye(ens_size)/inflation + C.dot(Y_b))
@@ -131,18 +92,7 @@ def assimilate(ensemble, observations, flat_sensor_indices, R_inverse,
 
     else:
         # LETKF with localization assumes H is I
-        # NEED: to include wind in ensemble will require reworking due to
-        # new H and different localization.
-        # NEED: Change to include some form of H for paralax correction??
-        # Maybe: ^ not if paralax is only corrected when moving ...
-        # to ground sensors.
-        # SHOULD: Will currently write as though R_inverse is a scalar.
-        # May need to change at some point but will likely need to do
-        # something clever since R_inverse.size is 400 billion
-        # best option: form R_inverse inside of localization routine
-        # good option: assimilate sat images at low resolution ...
-        # (probabily should do this either way)
-        x_bar = ensemble.mean(axis=1)  # Need to bring this back
+        x_bar = ensemble.mean(axis=1)
         ensemble -= x_bar[:, None]
         ens_size = ensemble.shape[1]
         kal_count = 0
@@ -157,7 +107,6 @@ def assimilate(ensemble, observations, flat_sensor_indices, R_inverse,
             # assume R_inverse is diag*const
             C = (local_ensemble.T)*R_inverse
 
-            # This should be better, but I can't get it to work
             eig_value, eig_vector = np.linalg.eigh(
                 (ens_size-1)*np.eye(ens_size)/inflation +
                 C.dot(local_ensemble))
@@ -169,13 +118,9 @@ def assimilate(ensemble, observations, flat_sensor_indices, R_inverse,
             P_tilde = P_tilde.dot(eig_vector.T)
             W_a = W_a.dot(eig_vector.T)*np.sqrt(ens_size - 1)
 
-            # P_tilde = np.linalg.inv(
-            #     (ens_size - 1)*np.eye(ens_size)/inflation +
-            #     C.dot(local_ensemble))
-            # W_a = np.real(sp.linalg.sqrtm((ens_size - 1)*P_tilde))
             w_a_bar = P_tilde.dot(C.dot(local_obs - local_x_bar))
             W_a += w_a_bar[:, None]
-            W_interp[kal_count] = np.ravel(W_a)  # separate w_bar??
+            W_interp[kal_count] = np.ravel(W_a)
             kal_count += 1
         if assimilation_positions_2d.size != full_positions_2d.size:
             W_fun = interpolate.LinearNDInterpolator(assimilation_positions_2d,
@@ -200,56 +145,7 @@ def assimilate_full_wind(ensemble, observations, flat_sensor_indices,
                          assimilation_positions=False,
                          assimilation_positions_2d=False,
                          full_positions_2d=False):
-    # seperate out localization in irradiance and wind
-    """
-    *** NEED TO REWRITE Documentation
-    Assimilates observations into ensemble using the LETKF.
-
-    Parameters
-    ----------
-    ensemble : array
-         The ensemble of size kxn where k is the number of ensemble members
-         and n is the state vector size.
-    observations : array
-         An observation vector of length m.
-    H : array
-         Forward observation matrix of size mxn. **may need changing**
-    R_inverse : array
-         Inverse of observation error matrix. **will need changing**
-    inflation : float
-         Inflation parameter.
-    localization_length : float
-         Localization distance in each direction so that assimilation will take
-         on (2*localization + 1)**2 elements. If equal to False then no
-         localization will take place.
-    assimilation_positions : array
-         Row and column index of state domain over which assimilation will
-         take place. First column contains row positions, second column
-         contains column positions, total number of rows is number of
-         assimilations. If False the assimilation will take place over
-         full_positions. If localization_length is False then this variable
-         will not be used.
-    full_positions : array
-         Array similar to assimilation_positions including the positions of
-         all elements of the state.
-
-    Return
-    ------
-    ensemble : array
-         Analysis ensemble of the same size as input ensemble
-    """
-
     # LETKF with localization assumes H is I
-    # NEED: to include wind in ensemble will require reworking due to
-    # new H and different localization.
-    # NEED: Change to include some form of H for paralax correction??
-    # Maybe: ^ not if paralax is only corrected when moving to ground sensors.
-    # SHOULD: Will currently write as though R_inverse is a scalar.
-    # May need to change at some point but will likely need to do
-    # something clever since R_inverse.size is 400 billion
-    # best option: form R_inverse inside of localization routine
-    # good option: assimilate sat images at low resolution (probabily should...
-    # do this either way)
 
     U_size = U_shape[0]*U_shape[1]
     V_size = V_shape[0]*V_shape[1]
@@ -266,7 +162,6 @@ def assimilate_full_wind(ensemble, observations, flat_sensor_indices,
     kal_count = 0
     W_interp = np.zeros([assimilation_positions.size, ens_size**2])
     W_interp_wind = W_interp.copy()*np.nan
-    # bad_count = 0
     for interp_position in assimilation_positions:
         # for the irradiance portion of the ensemble
         local_positions = assimilation_accessories.nearest_positions(
@@ -288,9 +183,8 @@ def assimilate_full_wind(ensemble, observations, flat_sensor_indices,
         W_a = W_a.dot(eig_vector.T)*np.sqrt(ens_size - 1)
         w_a_bar = P_tilde.dot(C.dot(local_obs - local_x_bar))
         W_a += w_a_bar[:, None]
-        W_interp[kal_count] = np.ravel(W_a)  # separate w_bar??
+        W_interp[kal_count] = np.ravel(W_a)
 
-        # should eventually change to assimilate on coarser wind grid
         local_positions = assimilation_accessories.nearest_positions(
             interp_position, domain_shape,
             localization_length_wind)
@@ -310,7 +204,7 @@ def assimilate_full_wind(ensemble, observations, flat_sensor_indices,
         W_a = W_a.dot(eig_vector.T)*np.sqrt(ens_size - 1)
         w_a_bar = P_tilde.dot(C.dot(local_obs - local_x_bar))
         W_a += w_a_bar[:, None]
-        W_interp_wind[kal_count] = np.ravel(W_a)  # separate w_bar??
+        W_interp_wind[kal_count] = np.ravel(W_a)
         kal_count += 1
     if assimilation_positions_2d.size != full_positions_2d.size:
         W_fun = interpolate.LinearNDInterpolator(assimilation_positions_2d,
@@ -323,7 +217,6 @@ def assimilate_full_wind(ensemble, observations, flat_sensor_indices,
 
     W_fine_mesh = W_interp.reshape(domain_shape[0]*domain_shape[1],
                                    ens_size, ens_size)
-    # change this to its own variable
     W_interp = W_interp_wind.reshape(domain_shape[0], domain_shape[1],
                                      ens_size, ens_size)
     ensemble_csi = x_bar_csi[:, None] + np.einsum(
@@ -348,56 +241,7 @@ def assimilate_sat_to_wind(ensemble, observations,
                            assimilation_positions=False,
                            assimilation_positions_2d=False,
                            full_positions_2d=False):
-    # separate out localization in irradiance and wind
-    """
-    *** NEED TO REWRITE Documentation
-    Assimilates observations into ensemble using the LETKF.
-
-    Parameters
-    ----------
-    ensemble : array
-         The ensemble of size kxn where k is the number of ensemble members
-         and n is the state vector size.
-    observations : array
-         An observation vector of length m.
-    H : array
-         Forward observation matrix of size mxn. **may need changing**
-    R_inverse : array
-         Inverse of observation error matrix. **will need changing**
-    inflation : float
-         Inflation parameter.
-    localization_length : float
-         Localization distance in each direction so that assimilation will take
-         on (2*localization + 1)**2 elements. If equal to False then no
-         localization will take place.
-    assimilation_positions : array
-         Row and column index of state domain over which assimilation will
-         take place. First column contains row positions, second column
-         contains column positions, total number of rows is number of
-         assimilations. If False the assimilation will take place over
-         full_positions. If localization_length is False then this variable
-         will not be used.
-    full_positions : array
-         Array similar to assimilation_positions including the positions of
-         all elements of the state.
-
-    Return
-    ------
-    ensemble : array
-         Analysis ensemble of the same size as input ensemble
-    """
-
     # LETKF with localization assumes H is I
-    # NEED: to include wind in ensemble will require reworking due to
-    # new H and different localization.
-    # NEED: Change to include some form of H for paralax correction??
-    # Maybe: ^ not if paralax is only corrected when moving to ground sensors.
-    # SHOULD: Will currently write as though R_inverse is a scalar.
-    # May need to change at some point but will likely need to do
-    # something clever since R_inverse.size is 400 billion
-    # best option: form R_inverse inside of localization routine
-    # good option: assimilate sat images at low resolution ...
-    # (probabily should do this either way)
 
     U_size = U_shape[0]*U_shape[1]
     V_size = V_shape[0]*V_shape[1]
@@ -414,31 +258,7 @@ def assimilate_sat_to_wind(ensemble, observations,
     kal_count = 0
     W_interp = np.zeros([assimilation_positions.size, ens_size**2])
     W_interp_wind = W_interp.copy()*np.nan
-    # bad_count = 0
     for interp_position in assimilation_positions:
-        # # for the irradiance portion of the ensemble
-        # local_positions = assimilation_accessories.nearest_positions(
-        #     interp_position, domain_shape,
-        #     localization_length)
-        # local_ensemble = ensemble_csi[local_positions]
-        # local_x_bar = x_bar_csi[local_positions]
-        # local_obs = observations[local_positions] # assume H is I
-        # C = (local_ensemble.T)*R_inverse  # assume R_inverse is diag+const
-
-        # eig_value, eig_vector = np.linalg.eigh(
-        #     (ens_size-1)*np.eye(ens_size)/inflation + C.dot(local_ensemble))
-        # P_tilde = eig_vector.copy()
-        # W_a = eig_vector.copy()
-        # for i, num in enumerate(eig_value):
-        #     P_tilde[:, i] *= 1/num
-        #     W_a[:, i] *= 1/np.sqrt(num)
-        # P_tilde = P_tilde.dot(eig_vector.T)
-        # W_a = W_a.dot(eig_vector.T)*np.sqrt(ens_size - 1)
-        # w_a_bar = P_tilde.dot(C.dot(local_obs - local_x_bar))
-        # W_a += w_a_bar[:, None]
-        # W_interp[kal_count] = np.ravel(W_a) # separate w_bar??
-
-        # should eventually change to assimilate on coarser wind grid
         local_positions = assimilation_accessories.nearest_positions(
             interp_position, domain_shape,
             localization_length_wind)
@@ -458,13 +278,12 @@ def assimilate_sat_to_wind(ensemble, observations,
         W_a = W_a.dot(eig_vector.T)*np.sqrt(ens_size - 1)
         w_a_bar = P_tilde.dot(C.dot(local_obs - local_x_bar))
         W_a += w_a_bar[:, None]
-        W_interp_wind[kal_count] = np.ravel(W_a)  # separate w_bar??
+        W_interp_wind[kal_count] = np.ravel(W_a)
         kal_count += 1
     if assimilation_positions_2d.size != full_positions_2d.size:
         W_fun = interpolate.LinearNDInterpolator(assimilation_positions_2d,
                                                  W_interp_wind)
         W_interp_wind = W_fun(full_positions_2d)
-    # change this to its own variable
     W_interp = W_interp_wind.reshape(domain_shape[0], domain_shape[1],
                                      ens_size, ens_size)
     W_fine_mesh = (np.pad(W_interp, [(0, 0), (0, 1), (0, 0), (0, 0)],
@@ -475,7 +294,6 @@ def assimilate_sat_to_wind(ensemble, observations,
                           mode='edge')).reshape(V_size, ens_size, ens_size)
     ensemble_V = x_bar_V[:, None] + np.einsum(
         'ij, ijk->ik', ensemble_V, W_fine_mesh)
-    # leave csi unchanged
     ensemble_csi += x_bar_csi[:, None]
 
     ensemble = np.concatenate([ensemble_U, ensemble_V, ensemble_csi], axis=0)
@@ -490,11 +308,7 @@ def assimilate_wrf(ensemble, observations,
                    assimilation_positions=False,
                    assimilation_positions_2d=False,
                    full_positions_2d=False):
-    # Currently doing U and V separately
     """
-    *** NEED TO REWRITE Documentation
-    Assimilates observations into ensemble using the LETKF.
-
     Parameters
     ----------
     ensemble : array
@@ -528,18 +342,6 @@ def assimilate_wrf(ensemble, observations,
     ensemble : array
          Analysis ensemble of the same size as input ensemble
     """
-
-    # LETKF with localization assumes H is I
-    # NEED: to include wind in ensemble will require reworking due to
-    # new H and different localization.
-    # NEED: Change to include some form of H for paralax correction??
-    # Maybe: ^ not if paralax is only corrected when moving to ground sensors.
-    # SHOULD: Will currently write as though R_inverse is a scalar.
-    # May need to change at some point but will likely need to do
-    # something clever since R_inverse.size is 400 billion
-    # best option: form R_inverse inside of localization routine
-    # good option: assimilate sat images at low resolution...
-    # (probabily should do this either way)
 
     x_bar = ensemble.mean(axis=1)
     ensemble -= x_bar[:, None]
@@ -564,7 +366,7 @@ def assimilate_wrf(ensemble, observations,
         W_a = W_a.dot(eig_vector.T)*np.sqrt(ens_size - 1)
         w_a_bar = P_tilde.dot(C.dot(local_obs - local_x_bar))
         W_a += w_a_bar[:, None]
-        W_interp[kal_count] = np.ravel(W_a)  # separate w_bar??
+        W_interp[kal_count] = np.ravel(W_a)
         kal_count += 1
     if assimilation_positions_2d.size != full_positions_2d.size:
         W_fun = sp.interpolate.LinearNDInterpolator(assimilation_positions_2d,
@@ -581,32 +383,12 @@ def assimilate_wrf(ensemble, observations,
 
 def assimilate_wind(ensemble, observations, flat_sensor_indices, R_inverse,
                     inflation, wind_size):
-    """
-    *** NEED TO REWRITE
-    Assimilates observations into ensemble using the LETKF.
-
-    Parameters
-    ----------
-    ensemble : array
-         The ensemble of size kxn where k is the number of ensemble members
-         and n is the state vector size.
-    observations : array
-         An observation vector of length m
-    R_inverse : array
-         Inverse of observation error matrix. **will need changing**
-    inflation : float
-         Inflation parameter
-
-    Return
-    ------
-    winds
-    """
 
     # LETKF without localization
     Y_b = ensemble[wind_size:].copy()
     y_b_bar = Y_b.mean(axis=1)
     Y_b -= y_b_bar[:, None]
-    x_bar = ensemble.mean(axis=1)  # Need to bring this back
+    x_bar = ensemble.mean(axis=1)
     ensemble -= x_bar[:, None]
     ens_size = ensemble.shape[1]
     C = Y_b.T*R_inverse

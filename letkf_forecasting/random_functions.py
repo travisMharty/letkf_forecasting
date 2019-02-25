@@ -8,7 +8,6 @@ def get_cov(n, L, dx):
     for ii in np.arange(n):
         for jj in np.arange(ii, n):
             dist = abs(ii - jj)
-            # dist = np.min([abs(ii - jj), np.mod(-abs(ii - jj), n)])
             C[ii, jj] = np.exp(-(dist*dx)**2/(2*L**2))
     return (C + C.T) - np.diag(np.diag(C))
 
@@ -67,7 +66,6 @@ def get_random_function_2d(x, y, Lx, Ly, tol):
     e = np.kron(ey, ex)
     v = np.kron(vy, vx)
 
-    # even more reduction
     sorted_indices = np.argsort(e)
     e = e[sorted_indices]
     v = v[:, sorted_indices]
@@ -90,7 +88,6 @@ def eig_2d_covariance(x, y, Lx, Ly, tol):
     e = np.kron(ey, ex)
     v = np.kron(vy, vx)
 
-    # even more reduction
     sorted_indices = np.argsort(e)
     sorted_indices = sorted_indices[::-1]
     e = e[sorted_indices]
@@ -111,7 +108,6 @@ def perturb_irradiance_old(ensemble, domain_shape, edge_weight, pert_mean,
     target[target < 0.1] = 0
     target = sp.ndimage.gaussian_filter(target, sigma=4)
     target = target/target.max()
-    # cloud_target = 1 - average
     cloud_target = average
     cloud_target = (cloud_target/cloud_target.max()).clip(min=0,
                                                           max=1)
@@ -162,9 +158,7 @@ def perturb_irradiance(ensemble, domain_shape, edge_weight, pert_mean,
     sample = np.random.randn(rf_eig.size, ens_size)
     sample = rf_vectors.dot(np.sqrt(rf_eig[:, None])*sample)
     target_mean = cloud_target.mean()
-    # target_var = (cloud_target**2).mean()
     cor_mean = pert_mean/target_mean
-    # cor_sd = pert_sigma/np.sqrt(rf_approx_var*target_var)
     cor_sd = pert_sigma/np.sqrt(rf_approx_var)
     max_ci = np.min([1, ensemble.max()*1.05])
     ensemble = (

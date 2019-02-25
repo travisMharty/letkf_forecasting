@@ -56,11 +56,6 @@ def interp_wind(interpolated_ci, raw_winds):
     wind_lons = raw_winds['wind_lons']
     wind_times = U.index
 
-    # ## delete after addressing bug
-    # U.index = U.index.tz_convert('MST')
-    # V.index = V.index.tz_convert('MST')
-    # ## delete after addressing bug
-
     wind_x, wind_y = prep.sphere_to_lcc(wind_lats, wind_lons)
     wind_x = wind_x.reshape([U_shape[0], V_shape[1]])
     wind_y = wind_y.reshape([U_shape[0], V_shape[1]])
