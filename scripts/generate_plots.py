@@ -512,10 +512,13 @@ def table_original_error(*, save_directory,
         stat_name = 'truth_sd'
         truth_sd[run_name] = (
             averaged_error[run_name][stat_name].loc[horizons])
-
-    peices = [rmse, correlation, bias]
+    ss_per = (1 - rmse.div(rmse['persistence'], axis='index'))
+    peices = [rmse, ss_per, correlation, bias]
     combined = pd.concat(peices, axis=0,
-                         keys=['RMSE', 'Corr.', 'Bias'])
+                         keys=['RMSE', 'SS_per', 'Corr.', 'Bias'])
+    # peices = [rmse, correlation, bias]
+    # combined = pd.concat(peices, axis=0,
+    #                      keys=['RMSE', 'Corr.', 'Bias'])
     combined = combined.rename(columns=legend_dict)
 
     def format_table(text, header_num=5, footer_num=2):
@@ -535,6 +538,9 @@ def table_original_error(*, save_directory,
         for line_num, line in enumerate(split_text[header_num:-footer_num - 1]):
             split_line = line.split(' ')
             if split_line[0] == 'Corr.':
+                Corr = True
+            elif split_line[0] == 'SS\_per':
+                split_line[0] = '$\mbox{SS}_\mbox{per}$'
                 Corr = True
             elif split_line[0] != '':
                 Corr = False
@@ -645,6 +651,9 @@ def table_case_studies(*, save_directory, legend_dict,
             split_line = line.split(' ')
             if split_line[0] == 'Corr.':
                 Corr = True
+            elif split_line[0] == 'SS\_per':
+                split_line[0] = '$\mbox{SS}_\mbox{per}$'
+                Corr = True
             elif split_line[0] != '':
                 Corr = False
             num_slice = slice(4, None, 2)
@@ -678,10 +687,10 @@ def table_case_studies(*, save_directory, legend_dict,
             stat_name = 'correlation'
             correlation[run_name] = (
                 this_error[run_name][stat_name].loc[horizons])
-
-        peices = [rmse, correlation, bias]
+        ss_per = (1 - rmse.div(rmse['persistence'], axis='index'))
+        peices = [rmse, ss_per, correlation, bias]
         combined = pd.concat(peices, axis=0,
-                             keys=['RMSE', 'Corr.', 'Bias'])
+                             keys=['RMSE', 'SS_per', 'Corr.', 'Bias'])
         combined = combined.rename(columns=legend_dict)
         column_format = 'll' + 'S[table-format=-1.3]' * len(runs)
         text = combined.round(decimals=decimals).to_latex(
@@ -723,10 +732,32 @@ def main():
     directory_name = 'third_set'
     figure_directory = ('/home/travis/python_code/'
                         'letkf_forecasting/figures/')
-
+    smoothing_error = return_smoothing_data(
+        directory_name=directory_name)
     averaged_error = return_original_stats(
         directory_name=directory_name)
     daily_error = return_daily_error()
+
+    # plot smoothed
+    plot_smoothing_data(cpal_dict=cpal_dict,
+                        legend_dict=legend_dict,
+                        marker_dict=marker_dict,
+                        format=format,
+                        dpi=dpi,
+                        smoothing_error=smoothing_error,
+                        averaged_error=averaged_error,
+                        save_directory=figure_directory)
+    plt.close('all')
+
+    # plot original error plots
+    plot_original_error(cpal_dict=cpal_dict,
+                        legend_dict=legend_dict,
+                        marker_dict=marker_dict,
+                        format=format,
+                        dpi=dpi,
+                        averaged_error=averaged_error,
+                        save_directory=figure_directory)
+    plt.close('all')
 
     # plot error by date plots
     plot_daily_error(cpal_dict=cpal_dict,
@@ -739,6 +770,63 @@ def main():
                      averaged_error=averaged_error,
                      save_directory=figure_directory)
     plt.close('all')
+
+    # plot spaghetti data
+    dates_dict = {
+        'translation': (4, 15),
+        'more_complex': (5, 29),
+        'two_levels': (4, 26)
+    }
+    run_names = ['persistence',
+                 'opt_flow',
+                 'wrf_no_div',
+                 'owp_opt',
+                 'wrf_mean',
+                 'radiosonde',
+                 ['ensemble', 'owp_opt'],
+                 ['anly_fore', 'owp_opt']]
+    loc_dict = {
+        'translation': 'upper left',
+        'more_complex': 'upper left',
+        'two_levels': 'lower right'
+    }
+    spaghetti_error = return_spaghetti_error(
+        dates_dict=dates_dict,
+        run_names=run_names)
+    plot_spaghetti(cpal_dict=cpal_dict,
+                   legend_dict=legend_dict,
+                   marker_dict=marker_dict,
+                   loc_dict=loc_dict,
+                   format=format,
+                   dpi=dpi,
+                   dates_dict=dates_dict,
+                   spaghetti_error=spaghetti_error,
+                   save_directory=figure_directory)
+    plt.close('all')
+
+    # tables
+    table_directory = '/home2/travis/python_code/letkf_forecasting/tables/'
+    table_legend_dict = {'opt_flow': 'Opt.~Flow',
+                         'opt_flow_with_div': 'Opt. Flow w/ Div.',
+                         'wrf_no_div': 'NWP Winds',
+                         'wrf': 'NWP w/ Div.',
+                         'owp_opt': 'ANOC Ens.~Mean',
+                         'persistence': 'Persis.',
+                         'radiosonde': 'Radiosonde',
+                         'wrf_mean': 'NWP Avg.~Winds',
+                         'ens_member': 'ANOC Ens.~Member',
+                         'owp_opt_anly_fore': 'ANOC Control'}
+
+    # original error table
+    table_original_error(save_directory=table_directory,
+                         legend_dict=table_legend_dict,
+                         averaged_error=averaged_error)
+
+    # case study tables
+    table_case_studies(save_directory=table_directory,
+                       legend_dict=table_legend_dict,
+                       spaghetti_error=spaghetti_error,
+                       dates_dict=dates_dict)
 
 
 if __name__ == '__main__':
